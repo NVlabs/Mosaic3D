@@ -10,7 +10,7 @@ hydra-colorlog==1.2.0
 hydra-optuna-sweeper==1.2.0
 
 # --------- loggers --------- #
-# wandb
+wandb
 # neptune-client
 # mlflow
 # comet-ml
@@ -21,4 +21,21 @@ rootutils       # standardizing the project root setup
 pre-commit      # hooks for applying linters on commit
 rich            # beautiful text formatting in terminal
 pytest          # tests
+black
+fire
 # sh            # for running bash commands in some tests (linux/macos only)
+
+# --------- RegionPLC --------- #
+numpy
+spconv-cu117
+easydict
+pyyaml
+tqdm
+scipy
+plyfile
+imageio
+matplotlib
+transformers
+clip @ git+https://github.com/openai/CLIP.git
+einops
+open3d==0.18.0
