@@ -11,6 +11,7 @@ import torch.utils.data as data
 from natsort import natsorted
 
 from src.data.data_augmentor import DataAugmentor
+from src.data.transform import TRANSFORMS, Compose
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -31,7 +32,8 @@ class PLADataset(data.Dataset):
         max_npoints,
         # data processor
         voxel_size: float,
-        #
+        # transform
+        transform=None,
         base_class_idx: Optional[List[int]] = None,
         ignore_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -42,6 +44,8 @@ class PLADataset(data.Dataset):
         self.caption_cfg = caption_cfg
 
         self.data_paths = natsorted(glob.glob(os.path.join(self.data_dir, split, "*.pth")))
+
+        self.transform = Compose(transform)
 
         # class mapper
         self.valid_class_idx = np.arange(len(class_names)).tolist()
