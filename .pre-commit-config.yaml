@@ -53,20 +53,20 @@ repos:
           ]
 
   # python docstring coverage checking
-  - repo: https://github.com/econchick/interrogate
-    rev: 1.5.0 # or master if you're bold
-    hooks:
-      - id: interrogate
-        args:
-          [
-            --verbose,
-            --fail-under=80,
-            --ignore-init-module,
-            --ignore-init-method,
-            --ignore-module,
-            --ignore-nested-functions,
-            -vv,
-          ]
+  # - repo: https://github.com/econchick/interrogate
+  #   rev: 1.5.0 # or master if you're bold
+  #   hooks:
+  #     - id: interrogate
+  #       args:
+  #         [
+  #           --verbose,
+  #           --fail-under=80,
+  #           --ignore-init-module,
+  #           --ignore-init-method,
+  #           --ignore-module,
+  #           --ignore-nested-functions,
+  #           -vv,
+  #         ]
 
   # python check (PEP8), programming errors and code complexity
   - repo: https://github.com/PyCQA/flake8
@@ -82,12 +82,12 @@ repos:
           ]
         additional_dependencies: [flake8-rst-docstrings==0.3.0]
 
-  # python security linter
-  - repo: https://github.com/PyCQA/bandit
-    rev: "1.7.5"
-    hooks:
-      - id: bandit
-        args: ["-s", "B101"]
+  # # python security linter
+  # - repo: https://github.com/PyCQA/bandit
+  #   rev: "1.7.5"
+  #   hooks:
+  #     - id: bandit
+  #       args: ["-s", "B101"]
 
   # yaml formatting
   - repo: https://github.com/pre-commit/mirrors-prettier

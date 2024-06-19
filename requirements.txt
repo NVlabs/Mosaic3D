@@ -39,3 +39,5 @@ transformers
 clip @ git+https://github.com/openai/CLIP.git
 einops
 open3d==0.18.0
+natsort
+scikit-image
