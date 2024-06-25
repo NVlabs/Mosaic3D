@@ -1,0 +1,69 @@
+_target_: src.data.regionplc.datamodule
+
+train_dataset:
+  _target_: src.data.regionplc.dataset
+  data_dir: /home/junhal/datasets/regionplc
+  split: train
+  transform_cfg:
+    - type: Copy
+      keys_dict:
+        coord: origin_coord
+    - type: CenterShift
+      apply_z: True
+    - type: RandomFlip
+      p: 0.5
+    - type: RandomRotate
+      p: 1.0
+      angle: [-1, 1]
+      center: [0, 0, 0]
+      axis: z
+    - type: ChromaticJitter
+      p: 1.0
+      std: 0.007
+    - type: ElasticDistortion
+      distortion_params: [[0.12, 0.8], [0.4, 3.2]]
+    - type: SphereCrop
+      point_max: 250000
+      mode: random
+    - type: GridSample
+      grid_size: 0.02
+      hash_type: fnv
+      mode: train
+      keys: ["coord", "color", "segment", "instance", "binary"]
+      return_grid_coord: True
+    - type: NormalizeColor
+    - type: ToTensor
+    - type: Collect
+      keys:
+        [
+          "origin_coord",
+          "grid_coord",
+          "coord",
+          "color",
+          "segment",
+          "instance",
+          "binary",
+        ]
+      offset_keys_dict:
+        offset: coord
+      feat_keys: ["color", "coord"]
+  caption_cfg:
+    view:
+      enabled: true
+      caption_path: text_embed/caption_detic-template_and_kosmos_125k_iou0.2.json
+      image_corr_path: scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
+      select: ratio
+      num: 1
+      ratio: 0.2
+      sample: 1
+    entity:
+      enabled: false
+      caption_path: text_embed/caption_2d_intersect_v3.json
+      image_corr_path: scannetv2_matching_idx_intersect_v3
+      select: ratio
+      num: 1
+      ratio: 1.0
+  base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
+  ignore_class_idx: [19]
+  novel_class_idx: [5, 9, 12, 16]
+  ignore_label: -100

@@ -3,37 +3,28 @@ import glob
 import json
 import os
 import pickle
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import torch
 import torch.utils.data as data
 from natsort import natsorted
 
-from src.data.data_augmentor import DataAugmentor
+from src.data.metadata.scannet import VALID_CLASS_IDS_20, VALID_CLASS_IDS_200
 from src.data.transform import TRANSFORMS, Compose
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-class PLADataset(data.Dataset):
+class RegionPLCDataset(data.Dataset):
     def __init__(
         self,
         data_dir: str,
         split: str,
-        class_names: List[int],
         caption_cfg: Dict,
-        # data augmentor
-        aug_cfg: Dict,
-        voxel_scale: float,
-        full_scale,
-        voxel_down,
-        max_npoints,
-        # data processor
-        voxel_size: float,
-        # transform
-        transform=None,
+        transform_cfg: None,
+        preset: str = Literal["scannet", "scannet200"],
         base_class_idx: Optional[List[int]] = None,
         ignore_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -43,11 +34,15 @@ class PLADataset(data.Dataset):
         self.split = split
         self.caption_cfg = caption_cfg
 
+        # data paths
         self.data_paths = natsorted(glob.glob(os.path.join(self.data_dir, split, "*.pth")))
 
-        self.transform = Compose(transform)
+        # transforms
+        self.transform_cfg = transform_cfg
+        self.transform = Compose(transform_cfg)
 
         # class mapper
+        class_names = VALID_CLASS_IDS_200 if preset == "scannet200" else VALID_CLASS_IDS_20
         self.valid_class_idx = np.arange(len(class_names)).tolist()
         if base_class_idx is not None:
             self.base_class_mapper = self.build_class_mapper(base_class_idx, ignore_label)
@@ -70,22 +65,10 @@ class PLADataset(data.Dataset):
                 captions[key.lower()] = copy.deepcopy(json.load(open(caption_path)))
         self.captions = captions
 
+        # load image correspondences
         self.scene_image_corr_infos = pickle.load(
             open(os.path.join(self.data_dir, caption_cfg.view.image_corr_path), "rb")
         )
-
-        # data processing
-        self.augmentor = DataAugmentor(
-            aug_cfg,
-            **{
-                "ignore_label": ignore_label,
-                "voxel_scale": voxel_scale,
-                "voxel_down": voxel_down,
-                "full_scale": full_scale,
-                "max_npoint": max_npoints,
-            },
-        )
-        self.voxel_size = voxel_size
 
     @staticmethod
     def build_class_mapper(class_idx, ignore_label, squeeze_label=True):
@@ -114,6 +97,9 @@ class PLADataset(data.Dataset):
 
     def load_data(self, filepath):
         xyz, rgb, label, inst_label = torch.load(filepath)
+
+        # normalize rgb to [0,255]
+        rgb = np.clip((rgb + 1.0) * 127.5, 0, 255)
 
         # class mapping
         semantic_label = self.valid_class_mapper[label.astype(np.int64)]
@@ -166,7 +152,7 @@ class PLADataset(data.Dataset):
             assert len(caption[scene_name]) == len(
                 image_names
             ), f"len caption: {len(caption[scene_name])}, len images: {len(image_names)}"
-            select_image_names, select_image_corr = PLADataset.select_images(
+            select_image_names, select_image_corr = RegionPLCDataset.select_images(
                 caption_cfg, image_names, image_corr_indices
             )  # list (B, K), (B, K, N)
             # (B*K)
@@ -180,36 +166,36 @@ class PLADataset(data.Dataset):
         Select part of images for training
         """
 
-        if caption_cfg.get("SAMPLE", 1) > 1:
-            random_start = np.random.randint(caption_cfg.SAMPLE)
-            image_name = (np.array(image_name)[random_start :: caption_cfg.SAMPLE]).tolist()
+        if caption_cfg.get("sample", 1) > 1:
+            random_start = np.random.randint(caption_cfg.sample)
+            image_name = (np.array(image_name)[random_start :: caption_cfg.sample]).tolist()
             image_corr = (
-                np.array(image_corr, dtype=object)[random_start :: caption_cfg.SAMPLE]
+                np.array(image_corr, dtype=object)[random_start :: caption_cfg.sample]
             ).tolist()
-        if caption_cfg.SELECT == "ratio" and caption_cfg.RATIO == 1.0:
+        if caption_cfg.select == "ratio" and caption_cfg.ratio == 1.0:
             return image_name, image_corr
 
         if image_name is None or len(image_name) == 0:  # lack 2d data
             selected_idx = None
-        elif caption_cfg.SELECT == "fixed":
+        elif caption_cfg.select == "fixed":
             # view-level caotion: random select fixed number
-            num = int(caption_cfg.NUM)
+            num = int(caption_cfg.num)
             selected_idx = np.random.choice(
                 len(image_name), min(num, len(image_name)), replace=False
             )
-        elif caption_cfg.SELECT == "ratio":
-            ratio = caption_cfg.RATIO
+        elif caption_cfg.select == "ratio":
+            ratio = caption_cfg.ratio
             selected_idx = np.random.choice(
                 len(image_name), max(1, int(len(image_name) * ratio)), replace=False
             )
-        elif caption_cfg.SELECT == "hybrid":
-            num = min(int(caption_cfg.NUM), int(len(image_name) * caption_cfg.RATIO))
+        elif caption_cfg.select == "hybrid":
+            num = min(int(caption_cfg.num), int(len(image_name) * caption_cfg.ratio))
             selected_idx = np.random.choice(
                 len(image_name), min(max(1, num), len(image_name)), replace=False
             )
-        elif caption_cfg.SELECT == "ratio_list":
-            ratio_list = caption_cfg.RATIO_LIST
-            ratio = caption_cfg.RATIO
+        elif caption_cfg.select == "ratio_list":
+            ratio_list = caption_cfg.ratio_list
+            ratio = caption_cfg.ratio
             image_idx_sources = []
             if len(ratio_list) == 2:
                 image_idx_sources.append(
@@ -269,116 +255,28 @@ class PLADataset(data.Dataset):
         metadata = {"idx": idx, "scene_name": scene_name, "filepath": filepath}
 
         data_dict = {
-            "points_xyz": xyz,
-            "rgb": rgb,
-            "labels": semantic_label,
-            "inst_label": inst_label,
-            "binary_labels": binary_label,
-            "caption_data": caption,
-            "origin_idx": np.arange(xyz.shape[0]).astype(np.int64),
+            "coord": xyz,
+            "color": rgb,
+            "segment": semantic_label,
+            "instance": inst_label,
+            "binary": binary_label,
+            "caption": caption,
             "metadata": metadata,
         }
 
-        if self.split == "train":
-            data_dict = self.augmentor.forward(data_dict)
-        else:
-            xyz_voxel_scale = xyz * self.voxel_scale
-            xyz_voxel_scale -= xyz_voxel_scale.min(0)
-            data_dict["points_xyz_voxel_scale"] = xyz_voxel_scale
-            data_dict["points"] = xyz
-
-        data_dict["feats"] = np.concatenate((data_dict["rgb"], data_dict["points_xyz"]), axis=1)
-        # data_dict = self.data_processor.forward(data_dict)
+        data_dict = self.transform(data_dict)
         return data_dict
 
 
 if __name__ == "__main__":
     from easydict import EasyDict as edict
+    from omegaconf import OmegaConf
 
-    args = dict(
-        data_dir="/home/junhal/datasets/pla",
-        split="train",
-        class_names=[
-            "wall",
-            "floor",
-            "cabinet",
-            "bed",
-            "chair",
-            "sofa",
-            "table",
-            "door",
-            "window",
-            "bookshelf",
-            "picture",
-            "counter",
-            "desk",
-            "curtain",
-            "refrigerator",
-            "showercurtain",
-            "toilet",
-            "sink",
-            "bathtub",
-            "otherfurniture",
-        ],
-        caption_cfg={
-            "scene": {"enabled": False, "caption_path": "text_embed/caption.json"},
-            "view": {
-                "enabled": True,
-                "caption_path": "text_embed/caption_detic-template_and_kosmos_125k_iou0.2.json",
-                "image_corr_path": "scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl",
-                "SELECT": "ratio",
-                "NUM": 1,
-                "RATIO": 1.0,
-                "SAMPLE": 1,
-                "GATHER_CAPTION": False,
-            },
-            "entity": {
-                "enabled": False,
-                "caption_path": "text_embed/caption_2d_intersect_v3.json",
-                "image_corr_path": "scannetv2_matching_idx_intersect_v3",
-                "SELECT": "ratio",
-                "NUM": 1,
-                "RATIO": 1.0,
-            },
-        },
-        aug_cfg={
-            "AUG_LIST": [],
-            "scene_aug": {
-                "scaling_scene": {"enabled": False, "p": 1.0, "value": [0.9, 1.1]},
-                "rotation": {"p": 1.0, "value": [0.0, 0.0, 1.0]},
-                "jitter": True,
-                "color_jitter": True,
-                "flip": {"p": 0.5},
-                "random_jitter": {
-                    "enabled": False,
-                    "value": 0.01,
-                    "accord_to_size": False,
-                    "p": 1.0,
-                },
-            },
-            "elastic": {
-                "enabled": True,
-                "value": [[6, 40], [20, 160]],
-                "apply_to_feat": False,
-                "p": 1.0,
-            },
-            "crop": {"step": 32},
-            "shuffle": True,
-        },
-        voxel_scale=50,
-        full_scale=[128, 512],
-        voxel_down=1,
-        max_npoints=250000,
-        voxel_size=0.02,
-        base_class_idx=[0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18],
-        ignore_class_idx=[19],
-        novel_class_idx=[5, 9, 12, 16],
-        ignore_label=-100,
-    )
+    conf = OmegaConf.load("./configs/data/regionplc.yaml")
 
-    args_dict = edict(args)
-
-    dataset = PLADataset(**args_dict)
+    dataset_args = conf.train_dataset
+    dataset_args.pop("_target_", None)
+    dataset = RegionPLCDataset(**edict(OmegaConf.to_object(dataset_args)))
     it = iter(dataset)
 
     batch = next(it)
