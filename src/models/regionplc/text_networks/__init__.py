@@ -4,7 +4,7 @@ import os
 import torch
 
 from ...config import cfg
-from ...utils import common_utils
+from ..utils import common_utils
 from . import text_models
 from .prompt_template import template_meta
 

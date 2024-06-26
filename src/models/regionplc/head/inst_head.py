@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from pcseg.config import cfg
-from pcseg.utils import common_utils, loss_utils
 from sklearn.cluster import AgglomerativeClustering
 from torch_scatter import scatter_mean
 
@@ -15,6 +14,7 @@ from ..model_utils.fp16 import force_fp32
 from ..model_utils.rle_utils import rle_decode, rle_encode
 from ..model_utils.spconv_utils import spconv
 from ..model_utils.unet_blocks import ResidualBlock, UBlock, VGGBlock
+from ..utils import common_utils, loss_utils
 
 
 class InstHead(nn.Module):

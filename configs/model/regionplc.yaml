@@ -1,0 +1,84 @@
+_target_: src.models.regionplc.module.RegionPLCLitModule
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 4e-3
+  weight_decay: 1e-4
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.OneCycleLR
+  _partial_: true
+  max_lr: ${model.optimizer.lr}
+  pct_start: 0.39
+  anneal_strategy: cos
+  div_factor: 1
+  final_div_factor: 10000.0
+
+net:
+  _target_: src.models.regionplc.build_vision_network
+  _partial_: true
+  model_cfg:
+    NAME: SparseUNetTextSeg
+    REMAP_FROM_3DLANG: false
+    REMAP_FROM_NOADAPTER: false
+    VFE:
+      NAME: IndoorVFE
+      USE_XYZ: true
+    BACKBONE_3D:
+      NAME: SparseUNetIndoor
+      IN_CHANNEL: 6
+      MID_CHANNEL: 16
+      BLOCK_RESIDUAL: true
+      BLOCK_REPS: 2
+      NUM_BLOCKS: 7
+      CUSTOM_SP1X1: true
+    BINARY_HEAD:
+      NAME: BinaryHead
+      DETACH: true
+      THRESH: 0.5
+      CUSTOM_SP1X1: true
+      HOOK_FEATURE_LIST:
+        [
+          "unet.blocks.block1",
+          "unet.u.blocks.block1",
+          "unet.u.u.blocks.block1",
+          "unet.u.u.u.blocks.block1",
+          "unet.u.u.u.u.blocks.block1",
+          "unet.u.u.u.u.u.blocks.block1",
+          "unet.u.u.u.u.u.u.blocks.block1",
+        ]
+    ADAPTER:
+      NAME: VLAdapter
+      EVAL_ONLY: false
+      NUM_ADAPTER_LAYERS: 2
+      TEXT_DIM: -1
+      LAST_NORM: true
+    TASK_HEAD:
+      NAME: TextSegHead
+      FEAT_NORM: false
+      CORRECT_SEG_PRED_BINARY: true
+      TEXT_EMBED:
+        NAME: CLIP
+        NORM: true
+        PATH: text_embed/scannet_clip-ViT-B16_id.pth
+    CAPTION_HEAD:
+      NAME: CaptionHead
+      POOLING_TYPE: avg
+      FEAT_NORM: true
+      LOGIT_SCALE:
+        value: 100.0
+        learnable: true
+      CUDA_ENABLED: true
+      POOL_OBJ: score
+      LOSS_FUNC: NLL_NoReduce
+      LOSS_WEIGHT:
+        SCENE: 0.1
+        VIEW: 0.5
+        ENTITY: 0.1
+      DIV_N_CAP: false
+      DIV_MODE: none
+      NOVEL_GRAD_ONLY: true
+
+# compile model for faster training with pytorch 2.0
+compile: false
