@@ -18,6 +18,7 @@ scheduler:
 net:
   _target_: src.models.regionplc.build_vision_network
   _partial_: true
+  num_classes: 20
   model_cfg:
     NAME: SparseUNetTextSeg
     REMAP_FROM_3DLANG: false
@@ -52,7 +53,7 @@ net:
       NAME: VLAdapter
       EVAL_ONLY: false
       NUM_ADAPTER_LAYERS: 2
-      TEXT_DIM: -1
+      TEXT_DIM: 512
       LAST_NORM: true
     TASK_HEAD:
       NAME: TextSegHead
@@ -62,6 +63,8 @@ net:
         NAME: CLIP
         NORM: true
         PATH: text_embed/scannet_clip-ViT-B16_id.pth
+        CHANNEL: 512
+        NUM_CLASS: 20
     CAPTION_HEAD:
       NAME: CaptionHead
       POOLING_TYPE: avg

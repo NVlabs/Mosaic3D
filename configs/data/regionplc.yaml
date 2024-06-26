@@ -1,7 +1,7 @@
-_target_: src.data.regionplc.datamodule
+_target_: src.data.regionplc.datamodule.RegionPLCDataModule
 
 train_dataset:
-  _target_: src.data.regionplc.dataset
+  _target_: src.data.regionplc.dataset.RegionPLCDataset
   data_dir: /home/junhal/datasets/regionplc
   split: train
   transform_cfg:
@@ -67,3 +67,39 @@ train_dataset:
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
   ignore_label: -100
+
+val_dataset:
+  _target_: src.data.regionplc.dataset.RegionPLCDataset
+  data_dir: /home/junhal/datasets/regionplc
+  split: val
+  transform_cfg:
+    - type: Copy
+      keys_dict:
+        coord: origin_coord
+    - type: CenterShift
+      apply_z: True
+    - type: GridSample
+      grid_size: 0.02
+      hash_type: fnv
+      mode: train
+      keys: ["coord", "color", "segment", "instance", "binary"]
+      return_grid_coord: True
+    - type: NormalizeColor
+    - type: ToTensor
+    - type: Collect
+      keys:
+        [
+          "origin_coord",
+          "grid_coord",
+          "coord",
+          "color",
+          "segment",
+          "instance",
+          "binary",
+        ]
+      offset_keys_dict:
+        offset: coord
+      feat_keys: ["color", "coord"]
+
+batch_size: 4
+num_workers: 2

@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.utils.data as data
 from natsort import natsorted
+from omegaconf import OmegaConf
 
 from src.data.metadata.scannet import VALID_CLASS_IDS_20, VALID_CLASS_IDS_200
 from src.data.transform import TRANSFORMS, Compose
@@ -39,7 +40,7 @@ class RegionPLCDataset(data.Dataset):
 
         # transforms
         self.transform_cfg = transform_cfg
-        self.transform = Compose(transform_cfg)
+        self.transform = Compose(OmegaConf.to_container(transform_cfg))
 
         # class mapper
         class_names = VALID_CLASS_IDS_200 if preset == "scannet200" else VALID_CLASS_IDS_20
@@ -248,10 +249,6 @@ class RegionPLCDataset(data.Dataset):
         scene_name = filepath.split("/")[-1][: -len(".pth")]
 
         xyz, rgb, semantic_label, inst_label, binary_label = self.load_data(filepath)
-        if self.split == "train":
-            image_name_dict, image_corr_dict = self.load_caption(scene_name, idx)
-            caption = self.select_caption_and_idx_all(scene_name, image_name_dict, image_corr_dict)
-
         metadata = {"idx": idx, "scene_name": scene_name, "filepath": filepath}
 
         data_dict = {
@@ -260,9 +257,12 @@ class RegionPLCDataset(data.Dataset):
             "segment": semantic_label,
             "instance": inst_label,
             "binary": binary_label,
-            "caption": caption,
             "metadata": metadata,
         }
+        if self.split == "train":
+            image_name_dict, image_corr_dict = self.load_caption(scene_name, idx)
+            caption = self.select_caption_and_idx_all(scene_name, image_name_dict, image_corr_dict)
+            data_dict["caption"] = caption
 
         data_dict = self.transform(data_dict)
         return data_dict
@@ -270,7 +270,6 @@ class RegionPLCDataset(data.Dataset):
 
 if __name__ == "__main__":
     from easydict import EasyDict as edict
-    from omegaconf import OmegaConf
 
     conf = OmegaConf.load("./configs/data/regionplc.yaml")
 
