@@ -10,7 +10,7 @@ class SparseUNetTextSeg(ModelTemplate):
             self.binary_head.register_hook_for_binary_head(self.backbone_3d)
 
     def forward(self, batch_dict):
-        batch_dict["test_x4_split"] = self.test_x4_split
+        # batch_dict["test_x4_split"] = self.test_x4_split
         # Order: vfe, backbone_3d, binary_head, seg_head, caption_head
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)

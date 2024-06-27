@@ -3,13 +3,14 @@ import os
 import torch
 from clip import clip
 
-from ...config import cfg
-from ...utils import commu_utils
+# from ...config import cfg
+from ..utils import commu_utils
 
 
 def get_clip_model(backbone_name):
     url = clip._MODELS[backbone_name]
-    if cfg.LOCAL_RANK == 0:  # only download once at master node
+    # if cfg.LOCAL_RANK == 0:  # only download once at master node
+    if True:
         model_path = clip._download(url, os.path.expanduser("~/.cache/clip"))
     else:
         model_path = _return_clip_path(url, os.path.expanduser("~/.cache/clip"))

@@ -1,11 +1,16 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from pcseg.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
-from pcseg.utils import loss_utils
+
+# from pcseg.utils import loss_utils
 from torch_scatter import scatter_mean
 
+from src.models.components.misc import offset2batch
+from src.models.regionplc.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
+
 from ..model_utils.fp16 import force_fp32
+
+# from pcseg.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
 
 
 class CaptionHead(nn.Module):
@@ -35,8 +40,8 @@ class CaptionHead(nn.Module):
             caption_loss_func = nn.NLLLoss(ignore_index=ignore_label).cuda()
         elif loss_type == "NLL_NoReduce":
             caption_loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none").cuda()
-        elif loss_type == "BYOL":
-            caption_loss_func = loss_utils.BYOLLoss()
+        # elif loss_type == "BYOL":
+        #     caption_loss_func = loss_utils.BYOLLoss()
         else:
             raise NotImplementedError
 
@@ -48,7 +53,7 @@ class CaptionHead(nn.Module):
             return batch_dict
 
         caption_infos = batch_dict["caption_infos"]
-        v2p_map = batch_dict["v2p_map"]
+        v2p_map = batch_dict["inverse"]
         adapter_feats = batch_dict["adapter_feats"][v2p_map]
 
         if isinstance(self.caption_logit_scale, nn.Parameter):
@@ -155,7 +160,9 @@ class CaptionHead(nn.Module):
     @force_fp32(apply_to=("to_pool_obj"))
     def _forward_given_type_caption_cuda(self, batch_dict, caption_info, to_pool_obj):
         frame_corr_idx = caption_info["select_image_corr"]
-        batch_idx = batch_dict["batch_idxs"]
+        # batch_idx = batch_dict["batch_idxs"]
+        offset_origin = batch_dict["offset_origin"]
+        batch_idx = offset2batch(offset_origin)
 
         origin_idx = batch_dict["origin_idx"]  # (N, )
         pooled_objs = []
@@ -164,6 +171,9 @@ class CaptionHead(nn.Module):
         for b in range(len(frame_corr_idx)):
             cur_n_points = (batch_idx == b).sum().item()
             origin_to_cur_idx = torch.ones((batch_dict["pc_count"][b],)).long().cuda() * (-1)
+            # print(
+            #     f"origin_idx.shape: {origin_idx.shape}, batch_idx.shape: {batch_idx.shape}, cur_n_points: {cur_n_points}"
+            # )
             origin_to_cur_idx[origin_idx[batch_idx == b]] = torch.arange(cur_n_points).cuda()
 
             caption2point_idx = frame_corr_idx[b]
@@ -192,11 +202,11 @@ class CaptionHead(nn.Module):
                         [n_cap_per_point, torch.zeros(n_padding, dtype=torch.float32).cuda()]
                     )
 
-            if self.model_cfg.get("NOVEL_GRAD_ONLY", False) and "binary_labels" in batch_dict:
-                if batch_dict["binary_labels"].shape[0] != batch_idx.shape[0]:
-                    binary_labels = batch_dict["binary_labels"][batch_dict["v2p_map"]]
+            if self.model_cfg.get("NOVEL_GRAD_ONLY", False) and "binary" in batch_dict:
+                if batch_dict["binary"].shape[0] != batch_idx.shape[0]:
+                    binary_labels = batch_dict["binary"][batch_dict["inverse"]]
                 else:
-                    binary_labels = batch_dict["binary_labels"]
+                    binary_labels = batch_dict["binary"]
                 base_mask = binary_labels[batch_idx == b] == 1
             else:
                 base_mask = torch.zeros((batch_idx == b).sum().item())

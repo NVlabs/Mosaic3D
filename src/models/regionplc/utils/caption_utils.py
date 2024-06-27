@@ -4,7 +4,7 @@ import os
 import numpy as np
 import torch
 
-from ..config import cfg
+# from ..config import cfg
 from . import commu_utils
 
 
@@ -24,13 +24,13 @@ def only_keep_label_names(label_names, caption, idx):
     return new_caption, new_idx
 
 
-def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder):
+def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder, local_rank):
     caption_infos = {}
-    caption_data = batch_dict["caption_data"]
+    caption_data = batch_dict["caption"]
 
     num_captions = 0
     for key in caption_cfg:
-        if key in caption_cfg["KEY"] and caption_cfg[key].ENABLED:
+        if caption_cfg[key].enabled:
             caption, idx = caption_data[key.lower()]["caption"], caption_data[key.lower()]["idx"]
             if caption_cfg[key].get("ONLY_LABEL_NAMES", False):
                 caption, idx = only_keep_label_names(caption_cfg[key].LABEL_NAMES, caption, idx)
@@ -38,7 +38,7 @@ def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder):
 
             # caption_embed: (K, 512), caption_idx: (N), (N > K)
             caption_embed, caption_idx = extract_caption_embed(
-                caption, caption_cfg[key], text_cfg, text_encoder, cfg.LOCAL_RANK
+                caption, caption_cfg[key], text_cfg, text_encoder, local_rank
             )
             normed_caption_embed = torch.nn.functional.normalize(caption_embed, dim=-1)
 
@@ -49,7 +49,7 @@ def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder):
             }
 
     batch_dict["caption_infos"] = caption_infos
-    batch_dict["num_caption"] = num_captions / batch_dict["batch_size"]
+    batch_dict["num_caption"] = num_captions / batch_dict["offset"].shape[0]
     return batch_dict
 
 
@@ -117,20 +117,19 @@ def gather_raw_captions(image_captions):
 def forward_text_encoder(image_captions, text_encoder):
     with torch.no_grad():
         if len(image_captions) > 0:
-            if cfg.MODEL.TASK_HEAD.TEXT_EMBED.NAME == "CLIP":
+            # if cfg.MODEL.TASK_HEAD.TEXT_EMBED.NAME == "CLIP":
+            if True:
                 text_tokens = text_encoder.tokenizer(image_captions, truncate=True).cuda()
                 text_embed = text_encoder.encode_text(text_tokens).float()
-            elif cfg.MODEL.TASK_HEAD.TEXT_EMBED.NAME == "Bert":
-                text_tokens = text_encoder.tokenizer(
-                    image_captions, return_tensors="pt", padding=True
-                ).to("cuda")
-                text_embed = text_encoder(**text_tokens).pooler_output
+            # elif cfg.MODEL.TASK_HEAD.TEXT_EMBED.NAME == "Bert":
+            #     text_tokens = text_encoder.tokenizer(
+            #         image_captions, return_tensors="pt", padding=True
+            #     ).to("cuda")
+            #     text_embed = text_encoder(**text_tokens).pooler_output
             else:
                 raise NotImplementedError
         else:
-            text_embed = torch.zeros(
-                (0, cfg.MODEL.TASK_HEAD.TEXT_EMBED.CHANNEL), dtype=torch.float32
-            ).cuda()
+            text_embed = torch.zeros((0, 512), dtype=torch.float32).cuda()
     return text_embed
 
 

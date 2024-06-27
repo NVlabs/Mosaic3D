@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from pcseg.config import cfg
+
+# from pcseg.config import cfg
 
 
 class LinearHead(nn.Module):
@@ -14,6 +15,8 @@ class LinearHead(nn.Module):
         self.cls_head = nn.Linear(self.in_channel, self.num_class)
 
         self.valid_class_idx = [i for i in range(self.num_class)]
+        from pcseg.config import cfg
+
         if hasattr(cfg.DATA_CONFIG, "ignore_class_idx"):
             self.ignore_class_idx = cfg.DATA_CONFIG.ignore_class_idx
             for i in self.ignore_class_idx:
@@ -30,7 +33,7 @@ class LinearHead(nn.Module):
         if self.training and self.model_cfg.get("VOXEL_LOSS", None):
             pass
         else:
-            semantic_scores = semantic_scores[batch_dict["v2p_map"]]
+            semantic_scores = semantic_scores[batch_dict["inverse"]]
 
         semantic_scores = semantic_scores[..., self.valid_class_idx]
         semantic_preds = semantic_scores.max(1)[1]

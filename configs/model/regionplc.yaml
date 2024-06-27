@@ -15,10 +15,12 @@ scheduler:
   div_factor: 1
   final_div_factor: 10000.0
 
+scheduler_interval: step
+
 net:
   _target_: src.models.regionplc.build_vision_network
   _partial_: true
-  num_classes: 20
+  num_class: 20
   model_cfg:
     NAME: SparseUNetTextSeg
     REMAP_FROM_3DLANG: false
@@ -84,4 +86,11 @@ net:
       NOVEL_GRAD_ONLY: true
 
 # compile model for faster training with pytorch 2.0
+text_embed_path: /datasets/regionplc_tmp/text_embed/scannet_clip-ViT-B16_id.pth
+text_encoder:
+  NAME: CLIP
+  BACKBONE: ViT-B/16
+  TEMPLATE: identity
+  EXTRACT_EMBED: false
+
 compile: false

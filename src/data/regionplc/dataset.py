@@ -23,8 +23,8 @@ class RegionPLCDataset(data.Dataset):
         self,
         data_dir: str,
         split: str,
-        caption_cfg: Dict,
-        transform_cfg: None,
+        caption_cfg: Optional[Dict] = None,
+        transform_cfg: Optional[Dict] = None,
         preset: str = Literal["scannet", "scannet200"],
         base_class_idx: Optional[List[int]] = None,
         ignore_class_idx: Optional[List[int]] = None,
@@ -36,7 +36,8 @@ class RegionPLCDataset(data.Dataset):
         self.caption_cfg = caption_cfg
 
         # data paths
-        self.data_paths = natsorted(glob.glob(os.path.join(self.data_dir, split, "*.pth")))
+        scenes = natsorted(os.listdir(os.path.join(self.data_dir, split)))
+        self.data_paths = [os.path.join(self.data_dir, split, scene) for scene in scenes]
 
         # transforms
         self.transform_cfg = transform_cfg
@@ -44,6 +45,7 @@ class RegionPLCDataset(data.Dataset):
 
         # class mapper
         class_names = VALID_CLASS_IDS_200 if preset == "scannet200" else VALID_CLASS_IDS_20
+        self.class_names = class_names
         self.valid_class_idx = np.arange(len(class_names)).tolist()
         if base_class_idx is not None:
             self.base_class_mapper = self.build_class_mapper(base_class_idx, ignore_label)
@@ -58,18 +60,19 @@ class RegionPLCDataset(data.Dataset):
         )
         self.ignore_label = ignore_label
 
-        # load caption
-        captions = {}
-        for key in caption_cfg:
-            if caption_cfg[key].enabled:
-                caption_path = os.path.join(data_dir, caption_cfg[key].caption_path)
-                captions[key.lower()] = copy.deepcopy(json.load(open(caption_path)))
-        self.captions = captions
+        if split == "train" and caption_cfg is not None:
+            # load caption
+            captions = {}
+            for key in caption_cfg:
+                if caption_cfg[key].enabled:
+                    caption_path = os.path.join(data_dir, caption_cfg[key].caption_path)
+                    captions[key.lower()] = copy.deepcopy(json.load(open(caption_path)))
+            self.captions = captions
 
-        # load image correspondences
-        self.scene_image_corr_infos = pickle.load(
-            open(os.path.join(self.data_dir, caption_cfg.view.image_corr_path), "rb")
-        )
+            # load image correspondences
+            self.scene_image_corr_infos = pickle.load(
+                open(os.path.join(self.data_dir, caption_cfg.view.image_corr_path), "rb")
+            )
 
     @staticmethod
     def build_class_mapper(class_idx, ignore_label, squeeze_label=True):
@@ -94,16 +97,20 @@ class RegionPLCDataset(data.Dataset):
         return remapper
 
     def __len__(self):
-        return self.data_paths
+        return len(self.data_paths)
 
     def load_data(self, filepath):
-        xyz, rgb, label, inst_label = torch.load(filepath)
-
-        # normalize rgb to [0,255]
-        rgb = np.clip((rgb + 1.0) * 127.5, 0, 255)
+        xyz = np.load(os.path.join(filepath, "coord.npy"))
+        rgb = np.load(os.path.join(filepath, "color.npy"))
+        label = np.load(os.path.join(filepath, "segment20.npy"))
+        inst_label = np.load(os.path.join(filepath, "instance.npy"))
 
         # class mapping
-        semantic_label = self.valid_class_mapper[label.astype(np.int64)]
+        semantic_label = (
+            self.valid_class_mapper[label.astype(np.int64)]
+            if not hasattr(self, "base_class_mapper")
+            else self.base_class_mapper[label.astype(np.int64)]
+        )
         inst_label[label == self.ignore_label] = self.ignore_label
         binary_label = np.ones_like(label)
         if hasattr(self, "base_class_mapper"):
@@ -246,8 +253,7 @@ class RegionPLCDataset(data.Dataset):
 
     def __getitem__(self, idx):
         filepath = self.data_paths[idx]
-        scene_name = filepath.split("/")[-1][: -len(".pth")]
-
+        scene_name = filepath.split("/")[-1]
         xyz, rgb, semantic_label, inst_label, binary_label = self.load_data(filepath)
         metadata = {"idx": idx, "scene_name": scene_name, "filepath": filepath}
 
@@ -258,6 +264,8 @@ class RegionPLCDataset(data.Dataset):
             "instance": inst_label,
             "binary": binary_label,
             "metadata": metadata,
+            "pc_count": xyz.shape[0],
+            "origin_idx": np.arange(xyz.shape[0]),
         }
         if self.split == "train":
             image_name_dict, image_corr_dict = self.load_caption(scene_name, idx)

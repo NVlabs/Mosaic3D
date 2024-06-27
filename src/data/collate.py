@@ -22,6 +22,11 @@ def collate_fn(batch):
     elif isinstance(batch[0], str):
         # str is also a kind of Sequence, judgement should before Sequence
         return list(batch)
+    elif isinstance(batch[0], Sequence) and isinstance(batch[0][0], str):
+        batch = [item for sublist in batch for item in sublist]
+        return batch
+    elif isinstance(batch[0], Sequence) and isinstance(batch[0][0], torch.Tensor):
+        return batch
     elif isinstance(batch[0], Sequence):
         for data in batch:
             data.append(torch.tensor([data[0].shape[0]]))

@@ -3,6 +3,8 @@ import functools
 import torch
 import torch.nn as nn
 
+from src.models.components.misc import offset2batch
+
 from ..model_utils.spconv_utils import spconv
 from ..model_utils.unet_blocks import ResidualBlock, UBlock, VGGBlock
 
@@ -58,11 +60,18 @@ class SparseUNetIndoor(nn.Module):
             m.bias.data.fill_(0.0)
 
     def forward(self, batch_dict):
+        grid_coord = batch_dict["grid_coord"]
+        feat = batch_dict["feat"]
+        offset = batch_dict["offset"]
+
+        batch = offset2batch(offset)
+        sparse_shape = torch.add(torch.max(grid_coord, dim=0).values, 96).tolist()
+
         input_sp_tensor = spconv.SparseConvTensor(
-            batch_dict["voxel_features"],
-            batch_dict["voxel_coords"].int(),
-            batch_dict["spatial_shape"],
-            batch_dict["batch_size"],
+            features=feat,
+            indices=torch.cat([batch.unsqueeze(-1).int(), grid_coord.int()], dim=1).contiguous(),
+            spatial_shape=sparse_shape,
+            batch_size=batch[-1].tolist() + 1,
         )
         output = self.input_conv(input_sp_tensor)
         output = self.unet(output)

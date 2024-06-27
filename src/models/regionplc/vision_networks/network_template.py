@@ -9,20 +9,20 @@ from ..vision_backbones_3d import vfe
 
 
 class ModelTemplate(nn.Module):
-    def __init__(self, model_cfg, num_class, dataset):
+    def __init__(self, model_cfg, num_class, data_cfg):
         super().__init__()
         self.model_cfg = model_cfg
         self.num_class = num_class
-        self.dataset = dataset
-        self.class_names = dataset.class_names
+        self.data_cfg = data_cfg
+        # self.class_names = dataset.class_names
         self.register_buffer("global_step", torch.LongTensor(1).zero_())
 
         self.fixed_modules = model_cfg.get("FIXED_MODULES", [])
         # For S3DIS
-        self.test_x4_split = dataset.dataset_cfg.DATA_PROCESSOR.get("x4_split", False)
+        # self.test_x4_split = dataset.dataset_cfg.DATA_PROCESSOR.get("x4_split", False)
 
         self.module_topology = [
-            "vfe",
+            # "vfe",
             "backbone_3d",
             "adapter",
             "binary_head",
@@ -57,9 +57,9 @@ class ModelTemplate(nn.Module):
 
         vfe_module = vfe.__all__[self.model_cfg.VFE.NAME](
             model_cfg=self.model_cfg.VFE,
-            num_point_features=self.dataset.dataset_cfg.get("NUM_POINT_FEATURES", None),
-            voxel_size=self.dataset.dataset_cfg.get("VOXEL_SIZE", None),
-            voxel_mode=self.dataset.dataset_cfg.DATA_PROCESSOR.get("voxel_mode", None),
+            num_point_features=self.data_cfg.get("NUM_POINT_FEATURES", None),
+            voxel_size=self.data_cfg.get("VOXEL_SIZE", None),
+            voxel_mode=self.data_cfg.DATA_PROCESSOR.get("voxel_mode", None),
         )
         model_info_dict["module_list"].append(vfe_module)
         return vfe_module, model_info_dict
@@ -85,8 +85,9 @@ class ModelTemplate(nn.Module):
         task_head_module = head.__all__[self.model_cfg.TASK_HEAD.NAME](
             model_cfg=self.model_cfg.TASK_HEAD,
             in_channel=in_channel,
-            ignore_label=self.dataset.ignore_label,
+            ignore_label=self.data_cfg.ignore_label,
             num_class=self.num_class,
+            data_cfg=self.data_cfg,
         )
         model_info_dict["module_list"].append(task_head_module)
         return task_head_module, model_info_dict
@@ -100,20 +101,20 @@ class ModelTemplate(nn.Module):
         else:
             in_channel = model_info_dict["backbone3d_out_channel"]
 
-        if hasattr(self.dataset, "base_inst_class_idx"):
-            base_inst_class_idx = self.dataset.base_inst_class_idx
-            novel_inst_class_idx = self.dataset.novel_inst_class_idx
+        if hasattr(self.data_cfg, "base_inst_class_idx"):
+            base_inst_class_idx = self.data_cfg.base_inst_class_idx
+            novel_inst_class_idx = self.data_cfg.novel_inst_class_idx
         else:
             base_inst_class_idx = novel_inst_class_idx = None
 
         inst_head_module = head.__all__[self.model_cfg.INST_HEAD.NAME](
             model_cfg=self.model_cfg.INST_HEAD,
             in_channel=in_channel,
-            inst_class_idx=self.dataset.inst_class_idx,
-            sem2ins_classes=self.dataset.dataset_cfg.sem2ins_classes,
-            valid_class_idx=self.dataset.valid_class_idx,
-            label_shift=self.dataset.inst_label_shift,
-            ignore_label=self.dataset.ignore_label,
+            inst_class_idx=self.data_cfg.inst_class_idx,
+            sem2ins_classes=self.data_cfg.sem2ins_classes,
+            valid_class_idx=self.data_cfg.valid_class_idx,
+            label_shift=self.data_cfg.inst_label_shift,
+            ignore_label=self.data_cfg.ignore_label,
             base_inst_class_idx=base_inst_class_idx,
             novel_inst_class_idx=novel_inst_class_idx,
         )
@@ -137,7 +138,7 @@ class ModelTemplate(nn.Module):
 
         binary_head_module = head.__all__[self.model_cfg.BINARY_HEAD.NAME](
             model_cfg=self.model_cfg.BINARY_HEAD,
-            ignore_label=self.dataset.ignore_label,
+            ignore_label=self.data_cfg.ignore_label,
             in_channel=model_info_dict["backbone3d_out_channel"],
             block_reps=self.model_cfg.BACKBONE_3D.BLOCK_REPS,
             block_residual=self.model_cfg.BACKBONE_3D.BLOCK_RESIDUAL,
@@ -150,7 +151,7 @@ class ModelTemplate(nn.Module):
             return None, model_info_dict
 
         caption_head_module = head.__all__[self.model_cfg.CAPTION_HEAD.NAME](
-            model_cfg=self.model_cfg.CAPTION_HEAD, ignore_label=self.dataset.ignore_label
+            model_cfg=self.model_cfg.CAPTION_HEAD, ignore_label=self.data_cfg.ignore_label
         )
         model_info_dict["module_list"].append(caption_head_module)
         return caption_head_module, model_info_dict
@@ -166,7 +167,7 @@ class ModelTemplate(nn.Module):
         return kd_head_module, model_info_dict
 
     def forward(self, batch_dict):
-        batch_dict["test_x4_split"] = self.test_x4_split
+        # batch_dict["test_x4_split"] = self.test_x4_split
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)
 

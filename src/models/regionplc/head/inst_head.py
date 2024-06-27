@@ -562,23 +562,23 @@ class InstHead(nn.Module):
         self.forward_ret_dict = {}
         self.semantic_only = batch_dict["epoch"] < self.prepare_epoch
 
-        if not self.training and batch_dict["test_x4_split"]:
-            batch_dict["points_xyz"] = common_utils.merge_4_parts(batch_dict["points_xyz"])
-            batch_dict["labels"] = common_utils.merge_4_parts(batch_dict["labels"])
-            batch_dict["inst_label"] = common_utils.merge_4_parts(batch_dict["inst_label"])
-            batch_dict["pt_offset_label"] = common_utils.merge_4_parts(
-                batch_dict["pt_offset_label"]
-            )
-            batch_dict["binary_labels"] = common_utils.merge_4_parts(batch_dict["binary_labels"])
-            self.forward_ret_dict["seg_labels"] = batch_dict["labels"]
-            self.forward_ret_dict["binary_labels"] = batch_dict["binary_labels"]
+        # if not self.training and batch_dict["test_x4_split"]:
+        #     batch_dict["points_xyz"] = common_utils.merge_4_parts(batch_dict["points_xyz"])
+        #     batch_dict["labels"] = common_utils.merge_4_parts(batch_dict["labels"])
+        #     batch_dict["inst_label"] = common_utils.merge_4_parts(batch_dict["inst_label"])
+        #     batch_dict["pt_offset_label"] = common_utils.merge_4_parts(
+        #         batch_dict["pt_offset_label"]
+        #     )
+        #     batch_dict["binary_labels"] = common_utils.merge_4_parts(batch_dict["binary_labels"])
+        #     self.forward_ret_dict["seg_labels"] = batch_dict["labels"]
+        #     self.forward_ret_dict["binary_labels"] = batch_dict["binary_labels"]
 
         # forward offset_branch
         backbone3d_feats = batch_dict[self.in_feature_name]
         if not self.no_v2p_map:
-            backbone3d_feats = backbone3d_feats[batch_dict["v2p_map"]]
-        if not self.training and batch_dict["test_x4_split"]:
-            backbone3d_feats = common_utils.merge_4_parts(backbone3d_feats)
+            backbone3d_feats = backbone3d_feats[batch_dict["inverse"]]
+        # if not self.training and batch_dict["test_x4_split"]:
+        #     backbone3d_feats = common_utils.merge_4_parts(backbone3d_feats)
         pt_offsets = self.offset_linear(backbone3d_feats)
         # pt_offsets[batch_dict['inst_label'] == self.ignore_label] = -100.
         # pt_offsets = batch_dict['pt_offset_label'] * 0.2

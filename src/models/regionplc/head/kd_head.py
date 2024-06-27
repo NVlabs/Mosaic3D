@@ -2,10 +2,13 @@ import functools
 
 import numpy as np
 import torch.nn as nn
-from pcseg.utils import loss_utils
+
+from src.models.regionplc.utils import loss_utils
 
 from ..model_utils import basic_block_1d
 from ..model_utils.basic_block_1d import build_block
+
+# from pcseg.utils import loss_utils
 
 
 class KDHeadTemplate(nn.Module):
@@ -26,7 +29,7 @@ class KDHeadTemplate(nn.Module):
         self.forward_ret_dict = {}
         # out_feature = self.kd_adapter(batch_dict[self.in_feature_name])
         feature = batch_dict[self.in_feature_name]
-        out_feature = feature[batch_dict["v2p_map"].long()]
+        out_feature = feature[batch_dict["inverse"].long()]
 
         if self.feature_norm:
             out_feature = out_feature / out_feature.norm(dim=-1, keepdim=True)

@@ -926,12 +926,16 @@ class SphereCrop:
                 data_dict["normal"] = data_dict["normal"][idx_crop]
             if "segment" in data_dict.keys():
                 data_dict["segment"] = data_dict["segment"][idx_crop]
+            if "binary" in data_dict.keys():
+                data_dict["binary"] = data_dict["binary"][idx_crop]
             if "instance" in data_dict.keys():
                 data_dict["instance"] = data_dict["instance"][idx_crop]
             if "displacement" in data_dict.keys():
                 data_dict["displacement"] = data_dict["displacement"][idx_crop]
             if "strength" in data_dict.keys():
                 data_dict["strength"] = data_dict["strength"][idx_crop]
+            if "origin_idx" in data_dict.keys():
+                data_dict["origin_idx"] = data_dict["origin_idx"][idx_crop]
         return data_dict
 
 

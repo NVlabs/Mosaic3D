@@ -1,9 +1,11 @@
 from typing import Any, Dict, Tuple
 
+import numpy as np
 import torch
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.accuracy import Accuracy
+from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
 from src.models.regionplc import build_text_model
 from src.models.regionplc.text_networks import load_text_embedding_from_path
@@ -37,44 +39,39 @@ class RegionPLCLitModule(LightningModule):
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()
 
-        # metric objects for calculating and averaging accuracy across batches
-        self.train_acc = Accuracy(task="multiclass", num_classes=10)
-        self.val_acc = Accuracy(task="multiclass", num_classes=10)
-        self.test_acc = Accuracy(task="multiclass", num_classes=10)
-
         # for averaging loss across batches
         self.train_loss = MeanMetric()
-        self.val_loss = MeanMetric()
-        self.test_loss = MeanMetric()
 
         # for tracking best so far validation accuracy
-        self.val_acc_best = MaxMetric()
+        self.val_confmat = None
+        self.val_miou_best = MaxMetric()
 
     def configure_model(self) -> None:
         if self.net is not None:
             return
 
-        dataset = self.trainer.train_dataloader.dataset
-        self.net = self.hparams.network(dataset=dataset)
+        self.net = self.hparams.net(dataset=self.data_cfg.train_dataset)
+        self.net.task_head.set_cls_head_with_text_embed(self.text_embed)
         self.text_encoder = build_text_model(self.hparams.text_encoder)
+
+    def setup(self, stage: str) -> None:
+        val_dataloader = self.trainer.datamodule.val_dataloader()
+        self.class_names = val_dataloader.dataset.class_names
+
+        self.val_confmat = MulticlassConfusionMatrix(
+            num_classes=len(self.class_names),
+            ignore_index=val_dataloader.dataset.ignore_label,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
-
-    def on_train_start(self) -> None:
-        self.val_loss.reset()
-        self.val_acc.reset()
-        self.val_acc_best.reset()
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> torch.Tensor:
         dataset = self.trainer.train_dataloader.dataset
         batch = caption_utils.get_caption_batch(
-            dataset.caption_cfg,
-            {},
-            batch,
-            self.text_encoder,
+            dataset.caption_cfg, {}, batch, self.text_encoder, local_rank=self.local_rank
         )
         ret_dict, tb_dict, dist_dict = self.net(batch)
 
@@ -82,39 +79,60 @@ class RegionPLCLitModule(LightningModule):
 
         # update and log metrics
         self.train_loss(loss)
-        self.log("train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True)
-
-        # return loss or backpropagation will fail
+        log_kwargs = dict(
+            on_step=True, on_epoch=True, prog_bar=True, batch_size=len(batch["offset"])
+        )
+        self.log("train/loss", self.train_loss, **log_kwargs)
+        self.log("train/loss_segment", tb_dict["loss_seg"], **log_kwargs)
+        self.log("train/loss_caption", tb_dict["caption_view"], **log_kwargs)
+        self.log("train/loss_binary", tb_dict["binary_loss"], **log_kwargs)
         return loss
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
-        loss, preds, targets = self.model_step(batch)
+        # loss, preds, targets = self.net(batch)
+        ret_dict = self.net(batch)
+
+        preds, labels = ret_dict["seg_preds"], ret_dict["seg_labels"]
 
         # update and log metrics
-        self.val_loss(loss)
-        self.val_acc(preds, targets)
-        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        # self.val_acc(preds, targets)
+        # self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        # self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        self.val_confmat(preds, labels)
 
     def on_validation_epoch_end(self) -> None:
-        acc = self.val_acc.compute()  # get current val acc
-        self.val_acc_best(acc)  # update best so far val acc
-        # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
-        # otherwise metric would be reset by lightning after each epoch
-        self.log("val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True)
+        confmat = self.val_confmat.compute().cpu().numpy()
+        class_ious = {}
+        class_accs = {}
+        for i, class_name in enumerate(self.class_names):
+            tp = confmat[i, i]
+            fp = confmat[:, i].sum() - tp
+            fn = confmat[i, :].sum() - tp
+
+            class_ious[class_name] = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0
+            class_accs[class_name] = tp / (tp + fn) if (tp + fn) > 0 else 0
+
+        miou = np.array(list(class_ious.values())).mean()
+        macc = np.array(list(class_accs.values())).mean()
+        allacc = np.diag(confmat).sum() / (confmat.sum() + 1e-10)
+
+        for k, v in class_ious.items():
+            self.log(f"val/iou_{k}", v, sync_dist=True, logger=True)
+
+        self.val_miou_best.update(miou)
+        self.log("val/best_miou", self.val_miou_best.compute(), sync_dist=True, logger=True)
+        self.log("val/miou", miou, sync_dist=True, logger=True)
+        self.log("val/macc", macc, sync_dist=True, logger=True)
+        self.log("val/allacc", allacc, sync_dist=True, logger=True)
+
+        self.val_confmat.reset()
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
-        loss, preds, targets = self.model_step(batch)
+        self.validation_step(batch, batch_idx)
 
-        # update and log metrics
-        self.test_loss(loss)
-        self.test_acc(preds, targets)
-        self.log("test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/acc", self.test_acc, on_step=False, on_epoch=True, prog_bar=True)
-
-    def setup(self, stage: str) -> None:
-        if self.hparams.compile and stage == "fit":
-            self.net = torch.compile(self.net)
+    # def setup(self, stage: str) -> None:
+    #     if self.hparams.compile and stage == "fit":
+    #         self.net = torch.compile(self.net)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())

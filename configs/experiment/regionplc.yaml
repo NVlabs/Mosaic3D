@@ -17,9 +17,7 @@ tags: ["regionplc"]
 seed: 12345
 
 trainer:
-  min_epochs: 10
-  max_epochs: 10
-  gradient_clip_val: 0.5
+  max_epochs: 150
 
 data:
   batch_size: 4
@@ -28,3 +26,7 @@ logger:
   wandb:
     tags: ${tags}
     group: "regionplc"
+
+callbacks:
+  model_checkpoint:
+    monitor: "val/miou"

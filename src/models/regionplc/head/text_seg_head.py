@@ -4,12 +4,15 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import torch.nn as nn
-from pcseg.config import cfg
-from pcseg.utils import category_remap_utils, common_utils
+
+# from pcseg.utils import category_remap_utils, common_utils
+from src.models.regionplc.utils import common_utils
+
+# from pcseg.config import cfg
 
 
 class TextSegHead(nn.Module):
-    def __init__(self, model_cfg, in_channel, ignore_label, **kwargs):
+    def __init__(self, model_cfg, in_channel, ignore_label, data_cfg, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
         self.in_channel = in_channel
@@ -20,6 +23,7 @@ class TextSegHead(nn.Module):
         self.text_channel = self.model_cfg.TEXT_EMBED.CHANNEL
         self.num_class = self.model_cfg.TEXT_EMBED.NUM_CLASS
         self.feat_norm = model_cfg.get("FEAT_NORM", False)
+        self.data_cfg = data_cfg
 
         # create cls head
         self.cls_head = nn.Linear(self.text_channel, self.num_class, bias=False)
@@ -38,26 +42,26 @@ class TextSegHead(nn.Module):
             param.requires_grad = False
 
         # open vocab
-        self.valid_class_idx = [i for i in range(len(cfg.CLASS_NAMES))]
-        if hasattr(cfg.DATA_CONFIG, "base_class_idx"):
-            self.base_class_idx = cfg.DATA_CONFIG.base_class_idx
-            self.novel_class_idx = cfg.DATA_CONFIG.novel_class_idx
-        if hasattr(cfg.DATA_CONFIG, "ignore_class_idx"):
-            self.ignore_class_idx = cfg.DATA_CONFIG.ignore_class_idx
+        self.valid_class_idx = [i for i in range(20)]  # TODO: cfg
+        if hasattr(self.data_cfg, "base_class_idx"):
+            self.base_class_idx = self.data_cfg.base_class_idx
+            self.novel_class_idx = self.data_cfg.novel_class_idx
+        if hasattr(self.data_cfg, "ignore_class_idx"):
+            self.ignore_class_idx = self.data_cfg.ignore_class_idx
             for i in self.ignore_class_idx:
                 self.valid_class_idx.remove(i)
 
         # remap category name for ambiguous categories
-        self.need_class_mapping = self.model_cfg.get("CLASS_MAPPING", False)
-        if self.need_class_mapping:
-            self.idx_mapping = category_remap_utils.cast_category_name_mapping_to_idx_mapping(
-                self.model_cfg.CLASS_MAPPING, cfg.TEXT_ENCODER.CATEGORY_NAMES, cfg.CLASS_NAMES
-            )
+        # self.need_class_mapping = self.model_cfg.get("CLASS_MAPPING", False)
+        # if self.need_class_mapping:
+        #     self.idx_mapping = category_remap_utils.cast_category_name_mapping_to_idx_mapping(
+        #         self.model_cfg.CLASS_MAPPING, cfg.TEXT_ENCODER.CATEGORY_NAMES, cfg.CLASS_NAMES
+        #     )
 
         self.seg_loss_weight = model_cfg.get("SEMANTIC_WEIGHT", None)
         if self.seg_loss_weight is not None:
             self.seg_loss_weight = torch.FloatTensor(self.seg_loss_weight).cuda()
-            if hasattr(cfg.DATA_CONFIG, "base_class_idx"):
+            if hasattr(self.data_cfg, "base_class_idx"):
                 self.seg_loss_weight = self.seg_loss_weight[self.base_class_idx]
             else:
                 self.seg_loss_weight = self.seg_loss_weight[self.valid_class_idx]
@@ -88,12 +92,12 @@ class TextSegHead(nn.Module):
         if self.no_v2p_map or (self.training and self.model_cfg.get("VOXEL_LOSS", None)):
             pass
         else:
-            semantic_scores = semantic_scores[batch_dict["v2p_map"]]
-        if not self.training and batch_dict["test_x4_split"]:
-            semantic_scores = common_utils.merge_4_parts(semantic_scores)
+            semantic_scores = semantic_scores[batch_dict["inverse"]]
+        # if not self.training and batch_dict["test_x4_split"]:
+        #     semantic_scores = common_utils.merge_4_parts(semantic_scores)
 
-        if not self.training and self.need_class_mapping:
-            semantic_scores = self.remap_category(semantic_scores, self.idx_mapping)
+        # if not self.training and self.need_class_mapping:
+        #     semantic_scores = self.remap_category(semantic_scores, self.idx_mapping)
 
         if self.training or batch_dict.get("pseudo_label_generation", False):
             if hasattr(self, "base_class_idx"):
@@ -143,13 +147,16 @@ class TextSegHead(nn.Module):
         self.forward_ret_dict["binary_preds"] = binary_preds
 
         # save gt label to forward_ret_dict
-        self.forward_ret_dict["seg_labels"] = batch_dict["labels"]
+        self.forward_ret_dict["seg_labels"] = batch_dict["segment"]
 
         return batch_dict
 
     def get_loss(self):
         semantic_scores = self.forward_ret_dict["seg_scores"]
         semantic_labels = self.forward_ret_dict["seg_labels"]
+        # print(
+        #     f"semantic_labels max: {semantic_labels.max()}, semantic_scores: {semantic_scores.shape}"
+        # )
         seg_loss = self.seg_loss_func(semantic_scores, semantic_labels) * self.model_cfg.get(
             "LOSS_WEIGHT", 1.0
         )
@@ -178,21 +185,21 @@ class TextSegHead(nn.Module):
         semantic_preds = semantic_scores.max(1)[1]
         return binary_preds, semantic_preds
 
-    @staticmethod
-    def remap_category(semantic_scores, idx_mapping):
-        new_semantic_scores = torch.zeros(
-            (semantic_scores.shape[0], len(cfg.CLASS_NAMES)), dtype=torch.float32
-        ).cuda()
-        for idx in range(new_semantic_scores.shape[1]):
-            if isinstance(idx_mapping[idx], list):
-                source_idxs = torch.from_numpy(np.array(idx_mapping[idx], dtype=np.int64)).cuda()
-                selected_logits = semantic_scores[..., source_idxs]
-                selected_idx = selected_logits.max(1)[1]
-                max_score_idx = source_idxs[selected_idx]
-                new_semantic_scores[..., idx] = semantic_scores[
-                    torch.arange(semantic_scores.shape[0]).cuda(), max_score_idx
-                ]
-            else:
-                new_semantic_scores[..., idx] = semantic_scores[..., idx_mapping[idx]]
+    # @staticmethod
+    # def remap_category(semantic_scores, idx_mapping):
+    #     new_semantic_scores = torch.zeros(
+    #         (semantic_scores.shape[0], len(cfg.CLASS_NAMES)), dtype=torch.float32
+    #     ).cuda()
+    #     for idx in range(new_semantic_scores.shape[1]):
+    #         if isinstance(idx_mapping[idx], list):
+    #             source_idxs = torch.from_numpy(np.array(idx_mapping[idx], dtype=np.int64)).cuda()
+    #             selected_logits = semantic_scores[..., source_idxs]
+    #             selected_idx = selected_logits.max(1)[1]
+    #             max_score_idx = source_idxs[selected_idx]
+    #             new_semantic_scores[..., idx] = semantic_scores[
+    #                 torch.arange(semantic_scores.shape[0]).cuda(), max_score_idx
+    #             ]
+    #         else:
+    #             new_semantic_scores[..., idx] = semantic_scores[..., idx_mapping[idx]]
 
-        return new_semantic_scores
+    #     return new_semantic_scores

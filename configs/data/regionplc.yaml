@@ -2,7 +2,8 @@ _target_: src.data.regionplc.datamodule.RegionPLCDataModule
 
 train_dataset:
   _target_: src.data.regionplc.dataset.RegionPLCDataset
-  data_dir: /home/junhal/datasets/regionplc
+  _partial_: True
+  data_dir: /datasets/regionplc_tmp
   split: train
   transform_cfg:
     - type: Copy
@@ -29,13 +30,15 @@ train_dataset:
       grid_size: 0.02
       hash_type: fnv
       mode: train
-      keys: ["coord", "color", "segment", "instance", "binary"]
+      keys: ["coord", "color"]
       return_grid_coord: True
+      return_inverse: True
     - type: NormalizeColor
     - type: ToTensor
     - type: Collect
       keys:
         [
+          "caption",
           "origin_coord",
           "grid_coord",
           "coord",
@@ -43,23 +46,27 @@ train_dataset:
           "segment",
           "instance",
           "binary",
+          "inverse",
+          "origin_idx",
+          "pc_count",
         ]
       offset_keys_dict:
         offset: coord
+        offset_origin: origin_coord
       feat_keys: ["color", "coord"]
   caption_cfg:
     view:
       enabled: true
-      caption_path: text_embed/caption_detic-template_and_kosmos_125k_iou0.2.json
-      image_corr_path: scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
+      caption_path: caption/caption_detic-template_and_kosmos_125k_iou0.2.json
+      image_corr_path: image_corr/scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
       select: ratio
       num: 1
       ratio: 0.2
       sample: 1
     entity:
       enabled: false
-      caption_path: text_embed/caption_2d_intersect_v3.json
-      image_corr_path: scannetv2_matching_idx_intersect_v3
+      caption_path: caption/caption_2d_intersect_v3.json
+      image_corr_path: image_corr/scannetv2_matching_idx_intersect_v3
       select: ratio
       num: 1
       ratio: 1.0
@@ -70,7 +77,8 @@ train_dataset:
 
 val_dataset:
   _target_: src.data.regionplc.dataset.RegionPLCDataset
-  data_dir: /home/junhal/datasets/regionplc
+  _partial_: True
+  data_dir: /datasets/regionplc_tmp
   split: val
   transform_cfg:
     - type: Copy
@@ -82,8 +90,9 @@ val_dataset:
       grid_size: 0.02
       hash_type: fnv
       mode: train
-      keys: ["coord", "color", "segment", "instance", "binary"]
+      keys: ["coord", "color"]
       return_grid_coord: True
+      return_inverse: True
     - type: NormalizeColor
     - type: ToTensor
     - type: Collect
@@ -96,9 +105,13 @@ val_dataset:
           "segment",
           "instance",
           "binary",
+          "inverse",
+          "origin_idx",
+          "pc_count",
         ]
       offset_keys_dict:
         offset: coord
+        offset_origin: origin_coord
       feat_keys: ["color", "coord"]
 
 batch_size: 4

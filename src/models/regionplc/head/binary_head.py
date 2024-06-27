@@ -2,7 +2,8 @@ import functools
 
 import torch
 import torch.nn as nn
-from pcseg.utils import common_utils
+
+from src.models.regionplc.utils import common_utils
 
 from ..model_utils.spconv_utils import spconv
 from ..model_utils.unet_blocks import ResidualBlock, UBlockDecoder, VGGBlock
@@ -72,10 +73,10 @@ class BinaryHead(nn.Module):
         if self.training and self.model_cfg.get("VOXEL_LOSS", None):
             pass
         else:
-            binary_scores = binary_scores[batch_dict["v2p_map"].long()]
+            binary_scores = binary_scores[batch_dict["inverse"].long()]
 
-        if not self.training and batch_dict["test_x4_split"]:
-            binary_scores = common_utils.merge_4_parts(binary_scores)
+        # if not self.training and batch_dict["test_x4_split"]:
+        #     binary_scores = common_utils.merge_4_parts(binary_scores)
 
         binary_preds = (torch.sigmoid(binary_scores) > self.binary_thresh).long()
 
@@ -83,7 +84,7 @@ class BinaryHead(nn.Module):
         self.forward_ret_dict["binary_scores"] = binary_scores
         self.forward_ret_dict["binary_preds"] = binary_preds
         if self.training:
-            self.forward_ret_dict["binary_labels"] = batch_dict["binary_labels"]
+            self.forward_ret_dict["binary_labels"] = batch_dict["binary"]
 
         batch_dict["binary_ret_dict"] = self.forward_ret_dict
         return batch_dict
@@ -104,6 +105,7 @@ class BinaryHead(nn.Module):
 
         # filter unannotated categories
         mask = binary_labels != self.ignore_label
+        # print(f"binary_scores: {binary_scores.shape}, binary_labels: {binary_labels.shape}")
         binary_loss = self.binary_loss_func(
             binary_scores[mask], binary_labels[mask].reshape(-1, 1)
         )

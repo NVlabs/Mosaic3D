@@ -8,7 +8,8 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-import SharedArray
+
+# import SharedArray
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -401,22 +402,22 @@ def check_exists(path):
         raise TypeError(f"Unexpected type for path: {type(path)}")
 
 
-def sa_create(name, var):
-    try:
-        x = SharedArray.create(name, var.shape, dtype=var.dtype)
-    except FileExistsError:
-        return
-    x[...] = var[...]
-    x.flags.writeable = False
-    return x
+# def sa_create(name, var):
+#     try:
+#         x = SharedArray.create(name, var.shape, dtype=var.dtype)
+#     except FileExistsError:
+#         return
+#     x[...] = var[...]
+#     x.flags.writeable = False
+#     return x
 
 
-def sa_delete(name):
-    try:
-        SharedArray.delete(name)
-    except Exception as e:
-        print(e)
-        return
+# def sa_delete(name):
+#     try:
+#         SharedArray.delete(name)
+#     except Exception as e:
+#         print(e)
+#         return
 
 
 class OSSClient:
