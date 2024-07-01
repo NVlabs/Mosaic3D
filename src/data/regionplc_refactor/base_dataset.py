@@ -13,18 +13,16 @@ from torch.utils.data import Dataset
 class DatasetTemplate(Dataset):
     def __init__(
         self,
+        data_dir: str,
+        split: str,
         dataset_cfg=None,
         class_names=None,
-        training=True,
-        root_path=None,
     ):
         super().__init__()
+        self.data_dir = Path(data_dir)
+        self.split = split
         self.dataset_cfg = dataset_cfg
-        self.training = training
         self.class_names = class_names
-        self.root_path = (
-            Path(root_path) if root_path is not None else Path(self.dataset_cfg.DATA_PATH)
-        )
 
         if self.dataset_cfg is None or class_names is None:
             return
@@ -83,10 +81,12 @@ class DatasetTemplate(Dataset):
         self.kd_label_dir = self.dataset_cfg.get("KD_LABEL_DIR", None)
         self.kd_label_norm = self.dataset_cfg.get("KD_LABEL_NORM", False)
 
-        self.mode = "train" if self.training else "test"
-
     def __len__(self):
         raise NotImplementedError
+
+    @property
+    def training(self):
+        return self.split == "train"
 
     def __getitem__(self, index):
         raise NotImplementedError
@@ -315,10 +315,9 @@ class DatasetTemplate(Dataset):
 
     def get_caption_items(self, caption_cfg):
         caption_items = {}
-        data_path = self.dataset_cfg.DATA_PATH
         for key in caption_cfg:
             if key in self.caption_keys and caption_cfg[key].ENABLED:
-                caption_path = os.path.join(data_path, caption_cfg[key].CAPTION_PATH)
+                caption_path = os.path.join(self.data_dir, caption_cfg[key].CAPTION_PATH)
                 caption_items[key.lower()] = copy.deepcopy(json.load(open(caption_path)))
         return caption_items
 
@@ -374,14 +373,3 @@ class DatasetTemplate(Dataset):
             selected_image_corr = []
 
         return selected_image_name, selected_image_corr
-
-    def include_point_caption_idx(self):
-        if self.need_view_caption and self.caption_cfg.VIEW.get("IMAGE_CORR_PATH", None):
-            corr_path = self.caption_cfg.VIEW.IMAGE_CORR_PATH
-            corr_path = self.root_path / corr_path
-            point_caption_idx = pickle.load(open(corr_path, "rb"))
-        else:
-            point_caption_idx = None
-
-        entity_point_caption_idx = None
-        return point_caption_idx, entity_point_caption_idx

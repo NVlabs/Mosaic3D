@@ -35,7 +35,7 @@ class RegionPLCLitModule(LightningModule):
         self.net = None
 
         # load text embed
-        self.text_embed = load_text_embedding_from_path(text_embed_path, log)
+        self.text_embed = load_text_embedding_from_path(text_embed_path)
 
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()

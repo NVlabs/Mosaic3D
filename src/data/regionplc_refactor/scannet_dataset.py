@@ -1,33 +1,61 @@
+import copy
 import os
+import pickle
 from pathlib import Path
 
 import numpy as np
 import torch
+from natsort import natsorted
 
+from src.data.regionplc_refactor.augmentor.data_augmentor import DataAugmentor
+from src.data.regionplc_refactor.base_dataset import DatasetTemplate
 from src.utils import RankedLogger
-
-from .indoor_dataset import IndoorDataset
 
 log = RankedLogger(__name__, rank_zero_only=False)
 
 
-class ScanNetDataset(IndoorDataset):
-    def __init__(self, dataset_cfg, class_names, training, root_path):
-        super().__init__(dataset_cfg, class_names, training, root_path)
+class ScanNetDataset(DatasetTemplate):
+    def __init__(self, data_dir, split, dataset_cfg, class_names):
+        super().__init__(data_dir, split, dataset_cfg, class_names)
 
-        self.data_suffix = dataset_cfg.DATA_SPLIT.data_suffix
-        self.split_file = dataset_cfg.DATA_SPLIT[self.mode]
-        with open(
-            os.path.join(dataset_cfg.DATA_SPLIT["root"], f"scannetv2_{self.split_file}.txt"),
-        ) as fin:
-            data_list = sorted(fin.readlines())
+        self.repeat = dataset_cfg.DATA_PROCESSOR.repeat
+        self.voxel_scale = dataset_cfg.DATA_PROCESSOR.voxel_scale
+        self.max_npoint = dataset_cfg.DATA_PROCESSOR.max_npoint
+        self.full_scale = dataset_cfg.DATA_PROCESSOR.full_scale
+        self.point_range = dataset_cfg.DATA_PROCESSOR.point_range
+        self.voxel_mode = dataset_cfg.DATA_PROCESSOR.voxel_mode
+        self.rgb_norm = dataset_cfg.DATA_PROCESSOR.rgb_norm
+        self.cache = dataset_cfg.DATA_PROCESSOR.cache
+        self.downsampling_scale = dataset_cfg.DATA_PROCESSOR.get("downsampling_scale", 1)
+
+        self.augmentor = DataAugmentor(
+            self.dataset_cfg,
+            **{
+                "ignore_label": self.ignore_label,
+                "voxel_scale": self.voxel_scale,
+                "voxel_down": dataset_cfg.DATA_PROCESSOR.get("voxel_down", 1),
+                "full_scale": self.full_scale,
+                "max_npoint": self.max_npoint,
+            },
+        )
+
+        self.voxel_size = [
+            1.0 / self.voxel_scale,
+            1.0 / self.voxel_scale,
+            1.0 / self.voxel_scale,
+        ]
+
+        num_point_features = 0
+        if dataset_cfg.DATA_PROCESSOR.xyz_as_feat:
+            num_point_features += 3
+
+        if dataset_cfg.DATA_PROCESSOR.rgb_as_feat:
+            num_point_features += 3
+
+        with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:
+            data_list = natsorted([line.strip() for line in f.readlines()])
         self.data_list = [
-            str(
-                Path(self.root_path)
-                / self.split_file.split("_")[0]
-                / f"{d.strip()}{self.data_suffix}"
-            )
-            for d in data_list
+            str(Path(self.data_dir) / self.split / f"{data}.pth") for data in data_list
         ]
 
         if hasattr(self, "caption_cfg") and self.caption_cfg.get(
@@ -38,19 +66,96 @@ class ScanNetDataset(IndoorDataset):
                 self.scene_image_corr_entity_infos,
             ) = self.include_point_caption_idx()
 
-        log.info(
-            "Totally {} samples in {} set.".format(
-                len(self.data_list) * (self.repeat if self.training else 1), self.mode
-            )
-        )
+        log.info(f"Totally {self.__len__()} samples in {self.split} set.")
 
     def __len__(self):
         length = len(self.data_list) * (self.repeat if self.training else 1)
         return length
 
+    def get_caption_image_corr_and_name_from_memory(self, scene_name, index):
+        image_name_dict = {}
+        image_corr_dict = {}
+
+        if self.caption_cfg.get("SCENE", None) and self.caption_cfg.SCENE.ENABLED:
+            image_name_dict["scene"] = None
+            image_corr_dict["scene"] = None
+
+        if hasattr(self, "scene_image_corr_infos") and self.scene_image_corr_infos is not None:
+            if isinstance(self.scene_image_corr_infos, dict):
+                # assert scene_name in self.scene_image_corr_infos
+                info = copy.deepcopy(self.scene_image_corr_infos.get(scene_name, {}))
+            else:
+                cur_caption_idx = copy.deepcopy(self.scene_image_corr_infos[index])
+                assert scene_name == cur_caption_idx["scene_name"]
+                info = cur_caption_idx["infos"]
+            if len(info) > 0:
+                image_name_view, image_corr_view = zip(*info.items())
+            else:
+                image_name_view, image_corr_view = [], []
+            image_name_dict["view"] = image_name_view
+            image_corr_dict["view"] = image_corr_view
+
+        if (
+            hasattr(self, "scene_image_corr_entity_infos")
+            and self.scene_image_corr_entity_infos is not None
+        ):
+            if isinstance(self.scene_image_corr_entity_infos, dict):
+                # assert scene_name in self.scene_image_corr_entity_infos
+                info = copy.deepcopy(self.scene_image_corr_entity_infos.get(scene_name, {}))
+            else:
+                cur_caption_idx = copy.deepcopy(self.scene_image_corr_entity_infos[index])
+                assert scene_name == cur_caption_idx["scene_name"]
+                info = cur_caption_idx["infos"]
+            if len(info) > 0:
+                image_name_entity, image_corr_entity = zip(*info.items())
+            else:
+                image_name_entity, image_corr_entity = [], []
+            image_name_dict["entity"] = image_name_entity
+            image_corr_dict["entity"] = image_corr_entity
+
+        return image_corr_dict, image_name_dict
+
+    def get_caption_image_corr_and_name_from_file(self, scene_name):
+        image_name_dict = {}
+        image_corr_dict = {}
+
+        if self.caption_cfg.get("SCENE", None) and self.caption_cfg.SCENE.ENABLED:
+            image_name_dict["scene"] = None
+            image_corr_dict["scene"] = None
+
+        if self.caption_cfg.get("VIEW", None) and self.caption_cfg.VIEW.ENABLED:
+            path = self.data_dir / self.caption_cfg.VIEW.IMAGE_CORR_PATH / (scene_name + ".pickle")
+            if os.path.exists(path):
+                info = pickle.load(open(path, "rb"))
+            else:
+                info = {}
+            if len(info) > 0:
+                image_name_view, image_corr_view = zip(*info.items())
+            else:
+                image_name_view = image_corr_view = []
+            image_name_dict["view"] = image_name_view
+            image_corr_dict["view"] = image_corr_view
+
+        if self.caption_cfg.get("ENTITY", None) and self.caption_cfg.ENTITY.ENABLED:
+            path = (
+                self.data_dir / self.caption_cfg.ENTITY.IMAGE_CORR_PATH / (scene_name + ".pickle")
+            )
+            if os.path.exists(path):
+                info = pickle.load(open(path, "rb"))
+            else:
+                info = {}
+            if len(info) > 0:
+                image_name_entity, image_corr_entity = zip(*info.items())
+            else:
+                image_name_entity = image_corr_entity = []
+            image_name_dict["entity"] = image_name_entity
+            image_corr_dict["entity"] = image_corr_entity
+
+        return image_corr_dict, image_name_dict
+
     def load_data(self, index):
         fn = self.data_list[index]
-        if self.split_file.find("test") < 0:
+        if self.split != "test":
             xyz, rgb, label, inst_label, *others = torch.load(fn)
         else:
             xyz, rgb = torch.load(fn)
@@ -160,52 +265,13 @@ class ScanNetDataset(IndoorDataset):
 
         return data_dict
 
+    def include_point_caption_idx(self):
+        if self.need_view_caption and self.caption_cfg.VIEW.get("IMAGE_CORR_PATH", None):
+            corr_path = self.caption_cfg.VIEW.IMAGE_CORR_PATH
+            corr_path = self.data_dir / corr_path
+            point_caption_idx = pickle.load(open(corr_path, "rb"))
+        else:
+            point_caption_idx = None
 
-class ScanNetInstDataset(ScanNetDataset):
-    def __init__(self, dataset_cfg, class_names, training, root_path, logger=None, split=None):
-        ScanNetDataset.__init__(
-            self,
-            dataset_cfg,
-            class_names,
-            training,
-            root_path,
-            logger=logger,
-            split=split,
-        )
-        self.inst_class_idx = dataset_cfg.inst_class_idx
-        self.inst_label_shift = dataset_cfg.inst_label_shift
-        if "base_class_idx" in dataset_cfg:
-            # instance seg, stuff first
-            self.base_inst_class_idx = (
-                np.array(self.base_class_idx)[dataset_cfg.inst_label_shift :]
-                - self.inst_label_shift
-            )
-            self.novel_inst_class_idx = np.array(self.novel_class_idx) - self.inst_label_shift
-        self.sem2ins_classes = dataset_cfg.sem2ins_classes
-        self.NYU_ID = (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 24, 28, 33, 34, 36, 39)
-
-    def __getitem__(self, item):
-        data_dict = super().__getitem__(item)
-        # get instance infos
-        # info = self.get_instance_info(xyz_mid, inst_label.astype(np.int32), label)
-        label, inst_label, binary_label = (
-            data_dict["labels"],
-            data_dict["inst_label"],
-            data_dict["binary_labels"],
-        )
-        points = data_dict["points_xyz"]
-        if self.training:
-            inst_label[binary_label == 0] = self.ignore_label
-        inst_label = self.get_valid_inst_label(inst_label, label != self.ignore_label)
-        if self.training and inst_label.max() < 0:
-            return ScanNetInstDataset.__getitem__(self, np.random.randint(self.__len__()))
-        info = self.get_inst_info(points, inst_label.astype(np.int32), label)
-
-        data_dict["inst_label"] = inst_label
-        data_dict.update(info)
-        return data_dict
-
-    def get_inst_info(self, xyz, instance_label, semantic_label):
-        ret = super().get_inst_info(xyz, instance_label, semantic_label)
-        ret["inst_cls"] = [x - self.inst_label_shift if x != -100 else x for x in ret["inst_cls"]]
-        return ret
+        entity_point_caption_idx = None
+        return point_caption_idx, entity_point_caption_idx

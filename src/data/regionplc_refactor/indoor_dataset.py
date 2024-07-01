@@ -9,14 +9,8 @@ from .base_dataset import DatasetTemplate
 
 
 class IndoorDataset(DatasetTemplate):
-    def __init__(
-        self,
-        dataset_cfg=None,
-        class_names=None,
-        training=True,
-        root_path=None,
-    ):
-        super().__init__(dataset_cfg, class_names, training, root_path)
+    def __init__(self, data_dir: str, split: str, dataset_cfg=None, class_names=None):
+        super().__init__(data_dir, split, dataset_cfg, class_names)
 
         self.repeat = dataset_cfg.DATA_PROCESSOR.repeat
         self.voxel_scale = dataset_cfg.DATA_PROCESSOR.voxel_scale
@@ -149,9 +143,7 @@ class IndoorDataset(DatasetTemplate):
             image_corr_dict["scene"] = None
 
         if self.caption_cfg.get("VIEW", None) and self.caption_cfg.VIEW.ENABLED:
-            path = (
-                self.root_path / self.caption_cfg.VIEW.IMAGE_CORR_PATH / (scene_name + ".pickle")
-            )
+            path = self.data_dir / self.caption_cfg.VIEW.IMAGE_CORR_PATH / (scene_name + ".pickle")
             if os.path.exists(path):
                 info = pickle.load(open(path, "rb"))
             else:
@@ -165,7 +157,7 @@ class IndoorDataset(DatasetTemplate):
 
         if self.caption_cfg.get("ENTITY", None) and self.caption_cfg.ENTITY.ENABLED:
             path = (
-                self.root_path / self.caption_cfg.ENTITY.IMAGE_CORR_PATH / (scene_name + ".pickle")
+                self.data_dir / self.caption_cfg.ENTITY.IMAGE_CORR_PATH / (scene_name + ".pickle")
             )
             if os.path.exists(path):
                 info = pickle.load(open(path, "rb"))

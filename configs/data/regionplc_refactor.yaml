@@ -3,20 +3,16 @@ _target_: src.data.regionplc_refactor.datamodule.RegionPLCDataModule
 train_dataset:
   _target_: src.data.regionplc_refactor.scannet_dataset.ScanNetDataset
   _partial_: True
-  root_path: /datasets/regionplc
-  training: True
+  data_dir: /datasets/regionplc
+  split: train
   class_names: ${model.net.model_cfg.CLASS_NAMES}
   dataset_cfg:
-    DATASET: ScanNetDataset
-    DATA_PATH: ${data.train_dataset.root_path}
-    OSS_PATH: "sh40:s3://PublicDatasets/scannetv2"
+    # DATA_PATH: ${data.train_dataset.root_path}
     base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
     ignore_class_idx: [19]
     valid_class_idx:
       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
     novel_class_idx: [5, 9, 12, 16]
-
-    COLLATE_FN: collate_batch_indoor
     MIN_SPATIAL_SCALE: 128
 
     DATA_SPLIT:
@@ -77,7 +73,6 @@ train_dataset:
 
       PROCESS_LIST: []
 
-    NEED_SV: False
     CAPTION_INFO:
       KEY: [SCENE, VIEW, ENTITY]
 
@@ -108,15 +103,11 @@ train_dataset:
 val_dataset:
   _target_: src.data.regionplc_refactor.scannet_dataset.ScanNetDataset
   _partial_: True
-  root_path: /datasets/regionplc
-  training: False
+  data_dir: /datasets/regionplc
+  split: val
   class_names: ${model.net.model_cfg.CLASS_NAMES}
   dataset_cfg:
-    DATASET: ScanNetDataset
-    DATA_PATH: ${data.val_dataset.root_path}
-    OSS_PATH: "sh40:s3://PublicDatasets/scannetv2"
-
-    COLLATE_FN: collate_batch_indoor
+    # DATA_PATH: ${data.val_dataset.root_path}
     MIN_SPATIAL_SCALE: 128
 
     DATA_SPLIT:
@@ -176,8 +167,6 @@ val_dataset:
       rgb_as_feat: True
 
       PROCESS_LIST: []
-
-    NEED_SV: False
 
 batch_size: 4
 num_workers: 2
