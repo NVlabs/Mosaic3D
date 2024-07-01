@@ -1,0 +1,6 @@
+defaults:
+  - default
+
+accelerator: gpu
+precision: 16-mixed
+devices: 1

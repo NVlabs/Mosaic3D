@@ -1,3 +1,5 @@
+import time
+
 import torch
 
 from .network_template import ModelTemplate

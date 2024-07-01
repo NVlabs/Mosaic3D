@@ -1,14 +1,8 @@
-import os
 from collections import OrderedDict
 
 import numpy as np
 import torch
 import torch.nn as nn
-
-# from pcseg.utils import category_remap_utils, common_utils
-from src.models.regionplc.utils import common_utils
-
-# from pcseg.config import cfg
 
 
 class TextSegHead(nn.Module):
@@ -17,9 +11,10 @@ class TextSegHead(nn.Module):
         self.model_cfg = model_cfg
         self.in_channel = in_channel
         self.ignore_label = ignore_label
+        self.loss_weight = model_cfg.get("LOSS_WEIGHT", 1.0)
         self.correct_seg_pred_binary = model_cfg.get("CORRECT_SEG_PRED_BINARY", True)
         self.eval_only = model_cfg.get("EVAL_ONLY", None)
-        self.no_v2p_map = model_cfg.get("NO_V2P_MAP", False)
+        # self.no_v2p_map = model_cfg.get("NO_V2P_MAP", False)
         self.text_channel = self.model_cfg.TEXT_EMBED.CHANNEL
         self.num_class = self.model_cfg.TEXT_EMBED.NUM_CLASS
         self.feat_norm = model_cfg.get("FEAT_NORM", False)
@@ -51,23 +46,7 @@ class TextSegHead(nn.Module):
             for i in self.ignore_class_idx:
                 self.valid_class_idx.remove(i)
 
-        # remap category name for ambiguous categories
-        # self.need_class_mapping = self.model_cfg.get("CLASS_MAPPING", False)
-        # if self.need_class_mapping:
-        #     self.idx_mapping = category_remap_utils.cast_category_name_mapping_to_idx_mapping(
-        #         self.model_cfg.CLASS_MAPPING, cfg.TEXT_ENCODER.CATEGORY_NAMES, cfg.CLASS_NAMES
-        #     )
-
-        self.seg_loss_weight = model_cfg.get("SEMANTIC_WEIGHT", None)
-        if self.seg_loss_weight is not None:
-            self.seg_loss_weight = torch.FloatTensor(self.seg_loss_weight).cuda()
-            if hasattr(self.data_cfg, "base_class_idx"):
-                self.seg_loss_weight = self.seg_loss_weight[self.base_class_idx]
-            else:
-                self.seg_loss_weight = self.seg_loss_weight[self.valid_class_idx]
-        self.seg_loss_func = nn.CrossEntropyLoss(
-            weight=self.seg_loss_weight, ignore_index=self.ignore_label
-        ).cuda()
+        self.seg_loss_func = nn.CrossEntropyLoss(ignore_index=self.ignore_label).cuda()
         self.forward_ret_dict = {}
 
     def set_cls_head_with_text_embed(self, text_embed):
@@ -75,8 +54,6 @@ class TextSegHead(nn.Module):
 
     def forward(self, batch_dict):
         self.forward_ret_dict = {}
-        # if self.eval_only and self.training:
-        #     return batch_dict
 
         adapter_feats = batch_dict["adapter_feats"]
         if self.feat_norm:
@@ -88,18 +65,9 @@ class TextSegHead(nn.Module):
             logit_scale = self.logit_scale
 
         semantic_scores = self.cls_head(adapter_feats) * logit_scale
+        semantic_scores = semantic_scores[batch_dict["inverse"]]
 
-        if self.no_v2p_map or (self.training and self.model_cfg.get("VOXEL_LOSS", None)):
-            pass
-        else:
-            semantic_scores = semantic_scores[batch_dict["inverse"]]
-        # if not self.training and batch_dict["test_x4_split"]:
-        #     semantic_scores = common_utils.merge_4_parts(semantic_scores)
-
-        # if not self.training and self.need_class_mapping:
-        #     semantic_scores = self.remap_category(semantic_scores, self.idx_mapping)
-
-        if self.training or batch_dict.get("pseudo_label_generation", False):
+        if self.training:
             if hasattr(self, "base_class_idx"):
                 semantic_scores = semantic_scores[..., self.base_class_idx]
             else:
@@ -112,11 +80,9 @@ class TextSegHead(nn.Module):
             ]
             semantic_scores = new_semantic_scores
 
-        # get semantic prediction results
-        # consider the binary calibrate
+        # get semantic prediction results consider the binary calibrate
         if (
             (not self.training)
-            and (not batch_dict.get("pseudo_label_generation", False))
             and batch_dict.get("binary_ret_dict")
             and self.correct_seg_pred_binary
         ):
@@ -131,11 +97,7 @@ class TextSegHead(nn.Module):
                 binary_preds = None
 
         # for 2D fusion
-        if (
-            not self.training
-            and not batch_dict.get("pseudo_label_generation", False)
-            and "adapter_feats_mask" in batch_dict
-        ):
+        if not self.training and batch_dict.get("adapter_feats_mask"):
             semantic_preds[~batch_dict["adapter_feats_mask"].bool().cuda()] = self.ignore_label
 
         # for captions
@@ -154,13 +116,7 @@ class TextSegHead(nn.Module):
     def get_loss(self):
         semantic_scores = self.forward_ret_dict["seg_scores"]
         semantic_labels = self.forward_ret_dict["seg_labels"]
-        # print(
-        #     f"semantic_labels max: {semantic_labels.max()}, semantic_scores: {semantic_scores.shape}"
-        # )
-        seg_loss = self.seg_loss_func(semantic_scores, semantic_labels) * self.model_cfg.get(
-            "LOSS_WEIGHT", 1.0
-        )
-
+        seg_loss = self.seg_loss_func(semantic_scores, semantic_labels) * self.loss_weight
         tb_dict = {"loss_seg": seg_loss.item()}
         return seg_loss, tb_dict
 
@@ -184,22 +140,3 @@ class TextSegHead(nn.Module):
         semantic_scores /= semantic_scores.sum(-1, keepdim=True)
         semantic_preds = semantic_scores.max(1)[1]
         return binary_preds, semantic_preds
-
-    # @staticmethod
-    # def remap_category(semantic_scores, idx_mapping):
-    #     new_semantic_scores = torch.zeros(
-    #         (semantic_scores.shape[0], len(cfg.CLASS_NAMES)), dtype=torch.float32
-    #     ).cuda()
-    #     for idx in range(new_semantic_scores.shape[1]):
-    #         if isinstance(idx_mapping[idx], list):
-    #             source_idxs = torch.from_numpy(np.array(idx_mapping[idx], dtype=np.int64)).cuda()
-    #             selected_logits = semantic_scores[..., source_idxs]
-    #             selected_idx = selected_logits.max(1)[1]
-    #             max_score_idx = source_idxs[selected_idx]
-    #             new_semantic_scores[..., idx] = semantic_scores[
-    #                 torch.arange(semantic_scores.shape[0]).cuda(), max_score_idx
-    #             ]
-    #         else:
-    #             new_semantic_scores[..., idx] = semantic_scores[..., idx_mapping[idx]]
-
-    #     return new_semantic_scores

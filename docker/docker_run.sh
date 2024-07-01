@@ -14,7 +14,12 @@ docker run \
     --gpus all \
     --shm-size=32g \
     -it \
-    -v /home/$USER:/root \
-    -v $(pwd):/workspace \
-    -v $DATASET_PATH:/datasets \
-    $DOCKER_IMAGE
+    -v "/home/${USER}:/root" \
+    -v "$(pwd):/workspace" \
+    -v "${DATASET_PATH}:/datasets" \
+    --device=/dev/nvidiactl \
+    --device=/dev/nvidia0 \
+    --device=/dev/nvidia-modeset \
+    --device=/dev/nvidia-uvm \
+    --device=/dev/nvidia-uvm-tools \
+    "$DOCKER_IMAGE"

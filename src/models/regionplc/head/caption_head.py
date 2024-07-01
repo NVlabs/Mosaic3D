@@ -1,16 +1,12 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
-# from pcseg.utils import loss_utils
 from torch_scatter import scatter_mean
 
 from src.models.components.misc import offset2batch
 from src.models.regionplc.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
 
 from ..model_utils.fp16 import force_fp32
-
-# from pcseg.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
 
 
 class CaptionHead(nn.Module):
