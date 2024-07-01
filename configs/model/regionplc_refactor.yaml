@@ -25,7 +25,7 @@ net:
     NAME: SparseUNetTextSeg
     REMAP_FROM_3DLANG: false
     REMAP_FROM_NOADAPTER: false
-    ignore_label: ${data.train_dataset.dataset_cfg.IGNORE_LABEL}
+    ignore_label: ${data.train_dataset.ignore_label}
     voxel_mode: 4
     CLASS_NAMES:
       [
@@ -50,7 +50,7 @@ net:
         bathtub,
         otherfurniture,
       ]
-    valid_class_idx: ${data.train_dataset.dataset_cfg.valid_class_idx}
+    # valid_class_idx: ${data.train_dataset.dataset_cfg.valid_class_idx}
     VFE:
       NAME: IndoorVFE
       USE_XYZ: true
@@ -94,9 +94,9 @@ net:
         CHANNEL: 512
         NUM_CLASS: 20
       CLASS_NAMES: ${model.net.model_cfg.CLASS_NAMES}
-      base_class_idx: ${data.train_dataset.dataset_cfg.base_class_idx}
-      novel_class_idx: ${data.train_dataset.dataset_cfg.novel_class_idx}
-      ignore_class_idx: ${data.train_dataset.dataset_cfg.ignore_class_idx}
+      base_class_idx: ${data.train_dataset.base_class_idx}
+      novel_class_idx: ${data.train_dataset.novel_class_idx}
+      ignore_class_idx: ${data.train_dataset.ignore_class_idx}
     CAPTION_HEAD:
       NAME: CaptionHead
       POOLING_TYPE: avg

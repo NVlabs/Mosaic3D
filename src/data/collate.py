@@ -5,8 +5,10 @@ Please cite our work if the code is helpful to you.
 """
 
 import random
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 
+import numpy as np
 import torch
 from torch.utils.data.dataloader import default_collate
 
@@ -55,3 +57,97 @@ def point_collate_fn(batch, mix_prob=0):
                 [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
             )
     return batch
+
+
+def collate_regionplc(batch_list, ignore_label: int, min_spatial_shape: int):
+    data_dict = defaultdict(list)
+    for cur_sample in batch_list:
+        for key, val in cur_sample.items():
+            data_dict[key].append(val)
+    batch_size = len(batch_list)
+    ret = {}
+
+    total_inst_num = 0
+    for key, val in data_dict.items():
+        if key in ["points"]:
+            coors = []
+            for i, coor in enumerate(val):
+                coor_pad = np.pad(coor, ((0, 0), (1, 0)), mode="constant", constant_values=i)
+                coors.append(coor_pad)
+            ret[key] = np.concatenate(coors, axis=0)
+        elif key in ["ids", "pc_count", "batch_size", "inst_num"]:
+            ret[key] = data_dict[key]
+        elif key in [
+            "points_xyz",
+            "feats",
+            "labels",
+            "binary_labels",
+            "origin_idx",
+            "rgb",
+            "pt_offset_label",
+            "inst_info",
+            "inst_pointnum",
+            "kd_labels",
+            "pred_mask",
+            "kd_labels_mask",
+            "adapter_feats",
+            "adapter_feats_mask",
+            "super_voxel",
+            "pt_offset_mask",
+            "n_captions_points",
+        ]:
+            ret[key] = np.concatenate(data_dict[key], axis=0)
+        elif key in ["inst_label"]:
+            if "inst_num" in data_dict:
+                inst_labels = []
+                for i, il in enumerate(val):
+                    il[np.where(il != ignore_label)] += total_inst_num
+                    total_inst_num += data_dict["inst_num"][i]
+                    inst_labels.append(il)
+            else:
+                inst_labels = val
+            ret[key] = np.concatenate(inst_labels, axis=0)
+        elif key in ["points_xyz_voxel_scale"]:
+            if data_dict[key][0].shape[1] == 4:  # x4_split
+                assert len(data_dict[key]) == 1
+                ret[key] = np.concatenate(data_dict[key], axis=0)
+                batch_size = int(ret[key][..., 0].max() + 1)  # re-set batch size
+            else:
+                ret[key] = np.concatenate(
+                    [
+                        np.concatenate(
+                            [np.full((d.shape[0], 1), i), d.astype(np.int64)],
+                            axis=-1,
+                        )
+                        for i, d in enumerate(data_dict[key])
+                    ],
+                    axis=0,
+                )
+        elif key in ["caption_data"]:
+            if val[0] is None:
+                continue
+            ret[key] = {}
+            for k in val[0]:
+                ret[key][k] = {}
+                ret[key][k]["idx"] = [val[n][k]["idx"] for n in range(len(val))]
+                ret[key][k]["caption"] = []
+                for n in range(len(val)):
+                    ret[key][k]["caption"].extend(val[n][k]["caption"])
+        elif key in ["inst_cls"]:
+            ret[key] = np.array([j for i in data_dict[key] for j in i], dtype=np.int32)
+        else:
+            ret[key] = np.stack(val, axis=0)
+
+    ret["spatial_shape"] = np.clip(
+        (ret["points_xyz_voxel_scale"].max(0)[1:] + 1), min_spatial_shape, None
+    )
+
+    ret["batch_idxs"] = ret["points_xyz_voxel_scale"][:, 0].astype(np.int32)
+    if len(batch_list) == 1:
+        ret["offsets"] = np.array([0, ret["batch_idxs"].shape[0]]).astype(np.int32)
+    else:
+        ret["offsets"] = np.cumsum(np.bincount(ret["batch_idxs"] + 1).astype(np.int32))
+        assert len(ret["offsets"]) == batch_size + 1
+
+    ret["batch_size"] = batch_size
+    return ret

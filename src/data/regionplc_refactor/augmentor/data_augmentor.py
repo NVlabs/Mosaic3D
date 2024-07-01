@@ -6,11 +6,10 @@ from . import augmentor_utils
 
 
 class DataAugmentor:
-    def __init__(self, dataset_cfg, **kwargs):
-        self.data_augmentor_queue = []
-        self.aug_cfg = dataset_cfg.DATA_AUG
+    def __init__(self, aug_cfg, **kwargs):
+        self.aug_cfg = aug_cfg
         self.kwargs = kwargs
-        aug_config_list = self.aug_cfg.AUG_LIST
+        aug_config_list = self.aug_cfg.aug_list
 
         self.data_augmentor_queue = []
         for aug in aug_config_list:
@@ -18,14 +17,6 @@ class DataAugmentor:
                 continue
             cur_augmentor = partial(getattr(self, aug), config=self.aug_cfg[aug])
             self.data_augmentor_queue.append(cur_augmentor)
-
-    def __getstate__(self):
-        d = dict(self.__dict__)
-        del d["logger"]
-        return d
-
-    def __setstate__(self, d):
-        self.__dict__.update(d)
 
     def shuffle(self, data_dict=None, config=None):
         shuffle_idx = np.random.permutation(data_dict["points_xyz"].shape[0])
@@ -45,16 +36,6 @@ class DataAugmentor:
         return data_dict
 
     def forward(self, data_dict):
-        """
-        Args:
-            data_dict:
-                points: (N, 3 + C_in)
-                gt_boxes: optional, (N, 7) [x, y, z, dx, dy, dz, heading]
-                gt_names: optional, (N), string
-                ...
-
-        Returns:
-        """
         data_dict["valid"] = True
         for cur_augmentor in self.data_augmentor_queue:
             data_dict = cur_augmentor(data_dict=data_dict)

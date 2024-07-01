@@ -1,70 +1,121 @@
 import copy
+import json
 import os
 import pickle
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import numpy as np
 import torch
 from natsort import natsorted
+from torch.utils.data import Dataset
 
 from src.data.regionplc_refactor.augmentor.data_augmentor import DataAugmentor
-from src.data.regionplc_refactor.base_dataset import DatasetTemplate
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=False)
 
 
-class ScanNetDataset(DatasetTemplate):
-    def __init__(self, data_dir, split, dataset_cfg, class_names):
-        super().__init__(data_dir, split, dataset_cfg, class_names)
+class ScanNetDataset(Dataset):
+    def __init__(
+        self,
+        data_dir: str,
+        split: str,
+        class_names: List[str],
+        # processor
+        repeat: int,
+        point_range: int,
+        voxel_scale: int,
+        max_npoint: int,
+        full_scale: List[int],
+        rgb_norm: bool,
+        xyz_as_feat: bool,
+        rgb_as_feat: bool,
+        min_spatial_shape: int,
+        # labels
+        ignore_label: int,
+        base_class_idx: List[int],
+        novel_class_idx: List[int],
+        ignore_class_idx: List[int],
+        # augmemtation
+        aug_cfg: Dict,
+        # caption
+        caption_cfg: Optional[Dict] = None,
+    ):
+        super().__init__()
+        self.data_dir = Path(data_dir)
+        self.split = split
+        self.class_names = class_names
+        # processor
+        self.repeat = repeat
+        self.voxel_scale = voxel_scale
+        self.max_npoint = max_npoint
+        self.full_scale = full_scale
+        self.point_range = point_range
+        self.rgb_norm = rgb_norm
+        self.xyz_as_feat = xyz_as_feat
+        self.rgb_as_feat = rgb_as_feat
+        self.min_spatial_shape = min_spatial_shape
+        # labels
+        self.ignore_label = ignore_label
+        self.base_class_idx = base_class_idx
+        self.novel_class_idx = novel_class_idx
+        self.ignore_class_idx = ignore_class_idx
+        # augmentation
+        self.aug_cfg = aug_cfg
+        # caption
+        self.caption_cfg = caption_cfg
 
-        self.repeat = dataset_cfg.DATA_PROCESSOR.repeat
-        self.voxel_scale = dataset_cfg.DATA_PROCESSOR.voxel_scale
-        self.max_npoint = dataset_cfg.DATA_PROCESSOR.max_npoint
-        self.full_scale = dataset_cfg.DATA_PROCESSOR.full_scale
-        self.point_range = dataset_cfg.DATA_PROCESSOR.point_range
-        self.voxel_mode = dataset_cfg.DATA_PROCESSOR.voxel_mode
-        self.rgb_norm = dataset_cfg.DATA_PROCESSOR.rgb_norm
-        self.cache = dataset_cfg.DATA_PROCESSOR.cache
-        self.downsampling_scale = dataset_cfg.DATA_PROCESSOR.get("downsampling_scale", 1)
+        # setup class mappers
+        self.n_classes = len(self.class_names)
+        if self.base_class_idx is not None and len(self.base_class_idx) > 0:
+            self.base_class_mapper = self.build_class_mapper(
+                self.base_class_idx, self.ignore_label
+            )
+            self.binary_class_mapper = self.build_binary_class_mapper(
+                self.base_class_idx,
+                self.novel_class_idx,
+                self.ignore_class_idx,
+                self.ignore_label,
+            )
 
+        self.valid_class_idx = np.arange(self.n_classes).tolist()
+        if self.ignore_class_idx is not None and len(self.ignore_class_idx) > 0:
+            for c in self.ignore_class_idx:
+                self.valid_class_idx.remove(c)
+        self.valid_class_mapper = self.build_class_mapper(
+            self.valid_class_idx, self.ignore_label, squeeze_label=self.training
+        )
+
+        self.class_mode = (
+            "base" if (self.training and hasattr(self, "base_class_mapper")) else "all"
+        )
+
+        # load captions
+        if self.training and self.caption_cfg is not None:
+            self.caption_keys = self.caption_cfg.KEY
+            self.caption = self.get_caption_items(self.caption_cfg)
+            self.scene_image_corr_infos = self.include_point_caption_idx()
+            self.scene_image_corr_entity_infos = None
+
+        # data augmentation
         self.augmentor = DataAugmentor(
-            self.dataset_cfg,
+            aug_cfg,
             **{
                 "ignore_label": self.ignore_label,
                 "voxel_scale": self.voxel_scale,
-                "voxel_down": dataset_cfg.DATA_PROCESSOR.get("voxel_down", 1),
+                "voxel_down": 1,
                 "full_scale": self.full_scale,
                 "max_npoint": self.max_npoint,
             },
         )
 
-        self.voxel_size = [
-            1.0 / self.voxel_scale,
-            1.0 / self.voxel_scale,
-            1.0 / self.voxel_scale,
-        ]
-
-        num_point_features = 0
-        if dataset_cfg.DATA_PROCESSOR.xyz_as_feat:
-            num_point_features += 3
-
-        if dataset_cfg.DATA_PROCESSOR.rgb_as_feat:
-            num_point_features += 3
-
+        # read files
         with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:
             data_list = natsorted([line.strip() for line in f.readlines()])
         self.data_list = [
             str(Path(self.data_dir) / self.split / f"{data}.pth") for data in data_list
         ]
-
-        if hasattr(self, "caption_cfg") and self.caption_cfg.get(
-            "CAPTION_CORR_PATH_IN_ONE_FILE", True
-        ):
-            (
-                self.scene_image_corr_infos,
-                self.scene_image_corr_entity_infos,
-            ) = self.include_point_caption_idx()
 
         log.info(f"Totally {self.__len__()} samples in {self.split} set.")
 
@@ -72,13 +123,35 @@ class ScanNetDataset(DatasetTemplate):
         length = len(self.data_list) * (self.repeat if self.training else 1)
         return length
 
+    @property
+    def training(self):
+        return self.split == "train"
+
+    @staticmethod
+    def build_class_mapper(class_idx, ignore_idx, squeeze_label=True):
+        remapper = np.ones(256, dtype=np.int64) * ignore_idx
+        for i, x in enumerate(class_idx):
+            if squeeze_label:
+                remapper[x] = i
+            else:
+                remapper[x] = x
+        return remapper
+
+    @staticmethod
+    def build_binary_class_mapper(base_class_idx, novel_class_idx, ignore_class_idx, ignore_idx):
+        remapper = np.ones(256, dtype=np.int64) * ignore_idx  # base: 1, novel: 0
+        for _, x in enumerate(base_class_idx):
+            remapper[x] = 1
+        for _, x in enumerate(novel_class_idx):
+            remapper[x] = 0
+        # ignored categories are mapped to novel
+        for _, x in enumerate(ignore_class_idx):
+            remapper[x] = 0
+        return remapper
+
     def get_caption_image_corr_and_name_from_memory(self, scene_name, index):
         image_name_dict = {}
         image_corr_dict = {}
-
-        if self.caption_cfg.get("SCENE", None) and self.caption_cfg.SCENE.ENABLED:
-            image_name_dict["scene"] = None
-            image_corr_dict["scene"] = None
 
         if hasattr(self, "scene_image_corr_infos") and self.scene_image_corr_infos is not None:
             if isinstance(self.scene_image_corr_infos, dict):
@@ -95,33 +168,11 @@ class ScanNetDataset(DatasetTemplate):
             image_name_dict["view"] = image_name_view
             image_corr_dict["view"] = image_corr_view
 
-        if (
-            hasattr(self, "scene_image_corr_entity_infos")
-            and self.scene_image_corr_entity_infos is not None
-        ):
-            if isinstance(self.scene_image_corr_entity_infos, dict):
-                # assert scene_name in self.scene_image_corr_entity_infos
-                info = copy.deepcopy(self.scene_image_corr_entity_infos.get(scene_name, {}))
-            else:
-                cur_caption_idx = copy.deepcopy(self.scene_image_corr_entity_infos[index])
-                assert scene_name == cur_caption_idx["scene_name"]
-                info = cur_caption_idx["infos"]
-            if len(info) > 0:
-                image_name_entity, image_corr_entity = zip(*info.items())
-            else:
-                image_name_entity, image_corr_entity = [], []
-            image_name_dict["entity"] = image_name_entity
-            image_corr_dict["entity"] = image_corr_entity
-
         return image_corr_dict, image_name_dict
 
     def get_caption_image_corr_and_name_from_file(self, scene_name):
         image_name_dict = {}
         image_corr_dict = {}
-
-        if self.caption_cfg.get("SCENE", None) and self.caption_cfg.SCENE.ENABLED:
-            image_name_dict["scene"] = None
-            image_corr_dict["scene"] = None
 
         if self.caption_cfg.get("VIEW", None) and self.caption_cfg.VIEW.ENABLED:
             path = self.data_dir / self.caption_cfg.VIEW.IMAGE_CORR_PATH / (scene_name + ".pickle")
@@ -135,21 +186,6 @@ class ScanNetDataset(DatasetTemplate):
                 image_name_view = image_corr_view = []
             image_name_dict["view"] = image_name_view
             image_corr_dict["view"] = image_corr_view
-
-        if self.caption_cfg.get("ENTITY", None) and self.caption_cfg.ENTITY.ENABLED:
-            path = (
-                self.data_dir / self.caption_cfg.ENTITY.IMAGE_CORR_PATH / (scene_name + ".pickle")
-            )
-            if os.path.exists(path):
-                info = pickle.load(open(path, "rb"))
-            else:
-                info = {}
-            if len(info) > 0:
-                image_name_entity, image_corr_entity = zip(*info.items())
-            else:
-                image_name_entity = image_corr_entity = []
-            image_name_dict["entity"] = image_name_entity
-            image_corr_dict["entity"] = image_corr_entity
 
         return image_corr_dict, image_name_dict
 
@@ -175,38 +211,89 @@ class ScanNetDataset(DatasetTemplate):
 
         return xyz, rgb, label, inst_label, binary_label
 
-    def get_kd_data_v2(self, scene_name):
-        random_idx = np.random.randint(0, 5)
-        kd_feat_path = os.path.join(self.kd_label_dir, f"{scene_name}_{random_idx}.pt")
-        kd_data = torch.load(kd_feat_path)
-        kd_feats = kd_data["feat"].numpy()[..., 0]
-        kd_feats = kd_feats / (np.linalg.norm(kd_feats, axis=-1, keepdims=True) + 1e-6)
-        kd_mask_full = kd_data["mask_full"].numpy()
-        kd_feats_all = np.zeros((kd_mask_full.shape[0], kd_feats.shape[1])).astype(np.float16)
-        kd_feats_all[kd_mask_full.nonzero()[0]] = kd_feats
-        kd_feat_mask = np.zeros(kd_mask_full.shape, dtype=bool)
-        kd_feat_mask[kd_mask_full.nonzero()[0][kd_data["mask"]]] = True
-        return kd_feats_all.astype(np.float16), kd_feat_mask
+    def include_point_caption_idx(self):
+        if self.caption_cfg.VIEW.get("IMAGE_CORR_PATH", None):
+            corr_path = self.caption_cfg.VIEW.IMAGE_CORR_PATH
+            corr_path = self.data_dir / corr_path
+            point_caption_idx = pickle.load(open(corr_path, "rb"))
+        else:
+            point_caption_idx = None
+
+        return point_caption_idx
+
+    def get_caption_items(self, caption_cfg):
+        caption_items = {}
+        for key in caption_cfg:
+            if key in self.caption_keys and caption_cfg[key].ENABLED:
+                caption_path = os.path.join(self.data_dir, caption_cfg[key].CAPTION_PATH)
+                caption_items[key.lower()] = copy.deepcopy(json.load(open(caption_path)))
+        return caption_items
+
+    def select_caption_and_idx_all(self, scene_name, image_name_dict, image_corr_dict):
+        if not hasattr(self, "caption_cfg"):
+            return None
+
+        ret = {}
+        for key in self.caption_cfg:
+            if key in self.caption_keys and self.caption_cfg[key].ENABLED:
+                key_lower = key.lower()
+                ret[key_lower] = self.select_caption_and_idx(
+                    self.caption[key_lower],
+                    self.caption_cfg[key],
+                    scene_name,
+                    image_name_dict[key_lower],
+                    image_corr_dict[key_lower],
+                )
+        return ret
+
+    @staticmethod
+    def select_caption_and_idx(caption, caption_cfg, scene_name, image_names, image_corr_indices):
+        if image_corr_indices is None:
+            select_captions = [caption[scene_name]]
+            select_image_corr = [None]
+        else:
+            assert len(caption[scene_name]) == len(image_names)
+            select_image_names, select_image_corr = ScanNetDataset.select_images(
+                caption_cfg, image_names, image_corr_indices
+            )  # list (B, K), (B, K, N)
+            # (B*K)
+            select_captions = [caption[scene_name][n] for n in select_image_names]
+        return {"idx": select_image_corr, "caption": select_captions}
+
+    @staticmethod
+    def select_images(caption_cfg, image_name, image_corr):
+        if caption_cfg.RATIO == 1.0:
+            return image_name, image_corr
+
+        if image_name is None or len(image_name) == 0:  # lack 2d data
+            selected_idx = None
+        else:
+            ratio = caption_cfg.RATIO
+            selected_idx = np.random.choice(
+                len(image_name), max(1, int(len(image_name) * ratio)), replace=False
+            )
+
+        if selected_idx is not None:
+            selected_image_name = np.array(image_name)[selected_idx].tolist()
+            selected_image_corr = np.array(image_corr, dtype=object)[selected_idx].tolist()
+        else:
+            selected_image_name = []
+            selected_image_corr = []
+
+        return selected_image_name, selected_image_corr
 
     def __getitem__(self, item):
         index = item % len(self.data_list)
-        xyz, rgb, label, inst_label, binary_label, *others = self.load_data(index)
-
-        # === caption ===
+        xyz, rgb, label, inst_label, binary_label, *_ = self.load_data(index)
         scene_name = self.data_list[index].split("/")[-1].split(".")[0]
 
         # get captioning data
         caption_data = None
-        if hasattr(self, "caption_cfg") and self.training:
-            if self.caption_cfg.get("CAPTION_CORR_PATH_IN_ONE_FILE", True):
-                (
-                    image_corr_dict,
-                    image_name_dict,
-                ) = self.get_caption_image_corr_and_name_from_memory(scene_name, index)
-            else:
-                image_corr_dict, image_name_dict = self.get_caption_image_corr_and_name_from_file(
-                    scene_name
-                )
+        if hasattr(self, "caption_cfg") and self.caption_cfg is not None:
+            (
+                image_corr_dict,
+                image_name_dict,
+            ) = self.get_caption_image_corr_and_name_from_memory(scene_name, index)
 
             if self.training:
                 caption_data = self.select_caption_and_idx_all(
@@ -229,17 +316,6 @@ class ScanNetDataset(DatasetTemplate):
             "scene_name": scene_name,
         }
 
-        # get kd data
-        # KD label will only carrys on 3D zero-shot
-        if self.load_kd_label:
-            kd_labels, kd_mask = self.get_kd_data_v2(scene_name)
-            if self.training:
-                data_dict["kd_labels"] = kd_labels
-                data_dict["kd_labels_mask"] = kd_mask
-            else:
-                data_dict["adapter_feats"] = kd_labels
-                data_dict["adapter_feats_mask"] = kd_mask
-
         if self.training:
             # perform augmentations
             data_dict = self.augmentor.forward(data_dict)
@@ -252,10 +328,10 @@ class ScanNetDataset(DatasetTemplate):
             data_dict["points"] = xyz
 
         # prepare features for voxelization
-        if self.dataset_cfg.DATA_PROCESSOR.rgb_as_feat:
+        if self.rgb_as_feat:
             data_dict["feats"] = data_dict["rgb"]
 
-        if self.dataset_cfg.DATA_PROCESSOR.xyz_as_feat:
+        if self.xyz_as_feat:
             if "feats" in data_dict:
                 data_dict["feats"] = np.concatenate(
                     (data_dict["feats"], data_dict["points_xyz"]), axis=1
@@ -264,14 +340,3 @@ class ScanNetDataset(DatasetTemplate):
                 data_dict["feats"] = data_dict["points_xyz"]
 
         return data_dict
-
-    def include_point_caption_idx(self):
-        if self.need_view_caption and self.caption_cfg.VIEW.get("IMAGE_CORR_PATH", None):
-            corr_path = self.caption_cfg.VIEW.IMAGE_CORR_PATH
-            corr_path = self.data_dir / corr_path
-            point_caption_idx = pickle.load(open(corr_path, "rb"))
-        else:
-            point_caption_idx = None
-
-        entity_point_caption_idx = None
-        return point_caption_idx, entity_point_caption_idx

@@ -1,8 +1,10 @@
+from functools import partial
 from typing import Any, Optional
 
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
+from src.data.collate import collate_regionplc
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -44,7 +46,11 @@ class RegionPLCDataModule(LightningDataModule):
                 pin_memory=self.hparams.pin_memory,
                 shuffle=True,
                 drop_last=True,
-                collate_fn=self.data_train.collate_batch_indoor,
+                collate_fn=partial(
+                    collate_regionplc,
+                    ignore_label=self.data_train.ignore_label,
+                    min_spatial_shape=self.data_train.min_spatial_shape,
+                ),
             )
 
     def val_dataloader(self) -> DataLoader[Any]:
@@ -57,5 +63,9 @@ class RegionPLCDataModule(LightningDataModule):
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
             shuffle=False,
-            collate_fn=self.data_train.collate_batch_indoor,
+            collate_fn=partial(
+                collate_regionplc,
+                ignore_label=self.data_val.ignore_label,
+                min_spatial_shape=self.data_val.min_spatial_shape,
+            ),
         )
