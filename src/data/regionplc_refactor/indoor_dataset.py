@@ -15,10 +15,8 @@ class IndoorDataset(DatasetTemplate):
         class_names=None,
         training=True,
         root_path=None,
-        logger=None,
-        split=None,
     ):
-        super().__init__(dataset_cfg, class_names, training, root_path, logger=logger, split=split)
+        super().__init__(dataset_cfg, class_names, training, root_path)
 
         self.repeat = dataset_cfg.DATA_PROCESSOR.repeat
         self.voxel_scale = dataset_cfg.DATA_PROCESSOR.voxel_scale

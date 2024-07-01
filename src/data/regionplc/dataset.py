@@ -30,10 +30,14 @@ class RegionPLCDataset(data.Dataset):
         ignore_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
+        repeat: int = 1,
+        *args,
+        **kwargs,
     ):
         self.data_dir = data_dir
         self.split = split
         self.caption_cfg = caption_cfg
+        self.repeat = repeat
 
         # data paths
         scenes = natsorted(os.listdir(os.path.join(self.data_dir, split)))
@@ -97,7 +101,7 @@ class RegionPLCDataset(data.Dataset):
         return remapper
 
     def __len__(self):
-        return len(self.data_paths)
+        return len(self.data_paths) * self.repeat
 
     def load_data(self, filepath):
         xyz = np.load(os.path.join(filepath, "coord.npy"))
@@ -251,7 +255,8 @@ class RegionPLCDataset(data.Dataset):
 
         return selected_image_name, selected_image_corr
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx_origin):
+        idx = idx_origin % len(self.data_paths)
         filepath = self.data_paths[idx]
         scene_name = filepath.split("/")[-1]
         xyz, rgb, semantic_label, inst_label, binary_label = self.load_data(filepath)

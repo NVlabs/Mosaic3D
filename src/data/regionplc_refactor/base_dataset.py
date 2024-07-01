@@ -17,18 +17,14 @@ class DatasetTemplate(Dataset):
         class_names=None,
         training=True,
         root_path=None,
-        logger=None,
-        split=None,
     ):
         super().__init__()
         self.dataset_cfg = dataset_cfg
         self.training = training
         self.class_names = class_names
-        self.logger = logger
         self.root_path = (
             Path(root_path) if root_path is not None else Path(self.dataset_cfg.DATA_PATH)
         )
-        self.logger = logger
 
         if self.dataset_cfg is None or class_names is None:
             return
@@ -87,27 +83,13 @@ class DatasetTemplate(Dataset):
         self.kd_label_dir = self.dataset_cfg.get("KD_LABEL_DIR", None)
         self.kd_label_norm = self.dataset_cfg.get("KD_LABEL_NORM", False)
 
-        if split is not None:
-            self.mode = split
-        else:
-            self.mode = "train" if self.training else "test"
-
-    def __getstate__(self):
-        d = dict(self.__dict__)
-        del d["logger"]
-        return d
-
-    def __setstate__(self, d):
-        self.__dict__.update(d)
+        self.mode = "train" if self.training else "test"
 
     def __len__(self):
         raise NotImplementedError
 
     def __getitem__(self, index):
         raise NotImplementedError
-
-    def set_class_mode(self, mode):
-        self.class_mode = mode
 
     @staticmethod
     def build_class_mapper(class_idx, ignore_idx, squeeze_label=True):

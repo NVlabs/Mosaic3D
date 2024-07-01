@@ -23,7 +23,7 @@ train_dataset:
       train: train
       test: val
       data_suffix: .pth
-      root: ./data/split_files
+      root: ./src/data/metadata/split_files
 
     IGNORE_LABEL: -100
 
@@ -104,7 +104,6 @@ train_dataset:
         RATIO: 1.0
 
       CAPTION_CORR_PATH_IN_ONE_FILE: True
-  split: train
 
 val_dataset:
   _target_: src.data.regionplc_refactor.scannet_dataset.ScanNetDataset
@@ -124,7 +123,7 @@ val_dataset:
       train: train
       test: val
       data_suffix: .pth
-      root: ./data/split_files
+      root: ./src/data/metadata/split_files
 
     IGNORE_LABEL: -100
 
@@ -179,7 +178,6 @@ val_dataset:
       PROCESS_LIST: []
 
     NEED_SV: False
-  split: test
 
 batch_size: 4
 num_workers: 2

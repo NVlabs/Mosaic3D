@@ -12,8 +12,8 @@ log = RankedLogger(__name__, rank_zero_only=False)
 
 
 class ScanNetDataset(IndoorDataset):
-    def __init__(self, dataset_cfg, class_names, training, root_path, logger=None, split=None):
-        super().__init__(dataset_cfg, class_names, training, root_path, logger=logger, split=split)
+    def __init__(self, dataset_cfg, class_names, training, root_path):
+        super().__init__(dataset_cfg, class_names, training, root_path)
 
         self.data_suffix = dataset_cfg.DATA_SPLIT.data_suffix
         self.split_file = dataset_cfg.DATA_SPLIT[self.mode]
