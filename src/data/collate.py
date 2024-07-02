@@ -150,4 +150,40 @@ def collate_regionplc(batch_list, ignore_label: int, min_spatial_shape: int):
         assert len(ret["offsets"]) == batch_size + 1
 
     ret["batch_size"] = batch_size
+
+    for key, val in ret.items():
+        if isinstance(val, torch.Tensor):
+            ret[key] = ret[key].cuda()
+        elif not isinstance(val, np.ndarray) or key in [
+            "calib",
+            "point_img_idx",
+            "point_img",
+        ]:
+            continue
+        elif key in [
+            "ids",
+            "scan_id",
+            "metadata",
+            "scene_name",
+            "n_captions_points",
+            "image_shape",
+            "cam",
+        ]:
+            continue
+        elif key in [
+            "points_xyz_voxel_scale",
+            "labels",
+            "inst_label",
+            "origin_idx",
+            "offsets",
+            "inst_cls",
+            "super_voxel",
+        ]:
+            ret[key] = torch.from_numpy(val).long()
+        elif key in ["inst_pointnum", "batch_idxs"]:
+            ret[key] = torch.from_numpy(val).int()
+        elif key in ["adapter_feats_mask", "kd_labels_mask", "pt_offset_mask"]:
+            ret[key] = torch.from_numpy(val).bool()
+        else:
+            ret[key] = torch.from_numpy(val).float()
     return ret

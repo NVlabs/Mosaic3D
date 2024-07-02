@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from ....external_libs.softgroup_ops.ops import functions as sg_ops
+from ..external_libs.softgroup_ops.ops import functions as sg_ops
 
 
 class IndoorVFE(nn.Module):

@@ -18,9 +18,8 @@ scheduler:
 scheduler_interval: step
 
 net:
-  _target_: src.models.regionplc_refactor.build_vision_network
+  _target_: src.models.regionplc_refactor.network.SparseUNetTextSeg
   _partial_: true
-  num_class: 20
   model_cfg:
     NAME: SparseUNetTextSeg
     REMAP_FROM_3DLANG: false

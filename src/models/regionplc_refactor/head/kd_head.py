@@ -3,7 +3,7 @@ import functools
 import numpy as np
 import torch.nn as nn
 
-from ..model_utils import basic_block_1d
+from src.models.regionplc_refactor.utils import basic_block_1d
 
 
 class KDHeadTemplate(nn.Module):

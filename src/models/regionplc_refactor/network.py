@@ -3,14 +3,15 @@ import os
 import torch
 import torch.nn as nn
 
-from .. import head
-from ..adapter import VLAdapter
-from ..model_utils.spconv_utils import find_all_spconv_keys
-from ..vision_backbones_3d.spconv_unet_indoor import SparseUNetIndoor
-from ..vision_backbones_3d.vfe import IndoorVFE
+from src.models.regionplc_refactor.adapter import VLAdapter
+from src.models.regionplc_refactor.backbone import SparseUNetIndoor
+from src.models.regionplc_refactor.utils.spconv_utils import find_all_spconv_keys
+from src.models.regionplc_refactor.vfe import IndoorVFE
+
+from . import head
 
 
-class ModelTemplate(nn.Module):
+class SparseUNetTextSeg(nn.Module):
     def __init__(self, model_cfg, *args, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
@@ -26,6 +27,8 @@ class ModelTemplate(nn.Module):
             "caption_head",
         ]
         self.module_list = self.build_networks()
+        if model_cfg.get("BINARY_HEAD", None):
+            self.binary_head.register_hook_for_binary_head(self.backbone_3d)
 
     @property
     def mode(self):
@@ -161,17 +164,53 @@ class ModelTemplate(nn.Module):
         ret_dict = self.task_head.forward_ret_dict
         if self.training:
             loss, tb_dict, disp_dict = self.get_training_loss()
-
             ret_dict["loss"] = loss
             return ret_dict, tb_dict, disp_dict
         else:
+            if hasattr(self, "inst_head") and self.inst_head is not None:
+                ret_dict.update(self.inst_head.forward_ret_dict)
             return ret_dict
 
     def get_training_loss(self):
         disp_dict = {}
-        # for segmentation loss
-        loss, tb_dict = self.task_head.get_loss()
+        tb_dict = {}
 
+        # for segmentation loss
+        if self.task_head is not None:
+            seg_loss, tb_dict_seg = self.task_head.get_loss()
+            tb_dict.update(tb_dict_seg)
+        else:
+            seg_loss = 0
+
+        # for binary loss
+        if self.binary_head is not None:
+            binary_loss, tb_dict_binary = self.binary_head.get_loss()
+            tb_dict.update(tb_dict_binary)
+        else:
+            binary_loss = 0
+
+        # for caption loss
+        if self.caption_head is not None:
+            caption_loss, tb_dict_caption = self.caption_head.get_loss()
+            tb_dict.update(tb_dict_caption)
+        else:
+            caption_loss = 0
+
+        # for inst loss
+        if self.inst_head is not None:
+            inst_loss, tb_dict_inst = self.inst_head.get_loss()
+            tb_dict.update(tb_dict_inst)
+        else:
+            inst_loss = 0
+
+        # for distillation loss
+        if self.kd_head is not None:
+            kd_loss, tb_dict_kd = self.kd_head.get_loss()
+            tb_dict.update(tb_dict_kd)
+        else:
+            kd_loss = 0
+
+        loss = seg_loss + binary_loss + caption_loss + inst_loss + kd_loss
         tb_dict["loss"] = loss.item()
         disp_dict.update(tb_dict)
 

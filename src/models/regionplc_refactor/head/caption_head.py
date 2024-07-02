@@ -3,8 +3,7 @@ import torch
 import torch.nn as nn
 
 from src.models.regionplc.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
-
-from ..model_utils.fp16 import force_fp32
+from src.models.regionplc_refactor.utils.fp16 import force_fp32
 
 
 class CaptionHead(nn.Module):

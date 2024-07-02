@@ -4,12 +4,12 @@ import numpy as np
 import torch
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
-from torchmetrics.classification.accuracy import Accuracy
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-from src.models.components.misc import offset2batch
-from src.models.regionplc_refactor import build_text_model, load_data_to_gpu
-from src.models.regionplc_refactor.text_networks import load_text_embedding_from_path
+from src.models.regionplc_refactor.text_models import (
+    build_text_model,
+    load_text_embedding_from_path,
+)
 from src.models.regionplc_refactor.utils import caption_utils
 from src.utils import RankedLogger
 
@@ -65,20 +65,6 @@ class RegionPLCLitModule(LightningModule):
         )
 
     def forward(self, batch) -> torch.Tensor:
-        # batch_ids = offset2batch(batch["offset"])
-        # batch["voxel_coords"] = torch.cat(
-        #     [batch_ids.unsqueeze(-1).int(), batch["grid_coord"].int()], dim=1
-        # ).contiguous()
-        # batch["v2p_map"] = batch["inverse"].long()
-        # batch["voxel_features"] = batch["feat"]
-        # batch["spatial_shape"] = torch.clip(
-        #     batch["grid_coord"].max(0).values + 1, 128, None
-        # )
-        # batch["batch_size"] = len(batch["offset"])
-        # batch["labels"] = batch["segment"]
-        # batch["binary_labels"] = batch["binary"]
-        # batch["batch_idxs"] = offset2batch(batch["offset_origin"])
-        load_data_to_gpu(batch)
         return self.net(batch)
 
     def training_step(
