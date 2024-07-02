@@ -6,7 +6,7 @@ import torch.nn as nn
 from src.models.regionplc.adapter import VLAdapter
 from src.models.regionplc.backbone import SparseUNetIndoor
 from src.models.regionplc.utils.spconv_utils import find_all_spconv_keys
-from src.models.regionplc.vfe import IndoorVFE
+from src.models.regionplc.vfe import IndoorVFE, IndoorVFEv2
 
 from . import head
 
@@ -49,7 +49,7 @@ class SparseUNetTextSeg(nn.Module):
         if self.model_cfg.get("VFE", None) is None:
             return None, model_info_dict
 
-        vfe_module = IndoorVFE(
+        vfe_module = IndoorVFEv2(
             model_cfg=self.model_cfg.VFE,
             num_point_features=self.model_cfg.get("NUM_POINT_FEATURES", None),
             voxel_size=self.model_cfg.get("VOXEL_SIZE", None),
