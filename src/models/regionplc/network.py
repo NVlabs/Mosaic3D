@@ -3,10 +3,10 @@ import os
 import torch
 import torch.nn as nn
 
-from src.models.regionplc_refactor.adapter import VLAdapter
-from src.models.regionplc_refactor.backbone import SparseUNetIndoor
-from src.models.regionplc_refactor.utils.spconv_utils import find_all_spconv_keys
-from src.models.regionplc_refactor.vfe import IndoorVFE
+from src.models.regionplc.adapter import VLAdapter
+from src.models.regionplc.backbone import SparseUNetIndoor
+from src.models.regionplc.utils.spconv_utils import find_all_spconv_keys
+from src.models.regionplc.vfe import IndoorVFE
 
 from . import head
 

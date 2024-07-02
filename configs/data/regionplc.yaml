@@ -1,7 +1,7 @@
-_target_: src.data.regionplc_refactor.datamodule.RegionPLCDataModule
+_target_: src.data.regionplc.datamodule.RegionPLCDataModule
 
 train_dataset:
-  _target_: src.data.regionplc_refactor.scannet_dataset.ScanNetDataset
+  _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
   _partial_: True
   data_dir: /datasets/regionplc
   split: train
@@ -78,7 +78,7 @@ train_dataset:
       ENABLED: False
 
 val_dataset:
-  _target_: src.data.regionplc_refactor.scannet_dataset.ScanNetDataset
+  _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
   _partial_: True
   data_dir: /datasets/regionplc
   split: val

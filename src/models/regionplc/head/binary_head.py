@@ -3,8 +3,8 @@ import functools
 import torch
 import torch.nn as nn
 
-from src.models.regionplc_refactor.utils.spconv_utils import spconv
-from src.models.regionplc_refactor.utils.unet_blocks import (
+from src.models.regionplc.utils.spconv_utils import spconv
+from src.models.regionplc.utils.unet_blocks import (
     ResidualBlock,
     UBlockDecoder,
     VGGBlock,

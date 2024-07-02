@@ -10,7 +10,7 @@ import torch
 from natsort import natsorted
 from torch.utils.data import Dataset
 
-from src.data.regionplc_refactor.augmentor.data_augmentor import DataAugmentor
+from src.data.regionplc.augmentor.data_augmentor import DataAugmentor
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=False)

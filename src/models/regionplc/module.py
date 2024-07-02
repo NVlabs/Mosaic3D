@@ -6,11 +6,11 @@ from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-from src.models.regionplc_refactor.text_models import (
+from src.models.regionplc.text_models import (
     build_text_model,
     load_text_embedding_from_path,
 )
-from src.models.regionplc_refactor.utils import caption_utils
+from src.models.regionplc.utils import caption_utils
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)

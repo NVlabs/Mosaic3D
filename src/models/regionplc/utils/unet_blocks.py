@@ -3,7 +3,7 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 
-from src.models.regionplc_refactor.utils.spconv_utils import spconv
+from src.models.regionplc.utils.spconv_utils import spconv
 
 
 class Custom1x1Subm3d(spconv.SparseConv3d):

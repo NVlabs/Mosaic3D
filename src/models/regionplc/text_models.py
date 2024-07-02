@@ -3,7 +3,7 @@ import os
 import torch
 from clip import clip
 
-from src.models.regionplc_refactor.utils import commu_utils
+from src.models.regionplc.utils import commu_utils
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)

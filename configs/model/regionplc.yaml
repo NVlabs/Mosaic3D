@@ -1,4 +1,4 @@
-_target_: src.models.regionplc_refactor.module.RegionPLCLitModule
+_target_: src.models.regionplc.module.RegionPLCLitModule
 
 optimizer:
   _target_: torch.optim.AdamW
@@ -18,7 +18,7 @@ scheduler:
 scheduler_interval: step
 
 net:
-  _target_: src.models.regionplc_refactor.network.SparseUNetTextSeg
+  _target_: src.models.regionplc.network.SparseUNetTextSeg
   _partial_: true
   model_cfg:
     NAME: SparseUNetTextSeg
