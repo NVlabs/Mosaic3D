@@ -30,6 +30,7 @@ python -m src.data.regionplc.download --download_dir [path/to/save/dataset]
 ```
 
 #### How to obtain fresh `FedAuth` token?
+<details><summary>Click</summary>
 
 1. Open the following [link](https://connecthkuhk-my.sharepoint.com/personal/jhyang13_connect_hku_hk/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fjhyang13%5Fconnect%5Fhku%5Fhk%2FDocuments%2Fpretrained%5Fmodels%2Fregionplc%2Fcaption%5Ffiles%2Fscannet&ga=1) on Google Chrome.
 
@@ -58,6 +59,7 @@ python -m src.data.regionplc.download --download_dir [path/to/save/dataset]
 09. Update `FedAuth` variable in `src/data/regionplc/download.py` to new one.
 
 10. Execute the above download command.
+</details>
 
 ## Installation
 
