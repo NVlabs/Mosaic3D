@@ -35,6 +35,7 @@ from src.utils import (
     log_hyperparameters,
     task_wrapper,
 )
+from src.utils.hpc_utils import HPCSignalHandler, hpc_config
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -83,9 +84,13 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         log.info("Logging hyperparameters!")
         log_hyperparameters(object_dict)
 
+    # For HPC specific signal handler.
+    signal_handler = HPCSignalHandler(trainer)
     if cfg.get("train"):
         log.info("Starting training!")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
+        with signal_handler:
+            trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
+        log.info("Finished training!")
 
     train_metrics = trainer.callback_metrics
 
@@ -113,6 +118,9 @@ def main(cfg: DictConfig) -> Optional[float]:
     :param cfg: DictConfig configuration composed by Hydra.
     :return: Optional[float] with optimized metric value.
     """
+    # HPC specific setup. No ops for non-HPC runs.
+    hpc_config(cfg)
+
     # apply extra utilities
     # (e.g. ask for tags if none are provided in cfg, print cfg tree, etc.)
     extras(cfg)
