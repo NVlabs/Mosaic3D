@@ -66,8 +66,8 @@ train_dataset:
 
     VIEW:
       ENABLED: True
-      CAPTION_PATH: text_embed/caption_detic-template_and_kosmos_125k_iou0.2.json
-      IMAGE_CORR_PATH: scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
+      CAPTION_PATH: caption/caption_detic-template_and_kosmos_125k_iou0.2.json
+      IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
       SELECT: ratio
       NUM: 1
       RATIO: 0.2

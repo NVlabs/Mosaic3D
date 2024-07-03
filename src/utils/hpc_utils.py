@@ -169,4 +169,8 @@ def hpc_config(cfg: DictConfig) -> None:
 
     # Replace the logger.wandb._target_ to AutoResumeWandbLogger
     if "wandb" in cfg.logger:
-        cfg.logger.wandb._target_ = "src.utils.autoresume_wandb_logger.AutoResumeWandbLogger"
+        #cfg.logger.wandb._target_ = "src.utils.autoresume_wandb_logger.AutoResumeWandbLogger"
+        assert (
+            str(cfg.logger.wandb._target_)
+            == "src.utils.auto_resume_wandb_logger.AutoResumeWandbLogger"
+        )
