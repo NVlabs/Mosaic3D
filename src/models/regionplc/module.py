@@ -77,16 +77,20 @@ class RegionPLCLitModule(LightningModule):
 
         # update and log metrics
         self.train_loss(loss)
-        log_kwargs = dict(
+
+        log_metrics = {
+            "train/loss": self.train_loss,
+            "train/loss_segment": tb_dict["loss_seg"],
+            "train/loss_caption": tb_dict["caption_view"],
+            "train/loss_binary": tb_dict["binary_loss"],
+        }
+        self.log_dict(
+            log_metrics,
             on_step=True,
-            on_epoch=True,
             prog_bar=True,
+            logger=True,
             batch_size=batch["batch_size"],
         )
-        self.log("train/loss", self.train_loss, **log_kwargs)
-        self.log("train/loss_segment", tb_dict["loss_seg"], **log_kwargs)
-        self.log("train/loss_caption", tb_dict["caption_view"], **log_kwargs)
-        self.log("train/loss_binary", tb_dict["binary_loss"], **log_kwargs)
         return loss
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
@@ -111,20 +115,45 @@ class RegionPLCLitModule(LightningModule):
         miou = np.array(list(class_ious.values())).mean()
         macc = np.array(list(class_accs.values())).mean()
         allacc = np.diag(confmat).sum() / (confmat.sum() + 1e-10)
-
-        for k, v in class_ious.items():
-            self.log(f"val/iou_{k}", v, sync_dist=True, logger=True)
-
         self.val_miou_best.update(miou)
-        self.log("val/best_miou", self.val_miou_best.compute(), sync_dist=True, logger=True)
-        self.log("val/miou", miou, sync_dist=True, logger=True)
-        self.log("val/macc", macc, sync_dist=True, logger=True)
-        self.log("val/allacc", allacc, sync_dist=True, logger=True)
+
+        log_metrics = {f"val/iou_{k}": v for k, v in class_ious.items()}
+        log_metrics.update(
+            {
+                "val/best_miou": self.val_miou_best.compute(),
+                "val/miou": miou,
+                "val/macc": macc,
+                "val/allacc": allacc,
+            }
+        )
+
+        if (
+            hasattr(self.net.task_head, "base_class_idx")
+            and self.net.task_head.base_class_idx is not None
+            and len(self.net.task_head.base_class_idx) > 0
+        ):
+            base_class_idx = self.net.task_head.base_class_idx
+            novel_class_idx = self.net.task_head.base_class_idx
+            miou_base = np.nanmean([class_ious[self.class_names[i]] for i in base_class_idx])
+            miou_novel = np.nanmean([class_ious[self.class_names[i]] for i in novel_class_idx])
+            hiou = 2 * miou_base * miou_novel / (miou_base + miou_novel + 1e-8)
+            log_metrics.update(
+                {
+                    "val/miou_base": miou_base,
+                    "val/miou_novel": miou_novel,
+                    "val/hiou": hiou,
+                }
+            )
+
+        self.log_dict(log_metrics, sync_dist=True, logger=True)
 
         self.val_confmat.reset()
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         self.validation_step(batch, batch_idx)
+
+    def on_test_epoch_end(self) -> None:
+        self.on_validation_epoch_end()
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
