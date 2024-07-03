@@ -6,10 +6,7 @@ from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-from src.models.regionplc.text_models import (
-    build_text_model,
-    load_text_embedding_from_path,
-)
+from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc.utils import caption_utils
 from src.utils import RankedLogger
 
@@ -21,7 +18,6 @@ class RegionPLCLitModule(LightningModule):
         self,
         net: torch.nn.Module,
         text_encoder: Dict,
-        text_embed_path: str,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler,
         compile: bool,
@@ -33,9 +29,7 @@ class RegionPLCLitModule(LightningModule):
         self.save_hyperparameters(logger=False)
 
         self.net = None
-
-        # load text embed
-        self.text_embed = load_text_embedding_from_path(text_embed_path)
+        self.text_encoder = None
 
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()
@@ -51,8 +45,7 @@ class RegionPLCLitModule(LightningModule):
         if self.net is not None:
             return
 
-        self.net = self.hparams.net(dataset=self.data_cfg.train_dataset)
-        self.net.task_head.set_cls_head_with_text_embed(self.text_embed)
+        self.net = self.hparams.net()
         self.text_encoder = build_text_model(self.hparams.text_encoder)
 
     def setup(self, stage: str) -> None:
@@ -132,10 +125,6 @@ class RegionPLCLitModule(LightningModule):
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         self.validation_step(batch, batch_idx)
-
-    # def setup(self, stage: str) -> None:
-    #     if self.hparams.compile and stage == "fit":
-    #         self.net = torch.compile(self.net)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())

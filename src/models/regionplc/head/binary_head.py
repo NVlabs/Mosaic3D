@@ -1,4 +1,5 @@
 import functools
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -12,20 +13,33 @@ from src.models.regionplc.utils.unet_blocks import (
 
 
 class BinaryHead(nn.Module):
-    def __init__(self, model_cfg, ignore_label, in_channel, block_reps, block_residual):
+    def __init__(
+        self,
+        ignore_label,
+        in_channel,
+        block_reps,
+        block_residual,
+        binary_thresh,
+        hook_feature_list: List[str] = [],
+        num_filters: Optional[int] = None,
+        custom_sp1x1: bool = False,
+        detach: bool = True,
+        loss_weight: float = 1.0,
+        voxel_loss: bool = False,
+    ):
         super().__init__()
-        self.model_cfg = model_cfg
         self.binary_feat_input = []
-        self.binary_thresh = model_cfg.THRESH
+        self.binary_thresh = binary_thresh
         self.in_channel = in_channel
         self.ignore_label = ignore_label
-        self.num_filters = model_cfg.get("NUM_FILTERS", None)
+        self.num_filters = num_filters
+        self.hook_feature_list = hook_feature_list
+        self.loss_weight = loss_weight
+        self.voxel_loss = voxel_loss
 
         norm_fn = functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1)
         if block_residual:
-            block = functools.partial(
-                ResidualBlock, custom_sp1x1=self.model_cfg.get("CUSTOM_SP1X1", False)
-            )
+            block = functools.partial(ResidualBlock, custom_sp1x1=custom_sp1x1)
         else:
             block = VGGBlock
 
@@ -49,7 +63,7 @@ class BinaryHead(nn.Module):
             block_reps,
             block,
             indice_key_id=1,
-            detach=model_cfg.get("DETACH", True),
+            detach=detach,
         )
 
         self.binary_classifier = spconv.SparseSequential(
@@ -72,7 +86,7 @@ class BinaryHead(nn.Module):
         binary_scores = self.binary_encoder(self.binary_feat_input)
         binary_scores = self.binary_classifier(binary_scores).features
 
-        if self.training and self.model_cfg.get("VOXEL_LOSS", None):
+        if self.training and self.voxel_loss:
             pass
         else:
             binary_scores = binary_scores[batch_dict["v2p_map"].long()]
@@ -95,7 +109,7 @@ class BinaryHead(nn.Module):
 
             return hook
 
-        for module_name in self.model_cfg.HOOK_FEATURE_LIST:
+        for module_name in self.hook_feature_list:
             eval("backbone." + module_name).register_forward_hook(get_features())
 
     def get_loss(self):
@@ -107,7 +121,7 @@ class BinaryHead(nn.Module):
         binary_loss = self.binary_loss_func(
             binary_scores[mask], binary_labels[mask].reshape(-1, 1)
         )
-        binary_loss = binary_loss * self.model_cfg.get("LOSS_WEIGHT", 1.0)
+        binary_loss = binary_loss * self.loss_weight
 
         tb_dict = {"binary_loss": binary_loss.item()}
         return binary_loss, tb_dict

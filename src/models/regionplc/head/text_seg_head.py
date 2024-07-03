@@ -1,46 +1,63 @@
 from collections import OrderedDict
+from typing import List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 
-# from pcseg.config import cfg
+from src.utils import RankedLogger
+
+log = RankedLogger(__name__, rank_zero_only=True)
 
 
 class TextSegHead(nn.Module):
-    def __init__(self, model_cfg, in_channel, ignore_label, **kwargs):
+    def __init__(
+        self,
+        in_channel: int,
+        text_embed_path: str,
+        ignore_label: int = -100,
+        feat_norm: bool = False,
+        loss_weight: float = 1.0,
+        logit_scale: Optional[float] = 1.0,
+        logit_learnable: Optional[bool] = False,
+        base_class_idx: Optional[List[int]] = [],
+        ignore_class_idx: Optional[List[int]] = [],
+        novel_class_idx: Optional[List[int]] = [],
+    ):
         super().__init__()
-        self.model_cfg = model_cfg
         self.in_channel = in_channel
         self.ignore_label = ignore_label
-        self.text_channel = self.model_cfg.TEXT_EMBED.CHANNEL
-        self.num_class = self.model_cfg.TEXT_EMBED.NUM_CLASS
-        self.feat_norm = model_cfg.get("FEAT_NORM", False)
-        self.loss_weight = self.model_cfg.get("LOSS_WEIGHT", 1.0)
+        self.text_embed_path = text_embed_path
+        self.feat_norm = feat_norm
+        self.loss_weight = loss_weight
+        if logit_learnable:
+            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        else:
+            self.logit_scale = logit_scale if logit_scale is not None else 1.0
+
+        # load pre-computed text embeddings
+        text_embeddings = torch.load(self.text_embed_path, map_location="cpu").detach()
+        text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
+        log.info(f"=> loaded text embeddings from {self.text_embed_path}")
+        num_classes, text_channel = text_embeddings.shape
 
         # create cls head
-        self.cls_head = nn.Linear(self.text_channel, self.num_class, bias=False)
+        self.cls_head = nn.Linear(text_channel, num_classes, bias=False)
 
-        if model_cfg.get("LOGIT_SCALE", None):
-            self.logit_scale = (
-                nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-                if model_cfg.LOGIT_SCALE.learnable
-                else model_cfg.LOGIT_SCALE.value
-            )
-        else:
-            self.logit_scale = 1.0
+        # load text embeddings as cls head weight
+        self.cls_head.load_state_dict(OrderedDict({"weight": text_embeddings.float()}))
 
         # fix text cls head
         for param in self.cls_head.parameters():
             param.requires_grad = False
 
         # open vocab
-        self.valid_class_idx = [i for i in range(len(self.model_cfg.CLASS_NAMES))]
-        if hasattr(self.model_cfg, "base_class_idx"):
-            self.base_class_idx = self.model_cfg.base_class_idx
-            self.novel_class_idx = self.model_cfg.novel_class_idx
-        if hasattr(self.model_cfg, "ignore_class_idx"):
-            self.ignore_class_idx = self.model_cfg.ignore_class_idx
+        self.valid_class_idx = [i for i in range(num_classes)]
+        if base_class_idx is not None and len(base_class_idx) > 0:
+            self.base_class_idx = base_class_idx
+            self.novel_class_idx = novel_class_idx
+        if ignore_class_idx is not None and len(ignore_class_idx) > 0:
+            self.ignore_class_idx = ignore_class_idx
             for i in self.ignore_class_idx:
                 self.valid_class_idx.remove(i)
 

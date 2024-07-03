@@ -8,16 +8,21 @@ from src.models.regionplc.utils import basic_block_1d
 
 
 class VLAdapter(nn.Module):
-    def __init__(self, model_cfg, in_channel):
+    def __init__(
+        self,
+        in_channel: int,
+        text_channel: int,
+        num_layers: int,
+        last_norm: bool = True,
+    ):
         super().__init__()
-        self.model_cfg = model_cfg
-        self.text_channel = model_cfg.TEXT_DIM
+        self.in_channel = in_channel
+        self.text_channel = text_channel
+        self.num_layers = num_layers
+        self.last_norm = last_norm
 
         # vision adapter
-        adapter_last_norm = self.model_cfg.get("LAST_NORM", True)
-        self.adapter = self.build_vl_adapter(
-            self.model_cfg.NUM_ADAPTER_LAYERS, in_channel, adapter_last_norm
-        )
+        self.adapter = self.build_vl_adapter(self.num_layers, self.in_channel, self.last_norm)
 
     def build_vl_adapter(self, num_adapter_layers, in_channel, last_norm):
         if num_adapter_layers < 1:

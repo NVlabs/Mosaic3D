@@ -7,19 +7,26 @@ from src.models.regionplc.utils.fp16 import force_fp32
 
 
 class CaptionHead(nn.Module):
-    def __init__(self, model_cfg, ignore_label):
+    def __init__(
+        self,
+        ignore_label: int,
+        feat_norm: bool,
+        loss_weight: float = 0.5,
+        logit_scale: float = 100.0,
+        logit_learnable: bool = True,
+        novel_grad_only: bool = False,
+    ):
         super().__init__()
-        self.model_cfg = model_cfg
-        self.feat_norm = model_cfg.FEAT_NORM
+        self.feat_norm = feat_norm
 
-        if model_cfg.LOGIT_SCALE.learnable:
-            self.caption_logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        if logit_learnable:
+            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         else:
-            self.caption_logit_scale = model_cfg.LOGIT_SCALE.value
+            self.logit_scale = logit_scale if logit_scale is not None else 1.0
 
-        self.caption_loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none")
-        self.caption_loss_weight = model_cfg.LOSS_WEIGHT
-        self.novel_grad_only = self.model_cfg.get("NOVEL_GRAD_ONLY", False)
+        self.loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none")
+        self.loss_weight = loss_weight
+        self.novel_grad_only = novel_grad_only
 
         self.forward_ret_dict = {}
 
@@ -32,10 +39,10 @@ class CaptionHead(nn.Module):
         v2p_map = batch_dict["v2p_map"]
         adapter_feats = batch_dict["adapter_feats"][v2p_map]
 
-        if isinstance(self.caption_logit_scale, nn.Parameter):
-            caption_logit_scale = self.caption_logit_scale.exp()
+        if isinstance(self.logit_scale, nn.Parameter):
+            logit_scale = self.logit_scale.exp()
         else:
-            caption_logit_scale = self.caption_logit_scale
+            logit_scale = self.logit_scale
 
         caption_ret_dict = {}
 
@@ -44,14 +51,12 @@ class CaptionHead(nn.Module):
         if caption_embed.shape[0] == 0:
             caption_ret_dict[caption_type] = {"zero_loss": adapter_feats.sum() * 0.0}
         else:
-            caption_scores = self.get_caption_scores(
-                adapter_feats, caption_embed, caption_logit_scale
-            )
+            caption_scores = self.get_caption_scores(adapter_feats, caption_embed, logit_scale)
             caption_ret_dict[caption_type] = self.forward_given_type_caption(
                 batch_dict,
                 caption_infos[caption_type],
                 caption_scores,
-                caption_logit_scale,
+                logit_scale,
             )
         self.forward_ret_dict = caption_ret_dict
         return batch_dict
@@ -195,12 +200,9 @@ class CaptionHead(nn.Module):
             if "caption_output" in self.forward_ret_dict[caption_type]:
                 caption_output = self.forward_ret_dict[caption_type]["caption_output"]
                 caption_labels = self.forward_ret_dict[caption_type]["caption_labels"]
-                cur_caption_loss_weight = self.caption_loss_weight[
-                    caption_type.split("_")[-1].upper()
-                ]
+                cur_caption_loss_weight = self.loss_weight
                 cur_caption_loss = (
-                    self.caption_loss_func(caption_output, caption_labels)
-                    * cur_caption_loss_weight
+                    self.loss_func(caption_output, caption_labels) * cur_caption_loss_weight
                 )
                 if len(cur_caption_loss.shape) > 0:
                     caption_n_points = self.forward_ret_dict[caption_type]["caption_n_points"]

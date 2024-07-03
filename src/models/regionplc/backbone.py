@@ -1,4 +1,5 @@
 import functools
+from typing import Optional
 
 import torch.nn as nn
 
@@ -7,22 +8,29 @@ from src.models.regionplc.utils.unet_blocks import ResidualBlock, UBlock, VGGBlo
 
 
 class SparseUNetIndoor(nn.Module):
-    def __init__(self, model_cfg):
+    def __init__(
+        self,
+        in_channel: int,
+        mid_channel: int,
+        block_reps: int,
+        block_residual: bool,
+        custom_sp1x1: bool = False,
+        num_blocks: Optional[int] = None,
+        num_filters: Optional[int] = None,
+    ):
         super().__init__()
         norm_fn = functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1)
 
-        self.model_cfg = model_cfg
-        self.in_channel = model_cfg.IN_CHANNEL
-        self.mid_channel = model_cfg.MID_CHANNEL
-        self.block_reps = model_cfg.BLOCK_REPS
-        self.block_residual = model_cfg.BLOCK_RESIDUAL
-        self.num_blocks = model_cfg.get("NUM_BLOCKS", None)
-        self.num_filters = model_cfg.get("NUM_FILTERS", None)
+        self.in_channel = in_channel
+        self.mid_channel = mid_channel
+        self.block_reps = block_reps
+        self.block_residual = block_residual
+        self.custom_sp1x1: custom_sp1x1
+        self.num_blocks = num_blocks
+        self.num_filters = num_filters
 
         if self.block_residual:
-            block = functools.partial(
-                ResidualBlock, custom_sp1x1=self.model_cfg.get("CUSTOM_SP1X1", False)
-            )
+            block = functools.partial(ResidualBlock, custom_sp1x1=custom_sp1x1)
         else:
             block = VGGBlock
 

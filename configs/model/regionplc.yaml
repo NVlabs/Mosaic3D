@@ -20,102 +20,66 @@ scheduler_interval: step
 net:
   _target_: src.models.regionplc.network.SparseUNetTextSeg
   _partial_: true
-  model_cfg:
-    NAME: SparseUNetTextSeg
-    REMAP_FROM_3DLANG: false
-    REMAP_FROM_NOADAPTER: false
+
+  vfe_cfg:
+    dummy: 0
+
+  backbone_cfg:
+    in_channel: 6
+    mid_channel: 16
+    block_reps: 2
+    block_residual: true
+    custom_sp1x1: true
+    num_blocks: 7
+
+  adapter_cfg:
+    in_channel: ${model.net.backbone_cfg.mid_channel}
+    text_channel: 512
+    num_layers: 2
+    last_norm: true
+
+  binary_head_cfg:
     ignore_label: ${data.train_dataset.ignore_label}
-    voxel_mode: 4
-    CLASS_NAMES:
+    in_channel: ${model.net.backbone_cfg.mid_channel}
+    block_reps: ${model.net.backbone_cfg.block_reps}
+    block_residual: ${model.net.backbone_cfg.block_residual}
+    binary_thresh: 0.5
+    hook_feature_list:
       [
-        wall,
-        floor,
-        cabinet,
-        bed,
-        chair,
-        sofa,
-        table,
-        door,
-        window,
-        bookshelf,
-        picture,
-        counter,
-        desk,
-        curtain,
-        refrigerator,
-        showercurtain,
-        toilet,
-        sink,
-        bathtub,
-        otherfurniture,
+        "unet.blocks.block1",
+        "unet.u.blocks.block1",
+        "unet.u.u.blocks.block1",
+        "unet.u.u.u.blocks.block1",
+        "unet.u.u.u.u.blocks.block1",
+        "unet.u.u.u.u.u.blocks.block1",
+        "unet.u.u.u.u.u.u.blocks.block1",
       ]
-    # valid_class_idx: ${data.train_dataset.dataset_cfg.valid_class_idx}
-    VFE:
-      NAME: IndoorVFE
-      USE_XYZ: true
-    BACKBONE_3D:
-      NAME: SparseUNetIndoor
-      IN_CHANNEL: 6
-      MID_CHANNEL: 16
-      BLOCK_RESIDUAL: true
-      BLOCK_REPS: 2
-      NUM_BLOCKS: 7
-      CUSTOM_SP1X1: true
-    BINARY_HEAD:
-      NAME: BinaryHead
-      DETACH: true
-      THRESH: 0.5
-      CUSTOM_SP1X1: true
-      HOOK_FEATURE_LIST:
-        [
-          "unet.blocks.block1",
-          "unet.u.blocks.block1",
-          "unet.u.u.blocks.block1",
-          "unet.u.u.u.blocks.block1",
-          "unet.u.u.u.u.blocks.block1",
-          "unet.u.u.u.u.u.blocks.block1",
-          "unet.u.u.u.u.u.u.blocks.block1",
-        ]
-    ADAPTER:
-      NAME: VLAdapter
-      EVAL_ONLY: false
-      NUM_ADAPTER_LAYERS: 2
-      TEXT_DIM: 512
-      LAST_NORM: true
-    TASK_HEAD:
-      NAME: TextSegHead
-      FEAT_NORM: false
-      CORRECT_SEG_PRED_BINARY: true
-      TEXT_EMBED:
-        NAME: CLIP
-        NORM: true
-        PATH: text_embed/scannet_clip-ViT-B16_id.pth
-        CHANNEL: 512
-        NUM_CLASS: 20
-      CLASS_NAMES: ${model.net.model_cfg.CLASS_NAMES}
-      base_class_idx: ${data.train_dataset.base_class_idx}
-      novel_class_idx: ${data.train_dataset.novel_class_idx}
-      ignore_class_idx: ${data.train_dataset.ignore_class_idx}
-    CAPTION_HEAD:
-      NAME: CaptionHead
-      POOLING_TYPE: avg
-      FEAT_NORM: true
-      LOGIT_SCALE:
-        value: 100.0
-        learnable: true
-      CUDA_ENABLED: true
-      POOL_OBJ: score
-      LOSS_FUNC: NLL_NoReduce
-      LOSS_WEIGHT:
-        SCENE: 0.1
-        VIEW: 0.5
-        ENTITY: 0.1
-      DIV_N_CAP: false
-      DIV_MODE: none
-      NOVEL_GRAD_ONLY: true
+    custom_sp1x1: true
+    detach: true
+    loss_weight: 1.0
+    voxel_loss: false
+
+  caption_head_cfg:
+    ignore_label: ${data.train_dataset.ignore_label}
+    feat_norm: true
+    logit_scale: 100.0
+    logit_learnable: true
+    loss_weight: 1.0
+    novel_grad_only: true
+
+  task_head_cfg:
+    in_channel: ${model.net.backbone_cfg.mid_channel}
+    text_embed_path: ${data.train_dataset.data_dir}/text_embed/scannet_clip-ViT-B16_id.pth
+    ignore_label: ${data.train_dataset.ignore_label}
+    feat_norm: false
+    loss_weight: 1.0
+    logit_scale: 1.0
+    logit_learnable: false
+    base_class_idx: ${data.train_dataset.base_class_idx}
+    novel_class_idx: ${data.train_dataset.novel_class_idx}
+    ignore_class_idx: ${data.train_dataset.ignore_class_idx}
 
 # compile model for faster training with pytorch 2.0
-text_embed_path: ${data.train_dataset.data_dir}/text_embed/scannet_clip-ViT-B16_id.pth
 text_encoder:
   NAME: CLIP
   BACKBONE: ViT-B/16

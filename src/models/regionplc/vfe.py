@@ -25,7 +25,7 @@ def fnv_hash_vec(arr):
 
 
 class IndoorVFE(nn.Module):
-    def __init__(self, model_cfg, voxel_mode, **kwargs):
+    def __init__(self, model_cfg={}, voxel_mode=4, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
         self.use_xyz = model_cfg.get("USE_XYZ", False)
@@ -58,9 +58,8 @@ class IndoorVFE(nn.Module):
 
 
 class IndoorVFEv2(nn.Module):
-    def __init__(self, model_cfg, voxel_mode, **kwargs) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__()
-        self.model_cfg = model_cfg
 
     def forward(self, batch):
         coords = batch["points_xyz_voxel_scale"]

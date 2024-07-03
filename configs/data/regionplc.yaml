@@ -6,11 +6,33 @@ train_dataset:
   data_dir: /datasets/regionplc
   split: train
   # class labels
-  class_names: ${model.net.model_cfg.CLASS_NAMES}
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
   ignore_label: -100
+  class_names:
+    [
+      wall,
+      floor,
+      cabinet,
+      bed,
+      chair,
+      sofa,
+      table,
+      door,
+      window,
+      bookshelf,
+      picture,
+      counter,
+      desk,
+      curtain,
+      refrigerator,
+      showercurtain,
+      toilet,
+      sink,
+      bathtub,
+      otherfurniture,
+    ]
   # augmentations
   aug_cfg:
     aug_list: [scene_aug, elastic, crop, shuffle]
@@ -82,11 +104,11 @@ val_dataset:
   _partial_: True
   data_dir: /datasets/regionplc
   split: val
-  class_names: ${model.net.model_cfg.CLASS_NAMES}
-  base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
-  ignore_class_idx: [19]
-  novel_class_idx: [5, 9, 12, 16]
-  ignore_label: -100
+  class_names: ${data.train_dataset.class_names}
+  base_class_idx: ${data.train_dataset.base_class_idx}
+  ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+  novel_class_idx: ${data.train_dataset.novel_class_idx}
+  ignore_label: ${data.train_dataset.ignore_label}
   aug_cfg:
     aug_list: [scene_aug, elastic, crop, shuffle]
     scene_aug:
