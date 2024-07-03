@@ -65,6 +65,7 @@ RUN pip3 install torch==2.0.1 torchvision --extra-index-url https://download.pyt
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 
-# Use zsh
-# RUN chsh -s /usr/bin/zsh user
+# Install torch_scatter manually
+RUN pip3 install --no-index torch-scatter -f https://data.pyg.org/whl/torch-2.0.1+cu117.html
+
 RUN chsh -s /usr/bin/bash user
