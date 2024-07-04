@@ -21,6 +21,16 @@ net:
   _target_: src.models.regionplc.network.SparseUNetTextSeg
   _partial_: true
 
+  module_names:
+    [
+      "vfe",
+      "backbone_3d",
+      "adapter",
+      "binary_head",
+      "caption_head",
+      "task_head",
+    ]
+
   vfe_cfg:
     dummy: 0
 
@@ -78,12 +88,11 @@ net:
     base_class_idx: ${data.train_dataset.base_class_idx}
     novel_class_idx: ${data.train_dataset.novel_class_idx}
     ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+    eval_only: false
 
 # compile model for faster training with pytorch 2.0
 text_encoder:
-  NAME: CLIP
-  BACKBONE: ViT-B/16
-  TEMPLATE: identity
-  EXTRACT_EMBED: false
+  name: CLIP
+  backbone: ViT-B/16
 
 compile: false

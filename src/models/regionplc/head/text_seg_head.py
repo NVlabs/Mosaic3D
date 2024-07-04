@@ -23,6 +23,7 @@ class TextSegHead(nn.Module):
         base_class_idx: Optional[List[int]] = [],
         ignore_class_idx: Optional[List[int]] = [],
         novel_class_idx: Optional[List[int]] = [],
+        eval_only: bool = False,
     ):
         super().__init__()
         self.in_channel = in_channel
@@ -34,6 +35,7 @@ class TextSegHead(nn.Module):
             self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         else:
             self.logit_scale = logit_scale if logit_scale is not None else 1.0
+        self.eval_only = eval_only
 
         # load pre-computed text embeddings
         text_embeddings = torch.load(self.text_embed_path, map_location="cpu").detach()

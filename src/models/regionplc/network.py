@@ -1,3 +1,5 @@
+from typing import List
+
 import torch.nn as nn
 
 from src.models.regionplc.adapter import VLAdapter
@@ -15,46 +17,57 @@ log = RankedLogger(__name__, rank_zero_only=True)
 class SparseUNetTextSeg(nn.Module):
     def __init__(
         self,
+        module_names: List[str],
         vfe_cfg=None,
         backbone_cfg=None,
         adapter_cfg=None,
         binary_head_cfg=None,
         kd_head_cfg=None,
         task_head_cfg=None,
+        inst_head_cfg=None,
         caption_head_cfg=None,
         **kwargs,
     ):
         super().__init__()
         self.module_list = []
+        self.module_names = module_names
 
-        if vfe_cfg:
+        self.vfe = None
+        if "vfe" in self.module_names and vfe_cfg:
             self.vfe = IndoorVFEv2(**vfe_cfg)
             self.module_list.append(self.vfe)
 
-        if backbone_cfg:
+        self.backbone_3d = None
+        if "backbone_3d" in self.module_names and backbone_cfg:
             self.backbone_3d = SparseUNetIndoor(**backbone_cfg)
             self.module_list.append(self.backbone_3d)
 
-        if adapter_cfg:
+        self.adapter = None
+        if "adapter" in self.module_names and adapter_cfg:
             self.adapter = VLAdapter(**adapter_cfg)
             self.module_list.append(self.adapter)
 
-        if binary_head_cfg:
+        self.binary_head = None
+        if "binary_head" in self.module_names and binary_head_cfg:
             self.binary_head = BinaryHead(**binary_head_cfg)
             self.module_list.append(self.binary_head)
 
         self.kd_head = None
-        if kd_head_cfg:
+        if "kd_head" in self.module_names and kd_head_cfg:
             self.kd_head = KDHeadTemplate(**kd_head_cfg)
             self.module_list.append(self.kd_head)
 
-        if task_head_cfg:
+        self.task_head = None
+        if "task_head" in self.module_names and task_head_cfg:
             self.task_head = TextSegHead(**task_head_cfg)
             self.module_list.append(self.task_head)
 
         self.inst_head = None
+        if "inst_head" in self.module_names and inst_head_cfg is not None:
+            self.inst_head = None  # TODO: instance seg head
 
-        if caption_head_cfg is not None:
+        self.caption_head = None
+        if "caption_head" in self.module_names and caption_head_cfg is not None:
             self.caption_head = CaptionHead(**caption_head_cfg)
             self.module_list.append(self.caption_head)
 
@@ -81,7 +94,7 @@ class SparseUNetTextSeg(nn.Module):
         tb_dict = {}
 
         # for segmentation loss
-        if self.task_head is not None:
+        if self.task_head is not None and not self.task_head.eval_only:
             seg_loss, tb_dict_seg = self.task_head.get_loss()
             tb_dict.update(tb_dict_seg)
         else:

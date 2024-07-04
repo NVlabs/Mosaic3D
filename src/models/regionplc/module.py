@@ -80,9 +80,9 @@ class RegionPLCLitModule(LightningModule):
 
         log_metrics = {
             "train/loss": self.train_loss,
-            "train/loss_segment": tb_dict["loss_seg"],
             "train/loss_caption": tb_dict["caption_view"],
-            "train/loss_binary": tb_dict["binary_loss"],
+            "train/loss_segment": tb_dict.get("loss_seg", 0),
+            "train/loss_binary": tb_dict.get("binary_loss", 0),
         }
         self.log_dict(
             log_metrics,

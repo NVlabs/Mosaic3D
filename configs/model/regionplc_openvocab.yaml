@@ -1,0 +1,7 @@
+defaults:
+  - regionplc
+
+net:
+  module_names: ["vfe", "backbone_3d", "adapter", "caption_head", "task_head"]
+  task_head_cfg:
+    eval_only: true

@@ -35,7 +35,7 @@ def _return_clip_path(url: str, root: str):
 
 
 def build_text_model(model_cfg):
-    tokenizer, text_encoder = get_clip_model(model_cfg.BACKBONE)
+    tokenizer, text_encoder = get_clip_model(model_cfg.backbone)
 
     text_encoder.tokenizer = tokenizer
     return text_encoder
