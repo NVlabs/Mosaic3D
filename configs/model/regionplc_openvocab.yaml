@@ -5,3 +5,5 @@ net:
   module_names: ["vfe", "backbone_3d", "adapter", "caption_head", "task_head"]
   task_head_cfg:
     eval_only: true
+  caption_head_cfg:
+    novel_grad_only: false
