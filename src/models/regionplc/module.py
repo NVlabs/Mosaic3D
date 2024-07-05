@@ -112,9 +112,9 @@ class RegionPLCLitModule(LightningModule):
             class_ious[class_name] = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0
             class_accs[class_name] = tp / (tp + fn) if (tp + fn) > 0 else 0
 
-        miou = np.array(list(class_ious.values())).mean()
-        macc = np.array(list(class_accs.values())).mean()
-        allacc = np.diag(confmat).sum() / (confmat.sum() + 1e-10)
+        valid_class_idx = self.net.task_head.valid_class_idx
+        miou = np.nanmean([class_ious[self.class_names[i]] for i in valid_class_idx])
+        macc = np.nanmean([class_accs[self.class_names[i]] for i in valid_class_idx])
         self.val_miou_best.update(miou)
 
         log_metrics = {f"val/iou_{k}": v for k, v in class_ious.items()}
@@ -123,7 +123,6 @@ class RegionPLCLitModule(LightningModule):
                 "val/best_miou": self.val_miou_best.compute(),
                 "val/miou": miou,
                 "val/macc": macc,
-                "val/allacc": allacc,
             }
         )
 
