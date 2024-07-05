@@ -133,7 +133,7 @@ class RegionPLCLitModule(LightningModule):
             and len(self.net.task_head.base_class_idx) > 0
         ):
             base_class_idx = self.net.task_head.base_class_idx
-            novel_class_idx = self.net.task_head.base_class_idx
+            novel_class_idx = self.net.task_head.novel_class_idx
             miou_base = np.nanmean([class_ious[self.class_names[i]] for i in base_class_idx])
             miou_novel = np.nanmean([class_ious[self.class_names[i]] for i in novel_class_idx])
             hiou = 2 * miou_base * miou_novel / (miou_base + miou_novel + 1e-8)
