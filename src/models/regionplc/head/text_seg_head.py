@@ -144,7 +144,7 @@ class TextSegHead(nn.Module):
 
         base_semantic_scores = semantic_scores[..., self.base_class_idx].softmax(dim=-1)
         novel_semantic_scores = semantic_scores[..., self.novel_class_idx].softmax(dim=-1)
-        semantic_scores = semantic_scores.clone()
+        semantic_scores = semantic_scores.clone().float()
         semantic_scores[:] = 0.0
         semantic_scores[..., self.base_class_idx] = base_semantic_scores
         semantic_scores[..., self.novel_class_idx] = novel_semantic_scores
