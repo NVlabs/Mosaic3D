@@ -91,7 +91,11 @@ class TextSegHead(nn.Module):
                 semantic_scores = semantic_scores[..., self.valid_class_idx]
         else:
             new_semantic_scores = semantic_scores.detach().clone()
-            new_semantic_scores[:] = -1e6
+            new_semantic_scores[:] = (
+                -1e6
+                if not semantic_scores.dtype == torch.float16
+                else torch.finfo(semantic_scores.dtype).min
+            )
             new_semantic_scores[..., self.valid_class_idx] = semantic_scores[
                 ..., self.valid_class_idx
             ]
