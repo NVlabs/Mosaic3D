@@ -9,6 +9,8 @@ defaults:
   - paths: default
   - extras: default
   - hydra: default
+  - callbacks: null
+  - experiment: null
 
 task_name: "eval"
 

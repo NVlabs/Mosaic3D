@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch_scatter import scatter
 
+from src.models.regionplc.ops.pool_by_idx.pool_by_idx_utils import avg_pool_by_idx
 from src.models.regionplc.utils.fp16 import force_fp32
 
 
@@ -70,7 +71,7 @@ class CaptionHead(nn.Module):
 
     def forward_given_type_caption(self, batch_dict, caption_info, caption_scores, logit_scale):
         ret_dict = {}
-        pooled_scores, real_n_points, if_has_pts = self._forward_given_type_caption_cuda(
+        pooled_scores, real_n_points, if_has_pts = self._forward_given_type_caption_cuda2(
             batch_dict,
             caption_info,
             caption_scores,
@@ -184,6 +185,56 @@ class CaptionHead(nn.Module):
             if_has_pts.append(_if_has_pts)
 
         return pooled_scores, real_n_points, if_has_pts
+
+    @force_fp32(apply_to=("to_pool_obj"))
+    def _forward_given_type_caption_cuda2(self, batch_dict, caption_info, to_pool_obj):
+        frame_corr_idx = caption_info["select_image_corr"]
+        batch_idx = batch_dict["batch_idxs"]
+
+        origin_idx = batch_dict["origin_idx"]  # (N, )
+        pooled_objs = []
+        if_has_pts = []
+        real_n_points = []
+        for b in range(len(frame_corr_idx)):
+            cur_n_points = (batch_idx == b).sum().item()
+            origin_to_cur_idx = torch.ones((batch_dict["pc_count"][b],)).long().cuda() * (-1)
+            origin_to_cur_idx[origin_idx[batch_idx == b]] = torch.arange(cur_n_points).cuda()
+
+            caption2point_idx = frame_corr_idx[b]
+            caption_idx_offset = torch.LongTensor([0] + [len(idx) for idx in caption2point_idx])
+            caption_idx_offset = torch.cumsum(caption_idx_offset, 0).cuda()
+            if len(caption_idx_offset) - 1 == 0:
+                continue
+            if isinstance(caption2point_idx[0], np.ndarray):
+                caption2point_idx = np.concatenate(caption2point_idx, 0)
+                caption2point_idx = torch.from_numpy(caption2point_idx).long().cuda()
+            else:
+                caption2point_idx = torch.cat(caption2point_idx, 0).long().cuda()
+
+            n_cap_per_point = None
+            if self.novel_grad_only and "binary_labels" in batch_dict:
+                if batch_dict["binary_labels"].shape[0] != batch_idx.shape[0]:
+                    binary_labels = batch_dict["binary_labels"][batch_dict["v2p_map"]]
+                else:
+                    binary_labels = batch_dict["binary_labels"]
+                base_mask = binary_labels[batch_idx == b] == 1
+            else:
+                base_mask = torch.zeros((batch_idx == b).sum().item())
+            assert to_pool_obj.dtype == torch.float32
+            _pooled_objs, _real_n_points = avg_pool_by_idx(
+                to_pool_obj[batch_idx == b],
+                origin_to_cur_idx,
+                caption2point_idx,
+                caption_idx_offset,
+                n_cap_per_point,
+                base_mask.bool(),
+            )
+            _if_has_pts = _real_n_points > 0
+            pooled_objs.append(_pooled_objs[_if_has_pts])
+            real_n_points.append(_real_n_points[_if_has_pts])
+            if_has_pts.append(_if_has_pts)
+
+        return pooled_objs, real_n_points, if_has_pts
 
     def prepare_caption_labels(self, caption_idx, exist_caption_idx=None):
         if exist_caption_idx is not None:
