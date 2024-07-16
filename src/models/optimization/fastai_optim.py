@@ -151,8 +151,9 @@ class OptimWrapper:
         return f"OptimWrapper over {repr(self.opt)}.\nTrue weight decay: {self.true_wd}"
 
     # Pytorch optimizer methods
-    def step(self, closure) -> None:
-        closure()
+    def step(self, closure=None) -> None:
+        if closure is not None:
+            closure()
         "Set weight decay and step optimizer."
         # weight decay outside of optimizer step (AdamW)
         if self.true_wd:
@@ -268,6 +269,9 @@ class OptimWrapper:
         if is_tuple(val[0]):
             val = [o[0] for o in val], [o[1] for o in val]
         return val
+
+    def consolidate_state_dict(self):
+        pass
 
 
 class FastAIMixedOptim(OptimWrapper):
