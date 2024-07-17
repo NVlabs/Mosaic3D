@@ -6,7 +6,7 @@ from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-from src.models.optimization.learning_schedules_fastai import OneCycle
+from src.models.optimization.fastai_lrscheduler import OneCycle
 from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc.utils import caption_utils
 from src.utils import RankedLogger

@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_sched
 
+from .fastai_lrscheduler import CosineWarmupLR, OneCycle
 from .fastai_optim import OptimWrapper
-from .learning_schedules_fastai import CosineWarmupLR, OneCycle
 
 
 def build_optimizer(model, optim_cfg):
