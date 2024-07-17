@@ -8,7 +8,7 @@ from src.models.regionplc.head.binary_head import BinaryHead
 from src.models.regionplc.head.caption_head import CaptionHead
 from src.models.regionplc.head.kd_head import KDHeadTemplate
 from src.models.regionplc.head.text_seg_head import TextSegHead
-from src.models.regionplc.vfe import IndoorVFEv2
+from src.models.regionplc.vfe import IndoorVFE
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -34,7 +34,7 @@ class SparseUNetTextSeg(nn.Module):
 
         self.vfe = None
         if "vfe" in self.module_names and vfe_cfg:
-            self.vfe = IndoorVFEv2(**vfe_cfg)
+            self.vfe = IndoorVFE(**vfe_cfg)
             self.module_list.append(self.vfe)
 
         self.backbone_3d = None
