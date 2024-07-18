@@ -25,6 +25,10 @@ black
 fire
 # sh            # for running bash commands in some tests (linux/macos only)
 
+# --------- Warp ConvNet -------- #
+jaxtyping
+torch_scatter
+
 # --------- RegionPLC --------- #
 numpy
 spconv-cu117
