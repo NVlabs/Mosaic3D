@@ -1,19 +1,28 @@
 _target_: src.models.regionplc.module.RegionPLCLitModule
 
 optimizer:
-  _target_: torch.optim.AdamW
+  _target_: src.models.optimization.build_optimizer
   _partial_: true
-  lr: 4e-3
-  weight_decay: 1e-4
+  optim_cfg:
+    BATCH_SIZE_PER_GPU: 4
+    NUM_EPOCHS: 128
+    LR: 4e-3
+    SCHEDULER: adam_onecycle
+    OPTIMIZER: adam_onecycle
+    WEIGHT_DECAY: 0.0001
+    MOMENTUM: 0.9
+    STEP_EPOCH: 50
+    MULTIPLIER: 0.1
+    CLIP_GRAD: False
+    PCT_START: 0.39
+    DIV_FACTOR: 1
+    MOMS: [0.95, 0.85]
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.OneCycleLR
+  _target_: src.models.optimization.build_scheduler
   _partial_: true
-  max_lr: ${model.optimizer.lr}
-  pct_start: 0.39
-  anneal_strategy: cos
-  div_factor: 1
-  final_div_factor: 10000.0
+  last_epoch: -1
+  optim_cfg: ${model.optimizer.optim_cfg}
 
 scheduler_interval: step
 

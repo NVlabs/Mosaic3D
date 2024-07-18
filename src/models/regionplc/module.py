@@ -6,6 +6,7 @@ from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
+from src.models.optimization.fastai_lrscheduler import OneCycle
 from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc.utils import caption_utils
 from src.utils import RankedLogger
@@ -155,9 +156,17 @@ class RegionPLCLitModule(LightningModule):
         self.on_validation_epoch_end()
 
     def configure_optimizers(self) -> Dict[str, Any]:
-        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
+        if self.hparams.optimizer.func.__name__.startswith("build_"):
+            optimizer = self.hparams.optimizer(model=self.net)
+        else:
+            optimizer = self.hparams.optimizer(params=self.net.parameters())
         if self.hparams.scheduler is not None:
             if self.hparams.scheduler.func.__name__ == "OneCycleLR":
+                scheduler = self.hparams.scheduler(
+                    optimizer=optimizer,
+                    total_steps=self.trainer.estimated_stepping_batches,
+                )
+            elif self.hparams.scheduler.func.__name__.startswith("build_"):
                 scheduler = self.hparams.scheduler(
                     optimizer=optimizer,
                     total_steps=self.trainer.estimated_stepping_batches,
@@ -174,6 +183,14 @@ class RegionPLCLitModule(LightningModule):
                 },
             }
         return {"optimizer": optimizer}
+
+    def lr_scheduler_step(self, scheduler, metric):
+        if isinstance(scheduler, OneCycle):
+            scheduler.step(self.trainer.global_step)
+        elif metric is None:
+            scheduler.step()
+        else:
+            scheduler.step(metric)
 
 
 if __name__ == "__main__":

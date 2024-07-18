@@ -69,6 +69,7 @@ ids_and_filenames = [
     ),
     ("d1d91ba5%2D6dae%2D4d88%2Dbe1e%2D194751deac45", "train.zip"),
     ("9ee2b28b%2D7441%2D447a%2Daf31%2D3b56c5cbb304", "val.zip"),
+    ("84005756%2D7969%2D49fb%2Dac58%2D012fbf9ef6bf", "pc_mean.json"),
 ]
 
 

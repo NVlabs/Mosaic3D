@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Tuple
 
 import hydra
 import rootutils
+import torch
 from lightning import LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
@@ -72,7 +73,13 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         log_hyperparameters(object_dict)
 
     log.info("Starting testing!")
-    trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
+    ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
+    if "pytorch-lightning_version" not in ckpt:
+        model.configure_model()
+        model.load_state_dict(ckpt["state_dict"], strict=False)
+        trainer.test(model=model, datamodule=datamodule)
+    else:
+        trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
 
     # for predictions use trainer.predict(...)
     # predictions = trainer.predict(model=model, dataloaders=dataloaders, ckpt_path=cfg.ckpt_path)

@@ -4,9 +4,9 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: regionplc
-  - override /model: regionplc
-  - override /callbacks: default
+  - override /data: regionplc_base15
+  - override /model: regionplc_fastai
+  - override /callbacks: cluster_nolr
   - override /trainer: gpu
 
 # all parameters below will be merged with parameters from default configurations set above
@@ -29,4 +29,4 @@ logger:
 
 callbacks:
   model_checkpoint:
-    monitor: "val/miou"
+    monitor: "val/hiou"
