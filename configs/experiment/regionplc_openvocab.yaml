@@ -5,8 +5,8 @@
 
 defaults:
   - override /data: regionplc_openvocab
-  - override /model: regionplc_openvocab
-  - override /callbacks: default
+  - override /model: regionplc_openvocab_fastai
+  - override /callbacks: cluster_nolr
   - override /trainer: gpu
 
 # all parameters below will be merged with parameters from default configurations set above

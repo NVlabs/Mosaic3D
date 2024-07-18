@@ -7,3 +7,4 @@ net:
     eval_only: true
   caption_head_cfg:
     novel_grad_only: false
+    loss_weight: 1.0

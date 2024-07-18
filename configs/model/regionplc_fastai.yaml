@@ -83,7 +83,7 @@ net:
     feat_norm: true
     logit_scale: 100.0
     logit_learnable: true
-    loss_weight: 1.0
+    loss_weight: 0.5
     novel_grad_only: true
 
   task_head_cfg:
