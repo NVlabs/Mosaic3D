@@ -1,5 +1,5 @@
 defaults:
-  - regionplc
+  - regionplc_base15
 
 train_dataset:
   # class labels
