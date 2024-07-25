@@ -1,7 +1,7 @@
 # --------- pytorch --------- #
-torch>=2.0.0
+torch==2.2.2
 torchvision>=0.15.0
-lightning>=2.0.0
+lightning==2.2
 torchmetrics>=0.11.4
 
 # --------- hydra --------- #
@@ -31,7 +31,7 @@ torch_scatter
 
 # --------- RegionPLC --------- #
 numpy
-spconv-cu117
+spconv
 easydict
 pyyaml
 tqdm
