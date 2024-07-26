@@ -177,7 +177,8 @@ class ScanNetDataset(Dataset):
         if self.caption_cfg.get("VIEW", None) and self.caption_cfg.VIEW.ENABLED:
             path = self.data_dir / self.caption_cfg.VIEW.IMAGE_CORR_PATH / (scene_name + ".pickle")
             if os.path.exists(path):
-                info = pickle.load(open(path, "rb"))
+                with open(path, "rb") as f:
+                    info = pickle.load(f)
             else:
                 info = {}
             if len(info) > 0:
@@ -215,7 +216,8 @@ class ScanNetDataset(Dataset):
         if self.caption_cfg.VIEW.get("IMAGE_CORR_PATH", None):
             corr_path = self.caption_cfg.VIEW.IMAGE_CORR_PATH
             corr_path = self.data_dir / corr_path
-            point_caption_idx = pickle.load(open(corr_path, "rb"))
+            with open(corr_path, "rb") as f:
+                point_caption_idx = pickle.load(f)
         else:
             point_caption_idx = None
 
@@ -226,7 +228,8 @@ class ScanNetDataset(Dataset):
         for key in caption_cfg:
             if key in self.caption_keys and caption_cfg[key].ENABLED:
                 caption_path = os.path.join(self.data_dir, caption_cfg[key].CAPTION_PATH)
-                caption_items[key.lower()] = copy.deepcopy(json.load(open(caption_path)))
+                with open(caption_path) as f:
+                    caption_items[key.lower()] = copy.deepcopy(json.load(f))
         return caption_items
 
     def select_caption_and_idx_all(self, scene_name, image_name_dict, image_corr_dict):
