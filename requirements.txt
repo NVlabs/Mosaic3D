@@ -27,7 +27,7 @@ fire
 
 # --------- RegionPLC --------- #
 numpy
-spconv-cu117
+spconv-cu120
 easydict
 pyyaml
 tqdm

@@ -1,15 +1,15 @@
-# Define base image.  # Use 11.7.1 for open3d==0.18 which is compiled with torch 2 and cuda 11.7.1
-FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu22.04
+# Define base image.  # Use 12.1.0 for NVIDIA warp
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
 # metainformation
 LABEL org.opencontainers.image.version = "0.0.1"
 LABEL org.opencontainers.image.source = "https://gitlab.nvidia.com:3dmmllm/openvocab-3d"
 
 # CUDA architectures.
-## A100 is 80, V100 is 70, T4 is 75
-ARG CUDA_ARCHITECTURES=86;80;75;70;
+## A5500 is 86, A100 is 80, V100 is 70, T4 is 75
+ARG CUDA_ARCHITECTURES=86;80;
 ## TORCH_CUDA_ARCH_LIST for torch_scatter
-ENV TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6"
+ENV TORCH_CUDA_ARCH_LIST="8.0 8.6"
 
 # Set environment variables.
 ## Set non-interactive to prevent asking for user inputs blocking image creation.
@@ -61,11 +61,11 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 RUN pip3 install -U pip
 
 # Install torch first for torch scatter installation
-RUN pip3 install torch==2.0.1 torchvision --extra-index-url https://download.pytorch.org/whl/cu117
+RUN pip3 install torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 --index-url https://download.pytorch.org/whl/cu121
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 
 # Install torch_scatter manually
-RUN pip3 install --no-index torch-scatter -f https://data.pyg.org/whl/torch-2.0.1+cu117.html
+RUN pip3 install --no-index torch-scatter -f https://data.pyg.org/whl/torch-2.3.0+cu121.html
 
 RUN chsh -s /usr/bin/bash user
