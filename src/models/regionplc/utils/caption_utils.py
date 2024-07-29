@@ -25,27 +25,25 @@ def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder, local_ran
     caption_data = batch_dict["caption_data"]
 
     num_captions = 0
-    for key in caption_cfg:
-        if key in caption_cfg["KEY"] and caption_cfg[key].ENABLED:
-            caption, idx = (
-                caption_data[key.lower()]["caption"],
-                caption_data[key.lower()]["idx"],
-            )
-            if caption_cfg[key].get("ONLY_LABEL_NAMES", False):
-                caption, idx = only_keep_label_names(caption_cfg[key].LABEL_NAMES, caption, idx)
-            num_captions += len(caption)
+    caption, idx = (
+        caption_data["caption"],
+        caption_data["idx"],
+    )
+    if caption_cfg.get("ONLY_LABEL_NAMES", False):
+        caption, idx = only_keep_label_names(caption_cfg.LABEL_NAMES, caption, idx)
+    num_captions += len(caption)
 
-            # caption_embed: (K, 512), caption_idx: (N), (N > K)
-            caption_embed, caption_idx = extract_caption_embed(
-                caption, caption_cfg[key], text_cfg, text_encoder, local_rank
-            )
-            normed_caption_embed = torch.nn.functional.normalize(caption_embed, dim=-1)
+    # caption_embed: (K, 512), caption_idx: (N), (N > K)
+    caption_embed, caption_idx = extract_caption_embed(
+        caption, caption_cfg, text_cfg, text_encoder, local_rank
+    )
+    normed_caption_embed = torch.nn.functional.normalize(caption_embed, dim=-1)
 
-            caption_infos[f"caption_{key.lower()}"] = {
-                "caption_embed": normed_caption_embed,
-                "caption_idx": caption_idx,
-                "select_image_corr": idx,
-            }
+    caption_infos["caption_view"] = {
+        "caption_embed": normed_caption_embed,
+        "caption_idx": caption_idx,
+        "select_image_corr": idx,
+    }
 
     batch_dict["caption_infos"] = caption_infos
     batch_dict["num_caption"] = num_captions / batch_dict["batch_size"]

@@ -7,6 +7,5 @@ train_dataset:
   novel_class_idx: [3, 4, 6, 9, 10, 17, 18]
 
   caption_cfg:
-    VIEW:
-      CAPTION_PATH: caption/caption_detic_and_sw_125k_iou0.3.json
-      IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic_and_sw_125k_iou0.3.pkl
+    CAPTION_PATH: caption/caption_detic_and_sw_125k_iou0.3.json
+    IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic_and_sw_125k_iou0.3.pkl

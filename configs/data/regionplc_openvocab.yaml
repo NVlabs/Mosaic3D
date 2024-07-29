@@ -8,6 +8,5 @@ train_dataset:
 
   # caption cfg
   caption_cfg:
-    VIEW:
-      CAPTION_PATH: caption/caption_kosmos_and_sw_and_detic-template_125k_iou0.2_0.1.json
-      IMAGE_CORR_PATH: image_corr/scannet_caption_idx_kosmos_and_sw_and_detic-template_125k_iou0.2_0.1.pkl
+    CAPTION_PATH: caption/caption_kosmos_and_sw_and_detic-template_125k_iou0.2_0.1.json
+    IMAGE_CORR_PATH: image_corr/scannet_caption_idx_kosmos_and_sw_and_detic-template_125k_iou0.2_0.1.pkl

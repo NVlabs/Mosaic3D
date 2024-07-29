@@ -127,12 +127,11 @@ def collate_regionplc(batch_list, ignore_label: int, min_spatial_shape: int):
             if val[0] is None:
                 continue
             ret[key] = {}
-            for k in val[0]:
-                ret[key][k] = {}
-                ret[key][k]["idx"] = [val[n][k]["idx"] for n in range(len(val))]
-                ret[key][k]["caption"] = []
-                for n in range(len(val)):
-                    ret[key][k]["caption"].extend(val[n][k]["caption"])
+            ret[key] = {}
+            ret[key]["idx"] = [val[n]["idx"] for n in range(len(val))]
+            ret[key]["caption"] = []
+            for n in range(len(val)):
+                ret[key]["caption"].extend(val[n]["caption"])
         elif key in ["inst_cls"]:
             ret[key] = np.array([j for i in data_dict[key] for j in i], dtype=np.int32)
         else:
