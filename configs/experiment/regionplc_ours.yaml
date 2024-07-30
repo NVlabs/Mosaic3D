@@ -1,0 +1,37 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: scannet_ours
+  - override /model: regionplc_fastai
+  - override /callbacks: cluster_nolr
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["regionplc"]
+
+seed: 12345
+
+trainer:
+  max_epochs: 150
+
+data:
+  batch_size: 4
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "regionplc"
+
+callbacks:
+  model_checkpoint:
+    monitor: "val/hiou"
+
+model:
+  net:
+    text_seg_head_cfg:
+      text_embed_path: /lustre/fsw/portfolios/nvr/projects/nvr_lpr_nvgptvision/datasets/scannet_clip-ViT-B16_id.pth
