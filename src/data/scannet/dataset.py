@@ -58,10 +58,14 @@ class ScanNetDataset(Dataset):
         if ignore_class_idx is not None:
             for c in ignore_class_idx:
                 self.valid_class_idx.remove(c)
+            self.ignore_class_idx = ignore_class_idx
         self.valid_class_mapper = self.build_class_mapper(
             self.valid_class_idx, ignore_label, squeeze_label=self.split == "train"
         )
         self.ignore_label = ignore_label
+        self.class_mode = (
+            "base" if (self.split == "train" and hasattr(self, "base_class_mapper")) else "all"
+        )
 
         # data transform
         self.transforms = Compose(OmegaConf.to_container(transforms))
@@ -123,7 +127,7 @@ class ScanNetDataset(Dataset):
         # load pcd data
         coord = np.load(scene_dir / "coord.npy")
         color = np.load(scene_dir / "color.npy")
-        segment = np.load(scene_dir / "segment20.npy")
+        label = np.load(scene_dir / "segment20.npy")
         instance = np.load(scene_dir / "instance.npy")
 
         # load
@@ -131,16 +135,21 @@ class ScanNetDataset(Dataset):
         color = np.clip((color + 1.0) * 127.5, 0, 255)
 
         # class mapping
-        semantic_label = self.valid_class_mapper[segment.astype(np.int64)]
-        instance[segment == self.ignore_label] = self.ignore_label
-        binary_label = np.ones_like(segment)
+        # base / novel label
         if hasattr(self, "base_class_mapper"):
-            binary_label = self.binary_class_mapper[segment.astype(np.int64)].astype(np.float32)
+            binary_label = self.binary_class_mapper[label.astype(np.int64)].astype(np.float32)
+        else:
+            binary_label = np.ones_like(label)
+        if self.class_mode == "base":
+            label = self.base_class_mapper[label.astype(np.int64)]
+        elif self.class_mode == "all" and hasattr(self, "ignore_class_idx"):
+            label = self.valid_class_mapper[label.astype(np.int64)]
+        instance[label == self.ignore_label] = self.ignore_label
 
         data_dict = dict(
             coord=coord,
             color=color,
-            segment=semantic_label,
+            segment=label,
             instance=instance,
             binary=binary_label,
             origin_idx=np.arange(coord.shape[0]).astype(np.int64),

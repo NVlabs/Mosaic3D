@@ -64,6 +64,10 @@ val_dataset:
   _partial_: true
   data_dir: /datasets/scannet_hf
   caption_dir: /datasets/scannet_captions
+  base_class_idx: ${data.train_dataset.base_class_idx}
+  ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+  novel_class_idx: ${data.train_dataset.novel_class_idx}
+  ignore_label: ${data.train_dataset.ignore_label}
   # _target_: src.data.regionplc.dataset.RegionPLCDataset
   # data_dir: /home/junhal/datasets/regionplc
   split: val
