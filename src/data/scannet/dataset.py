@@ -36,6 +36,7 @@ class ScanNetDataset(Dataset):
         novel_class_idx: Optional[List[int]] = None,
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
+        repeat: int = 1,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -43,6 +44,7 @@ class ScanNetDataset(Dataset):
         self.split = split
         self.view_sample_ratio = view_sample_ratio
         self.class_names = self.CLASS_LABELS
+        self.repeat = repeat
 
         # read scene names for split
         with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:
@@ -98,7 +100,8 @@ class ScanNetDataset(Dataset):
         return remapper
 
     def __len__(self):
-        return len(self.scene_names)
+        length = len(self.scene_names) * (self.repeat if self.split == "train" else 1)
+        return length
 
     def load_caption(self, scene_name):
         caption_files = natsorted(glob.glob(os.path.join(self.caption_dir, f"{scene_name}*")))
@@ -120,7 +123,8 @@ class ScanNetDataset(Dataset):
             caption_text.extend(caption["captions"])
         return caption_idx, caption_text
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx_original):
+        idx = idx_original % len(self.scene_names)
         scene_name = self.scene_names[idx]
         scene_dir = self.data_dir / self.split / scene_name
 

@@ -7,6 +7,7 @@ train_dataset:
   caption_dir: /datasets/scannet_captions/results_ours_ram++
   view_sample_ratio: 0.2
   split: train
+  repeat: 4
   transforms:
     - type: Copy
       keys_dict:
