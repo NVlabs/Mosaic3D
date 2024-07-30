@@ -7,6 +7,5 @@ train_dataset:
   novel_class_idx: [9, 10, 11, 12, 14, 15, 16, 17, 18]
 
   caption_cfg:
-    VIEW:
-      CAPTION_PATH: caption/caption_kosmos_and_sw_125k_iou0.2-0.0.json
-      IMAGE_CORR_PATH: image_corr/scannet_caption_idx_kosmos_and_sw_125k_iou0.2-0.0.pkl
+    CAPTION_PATH: caption/caption_kosmos_and_sw_125k_iou0.2-0.0.json
+    IMAGE_CORR_PATH: image_corr/scannet_caption_idx_kosmos_and_sw_125k_iou0.2-0.0.pkl

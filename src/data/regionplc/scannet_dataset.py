@@ -93,7 +93,6 @@ class ScanNetDataset(Dataset):
 
         # load captions
         if self.training and self.caption_cfg is not None:
-            self.caption_keys = self.caption_cfg.KEY
             self.caption = self.get_caption_items(self.caption_cfg)
             self.scene_image_corr_infos = self.include_point_caption_idx()
             self.scene_image_corr_entity_infos = None
@@ -150,45 +149,18 @@ class ScanNetDataset(Dataset):
         return remapper
 
     def get_caption_image_corr_and_name_from_memory(self, scene_name, index):
-        image_name_dict = {}
-        image_corr_dict = {}
-
-        if hasattr(self, "scene_image_corr_infos") and self.scene_image_corr_infos is not None:
-            if isinstance(self.scene_image_corr_infos, dict):
-                # assert scene_name in self.scene_image_corr_infos
-                info = copy.deepcopy(self.scene_image_corr_infos.get(scene_name, {}))
-            else:
-                cur_caption_idx = copy.deepcopy(self.scene_image_corr_infos[index])
-                assert scene_name == cur_caption_idx["scene_name"]
-                info = cur_caption_idx["infos"]
-            if len(info) > 0:
-                image_name_view, image_corr_view = zip(*info.items())
-            else:
-                image_name_view, image_corr_view = [], []
-            image_name_dict["view"] = image_name_view
-            image_corr_dict["view"] = image_corr_view
-
-        return image_corr_dict, image_name_dict
-
-    def get_caption_image_corr_and_name_from_file(self, scene_name):
-        image_name_dict = {}
-        image_corr_dict = {}
-
-        if self.caption_cfg.get("VIEW", None) and self.caption_cfg.VIEW.ENABLED:
-            path = self.data_dir / self.caption_cfg.VIEW.IMAGE_CORR_PATH / (scene_name + ".pickle")
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    info = pickle.load(f)
-            else:
-                info = {}
-            if len(info) > 0:
-                image_name_view, image_corr_view = zip(*info.items())
-            else:
-                image_name_view = image_corr_view = []
-            image_name_dict["view"] = image_name_view
-            image_corr_dict["view"] = image_corr_view
-
-        return image_corr_dict, image_name_dict
+        if isinstance(self.scene_image_corr_infos, dict):
+            # assert scene_name in self.scene_image_corr_infos
+            info = copy.deepcopy(self.scene_image_corr_infos.get(scene_name, {}))
+        else:
+            cur_caption_idx = copy.deepcopy(self.scene_image_corr_infos[index])
+            assert scene_name == cur_caption_idx["scene_name"]
+            info = cur_caption_idx["infos"]
+        if len(info) > 0:
+            image_name_view, image_corr_view = zip(*info.items())
+        else:
+            image_name_view, image_corr_view = [], []
+        return image_corr_view, image_name_view
 
     def load_data(self, index):
         fn = self.data_list[index]
@@ -213,40 +185,31 @@ class ScanNetDataset(Dataset):
         return xyz, rgb, label, inst_label, binary_label
 
     def include_point_caption_idx(self):
-        if self.caption_cfg.VIEW.get("IMAGE_CORR_PATH", None):
-            corr_path = self.caption_cfg.VIEW.IMAGE_CORR_PATH
-            corr_path = self.data_dir / corr_path
-            with open(corr_path, "rb") as f:
-                point_caption_idx = pickle.load(f)
-        else:
-            point_caption_idx = None
+        assert self.caption_cfg.get("IMAGE_CORR_PATH", None)
+        corr_path = self.caption_cfg.IMAGE_CORR_PATH
+        corr_path = self.data_dir / corr_path
+        with open(corr_path, "rb") as f:
+            point_caption_idx = pickle.load(f)
 
         return point_caption_idx
 
     def get_caption_items(self, caption_cfg):
-        caption_items = {}
-        for key in caption_cfg:
-            if key in self.caption_keys and caption_cfg[key].ENABLED:
-                caption_path = os.path.join(self.data_dir, caption_cfg[key].CAPTION_PATH)
-                with open(caption_path) as f:
-                    caption_items[key.lower()] = copy.deepcopy(json.load(f))
+        caption_path = os.path.join(self.data_dir, caption_cfg.CAPTION_PATH)
+        with open(caption_path) as f:
+            caption_items = copy.deepcopy(json.load(f))
         return caption_items
 
     def select_caption_and_idx_all(self, scene_name, image_name_dict, image_corr_dict):
         if not hasattr(self, "caption_cfg"):
             return None
 
-        ret = {}
-        for key in self.caption_cfg:
-            if key in self.caption_keys and self.caption_cfg[key].ENABLED:
-                key_lower = key.lower()
-                ret[key_lower] = self.select_caption_and_idx(
-                    self.caption[key_lower],
-                    self.caption_cfg[key],
-                    scene_name,
-                    image_name_dict[key_lower],
-                    image_corr_dict[key_lower],
-                )
+        ret = self.select_caption_and_idx(
+            self.caption,
+            self.caption_cfg,
+            scene_name,
+            image_name_dict,
+            image_corr_dict,
+        )
         return ret
 
     @staticmethod
@@ -343,3 +306,20 @@ class ScanNetDataset(Dataset):
                 data_dict["feats"] = data_dict["points_xyz"]
 
         return data_dict
+
+
+if __name__ == "__main__":
+    import easydict
+    import yaml
+
+    config_path = "./configs/data/regionplc_base15.yaml"
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+
+    dataset_cfg = cfg["train_dataset"]
+    dataset_cfg.pop("_target_")
+    dataset_cfg.pop("_partial_")
+
+    dataset_cfg = easydict.EasyDict(dataset_cfg)
+
+    dataset = ScanNetDataset(**dataset_cfg)

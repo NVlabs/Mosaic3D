@@ -1,15 +1,47 @@
 #!/bin/bash
 
-TAG=${1:-"junhal/openvocab-3d"}
-IMAGE_URL=${2:-"gitlab-master.nvidia.com/3dmmllm/openvocab-3d"}
+# Function to display usage
+usage() {
+    echo "Usage: $0 [OPTIONS] [VERSION]"
+    echo "Options:"
+    echo "  -p, --push    Push the Docker image after building"
+    echo "  -h, --help    Display this help message"
+    echo "VERSION defaults to 'latest' if not provided"
+}
+
+# Initialize variables
+PUSH=false
+VERSION="latest"
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -p|--push)
+            PUSH=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            VERSION=$1
+            shift
+            ;;
+    esac
+done
+
+TAG="junhal/openvocab-3d:${VERSION}"
+IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
 
 # Build the Docker image
 # Add --no-cache to force a rebuild
+echo "Building Docker image..."
 docker build \
-    -t $TAG \
-    -t $IMAGE_URL \
+    -t "$TAG" \
     -f docker/Dockerfile .
 
+# shellcheck disable=SC2181
 # Exit if previous build failed
 if [ $? -ne 0 ]; then
     echo "Docker build failed"
@@ -21,13 +53,30 @@ docker \
     run \
     --gpus all \
     -it --rm \
-    $TAG \
+    "$TAG" \
     python -c "import torch;print(torch.cuda.is_available());"
 
+# shellcheck disable=SC2181
 # Get the exit code and return if failed
 if [ $? -ne 0 ]; then
     echo "Docker test failed"
     exit 1
 fi
 
-docker push $IMAGE_URL
+# Tag the image
+docker tag "$TAG" "$IMAGE_URL"
+
+# shellcheck disable=SC2181
+# Push the Docker image if requested
+if [ "$PUSH" = true ]; then
+    echo "Pushing Docker image..."
+    docker push "$IMAGE_URL"
+    if [ $? -ne 0 ]; then
+        echo "Docker push failed"
+        exit 1
+    fi
+    echo "Docker image pushed successfully"
+else
+    echo "Docker image built and tested successfully"
+    echo "To push the image, run the script with the -p or --push option"
+fi

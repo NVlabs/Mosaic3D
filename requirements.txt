@@ -31,7 +31,7 @@ torch_scatter
 
 # --------- RegionPLC --------- #
 numpy
-spconv
+spconv-cu120
 easydict
 pyyaml
 tqdm

@@ -81,23 +81,14 @@ train_dataset:
 
   # caption cfg
   caption_cfg:
-    KEY: [SCENE, VIEW, ENTITY]
-
-    SCENE:
-      ENABLED: False
-
-    VIEW:
-      ENABLED: True
-      CAPTION_PATH: caption/caption_detic-template_and_kosmos_125k_iou0.2.json
-      IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
-      SELECT: ratio
-      NUM: 1
-      RATIO: 0.2
-      SAMPLE: 1
-      GATHER_CAPTION: False
-
-    ENTITY:
-      ENABLED: False
+    ENABLED: True
+    CAPTION_PATH: caption/caption_detic-template_and_kosmos_125k_iou0.2.json
+    IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
+    SELECT: ratio
+    NUM: 1
+    RATIO: 0.2
+    SAMPLE: 1
+    GATHER_CAPTION: False
 
 val_dataset:
   _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
