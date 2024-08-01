@@ -137,6 +137,18 @@ class PositiveShift:
 
 
 @TRANSFORMS.register_module()
+class MeanShift:
+    def __init__(self):
+        pass
+
+    def __call__(self, data_dict):
+        if "coord" in data_dict.keys():
+            shift = data_dict["coord"].mean(axis=0)
+            data_dict["coord"] -= shift
+        return data_dict
+
+
+@TRANSFORMS.register_module()
 class CenterShift:
     def __init__(self, apply_z=True):
         self.apply_z = apply_z
