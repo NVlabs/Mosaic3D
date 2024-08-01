@@ -93,7 +93,8 @@ class AutoResumeWandbLogger(WandbLogger):
             return resume, id
 
         if os.path.exists(wandb_id_file):
-            id = open(wandb_id_file).read().strip()
+            with open(wandb_id_file) as f:
+                id = f.read().strip()
             resume = "must"
             log.info(f"wandb_id found, setting wandb_id: {id}")
         else:

@@ -1,9 +1,11 @@
 _target_: src.data.regionplc.datamodule.RegionPLCDataModule
 
+data_dir: /datasets/regionplc
+
 train_dataset:
   _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
   _partial_: True
-  data_dir: /datasets/regionplc
+  data_dir: ${data.data_dir}
   split: train
   # class labels
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
@@ -93,7 +95,7 @@ train_dataset:
 val_dataset:
   _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
   _partial_: True
-  data_dir: /datasets/regionplc
+  data_dir: ${data.data_dir}
   split: val
   class_names: ${data.train_dataset.class_names}
   base_class_idx: ${data.train_dataset.base_class_idx}

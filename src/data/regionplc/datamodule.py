@@ -13,6 +13,7 @@ log = RankedLogger(__name__, rank_zero_only=True)
 class RegionPLCDataModule(LightningDataModule):
     def __init__(
         self,
+        data_dir: str,
         train_dataset,
         val_dataset,
         batch_size: int,
