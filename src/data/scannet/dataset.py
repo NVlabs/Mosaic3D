@@ -51,6 +51,9 @@ class ScanNetDataset(Dataset):
             self.scene_names = natsorted([line.strip() for line in f.readlines()])
 
         # class label mappers
+        self.base_class_idx = base_class_idx
+        self.novel_class_idx = novel_class_idx
+        self.ignore_class_idx = ignore_class_idx
         self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
         if base_class_idx is not None:
             self.base_class_mapper = self.build_class_mapper(base_class_idx, ignore_label)
@@ -60,7 +63,6 @@ class ScanNetDataset(Dataset):
         if ignore_class_idx is not None:
             for c in ignore_class_idx:
                 self.valid_class_idx.remove(c)
-            self.ignore_class_idx = ignore_class_idx
         self.valid_class_mapper = self.build_class_mapper(
             self.valid_class_idx, ignore_label, squeeze_label=self.split == "train"
         )
@@ -133,10 +135,6 @@ class ScanNetDataset(Dataset):
         color = np.load(scene_dir / "color.npy")
         label = np.load(scene_dir / "segment20.npy")
         instance = np.load(scene_dir / "instance.npy")
-
-        # load
-        # normalize rgb to [0,255]
-        color = np.clip((color + 1.0) * 127.5, 0, 255)
 
         # class mapping
         # base / novel label

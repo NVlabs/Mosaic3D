@@ -96,6 +96,8 @@ val_dataset:
           "segment",
           "instance",
           "binary",
+          "origin_idx",
+          "pc_count",
           # "inverse",
         ]
       offset_keys_dict:
