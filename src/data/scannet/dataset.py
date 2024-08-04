@@ -15,6 +15,7 @@ from src.data.metadata.scannet import (
     VALID_CLASS_IDS_20,
     VALID_CLASS_IDS_200,
 )
+from src.data.regionplc.augmentor.data_augmentor import DataAugmentor
 from src.data.transform import Compose
 from src.utils import RankedLogger
 
@@ -37,6 +38,11 @@ class ScanNetDataset(Dataset):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
+        # augment
+        aug_cfg: Dict = None,
+        voxel_scale: int = None,
+        full_scale: List[int] = None,
+        max_npoint: int = None,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -45,6 +51,8 @@ class ScanNetDataset(Dataset):
         self.view_sample_ratio = view_sample_ratio
         self.class_names = self.CLASS_LABELS
         self.repeat = repeat
+        self.aug_cfg = aug_cfg
+        self.voxel_scale = voxel_scale
 
         # read scene names for split
         with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:
@@ -73,6 +81,18 @@ class ScanNetDataset(Dataset):
 
         # data transform
         self.transforms = Compose(OmegaConf.to_container(transforms))
+
+        # data augmentor
+        self.augmentor = DataAugmentor(
+            aug_cfg,
+            **{
+                "ignore_label": self.ignore_label,
+                "voxel_scale": voxel_scale,
+                "voxel_down": 1,
+                "full_scale": full_scale,
+                "max_npoint": max_npoint,
+            },
+        )
 
         log.info(f"Loaded {self.__len__()} samples in {self.split} set.")
 
@@ -149,11 +169,11 @@ class ScanNetDataset(Dataset):
         instance[label == self.ignore_label] = self.ignore_label
 
         data_dict = dict(
-            coord=coord,
-            color=color,
-            segment=label,
-            instance=instance,
-            binary=binary_label,
+            points_xyz=coord,
+            rgb=color.astype(np.float32) / 127.5 - 1.0,
+            labels=label,
+            inst_label=instance,
+            binary_labels=binary_label,
             origin_idx=np.arange(coord.shape[0]).astype(np.int64),
             pc_count=len(coord),
         )
@@ -163,7 +183,32 @@ class ScanNetDataset(Dataset):
             caption_idx, caption_text = self.load_caption(scene_name)
             data_dict["caption_data"] = {"idx": caption_idx, "caption": caption_text}
 
-        data_dict = self.transforms(data_dict)
+        # data_dict = self.transforms(data_dict)
+
+        # data_dict["points_xyz"] = data_dict["coord"]
+        # data_dict["rgb"] = data_dict["color"]
+        # data_dict["labels"] = data_dict["segment"]
+        # data_dict["inst_label"] = data_dict["instance"]
+        # data_dict["binary_labels"] = data_dict["binary"]
+
+        if self.split == "train":
+            data_dict = self.augmentor.forward(data_dict)
+            if not data_dict["valid"]:
+                return ScanNetDataset.__getitem__(self, np.random.randint(self.__len__()))
+        else:
+            xyz = data_dict["points_xyz"]
+            xyz_voxel_scale = xyz * self.voxel_scale
+            xyz_voxel_scale -= xyz_voxel_scale.min(0)
+            data_dict["points_xyz_voxel_scale"] = xyz_voxel_scale
+            data_dict["points"] = xyz
+
+        data_dict["feats"] = np.concatenate(
+            [
+                data_dict["rgb"],
+                data_dict["points_xyz"],
+            ],
+            axis=1,
+        )
         return data_dict
 
 

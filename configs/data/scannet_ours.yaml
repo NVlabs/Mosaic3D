@@ -54,6 +54,43 @@ train_dataset:
       offset_keys_dict:
         offset: coord
       feats_keys: ["color", "coord"]
+  aug_cfg:
+    aug_list: [scene_aug, elastic, crop, shuffle]
+    scene_aug:
+      scaling_scene:
+        enabled: False
+        p: 1.0
+        value: [0.9, 1.1]
+
+      rotation:
+        p: 1.0
+        value: [0.0, 0.0, 1.0]
+
+      jitter: True
+      color_jitter: True
+
+      flip:
+        p: 0.5
+
+      random_jitter:
+        enabled: False
+        value: 0.01
+        accord_to_size: False
+        p: 1.0
+
+    elastic:
+      enabled: True
+      value: [[6, 40], [20, 160]]
+      apply_to_feat: False
+      p: 1.0
+
+    crop:
+      step: 32
+
+    shuffle: True
+  voxel_scale: 50
+  max_npoint: 250000
+  full_scale: [128, 512]
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
@@ -101,9 +138,12 @@ val_dataset:
       offset_keys_dict:
         offset: coord
       feats_keys: ["color", "coord"]
+  aug_cfg: ${data.train_dataset.aug_cfg}
+  voxel_scale: ${data.train_dataset.voxel_scale}
 collate_fn:
-  _target_: src.data.collate.point_collate_regionplc_fn
+  _target_: src.data.collate.collate_regionplc
   _partial_: true
-  grid_size: 0.02
+  ignore_label: ${data.train_dataset.ignore_label}
+  min_spatial_shape: 128
 batch_size: 4
 num_workers: 2
