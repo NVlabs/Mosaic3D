@@ -6,12 +6,14 @@ usage() {
     echo "Options:"
     echo "  -p, --push    Push the Docker image after building"
     echo "  -h, --help    Display this help message"
+    echo "  -t, --tag     Tag the Docker image with the provided version"
     echo "VERSION defaults to 'latest' if not provided"
 }
 
 # Initialize variables
 PUSH=false
 VERSION="latest"
+TAG="junhal/openvocab-3d:${VERSION}"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -24,6 +26,10 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
+        -t|--tag)
+            TAG=$2
+            shift 2
+            ;;
         *)
             VERSION=$1
             shift
@@ -31,7 +37,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-TAG="junhal/openvocab-3d:${VERSION}"
 IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
 
 # Build the Docker image
