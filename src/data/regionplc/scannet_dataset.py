@@ -239,6 +239,9 @@ class ScanNetDataset(Dataset):
                 len(image_name), max(1, int(len(image_name) * ratio)), replace=False
             )
 
+        import ipdb
+
+        ipdb.set_trace()
         if selected_idx is not None:
             selected_image_name = np.array(image_name)[selected_idx].tolist()
             selected_image_corr = np.array(image_corr, dtype=object)[selected_idx].tolist()
