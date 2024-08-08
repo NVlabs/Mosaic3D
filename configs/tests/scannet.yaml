@@ -89,3 +89,8 @@ caption_cfg:
   GATHER_CAPTION: False
 
 text_embed_path: text_embed/scannet_clip-ViT-B16_id.pth
+
+# compile model for faster training with pytorch 2.0
+text_encoder:
+  name: CLIP
+  backbone: ViT-B/16

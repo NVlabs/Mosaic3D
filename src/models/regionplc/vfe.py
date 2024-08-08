@@ -26,7 +26,13 @@ class IndoorVFE(nn.Module):
     def forward(self, batch):
         coords = batch["points_xyz_voxel_scale"]
 
-        key = fnv_hash_vec(coords.cpu().numpy())
+        coords_np = coords
+        device = "cpu"
+        if isinstance(coords, torch.Tensor):
+            coords_np = coords.cpu().numpy()
+            device = coords.device
+
+        key = fnv_hash_vec(coords_np)
         idx_sort = np.argsort(key)
         idx_sort_rev = np.argsort(idx_sort)
         key_sort = key[idx_sort]
@@ -34,15 +40,13 @@ class IndoorVFE(nn.Module):
             key_sort, return_index=True, return_inverse=True, return_counts=True
         )
         voxel_ids = (
-            offset2batch(
-                torch.from_numpy(np.cumsum(np.insert(count, 0, 0))).to(
-                    batch["points_xyz_voxel_scale"].device
-                )
-            )
-            - 1
+            offset2batch(torch.from_numpy(np.cumsum(np.insert(count, 0, 0))).to(device)) - 1
         )
         voxel_coords = coords[idx_sort[index]]
-        voxel_feats = scatter(batch["feats"][idx_sort], voxel_ids, dim=0, reduce="mean")
+        feats = batch["feats"]
+        if isinstance(feats, np.ndarray):
+            feats = torch.from_numpy(feats).to(device)
+        voxel_feats = scatter(feats[idx_sort], voxel_ids, dim=0, reduce="mean")
 
         batch.update(
             {

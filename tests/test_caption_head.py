@@ -7,6 +7,9 @@ from omegaconf import OmegaConf
 
 from src.data.regionplc.scannet_dataset import ScanNetDataset
 from src.models.heads.caption_head import CaptionHead
+from src.models.regionplc.text_models import build_text_model
+from src.models.regionplc.utils.caption_utils import get_caption_batch
+from src.models.regionplc.vfe import IndoorVFE
 
 
 def yaml_to_dict(yaml_str: str) -> dict:
@@ -22,7 +25,7 @@ def test_caption_head(split: str) -> None:
 
     :param batch_size: Batch size of the data to be loaded by the dataloader.
     """
-    data_dir = Path("~/datasets/regionplc").expanduser()
+    data_dir = Path("/workspace/datasets/regionplc").expanduser()
     project_root = Path(__file__).resolve().parents[1]
     config_path = "configs/tests/scannet.yaml"
     with open(project_root / config_path) as f:
@@ -35,6 +38,10 @@ def test_caption_head(split: str) -> None:
     caption_head = CaptionHead(
         normalize_input=True,
     )
+
+    device = torch.device("cuda:0")
+    text_encoder = build_text_model(cfg.text_encoder).to(device)
+    vfe = IndoorVFE()
 
     dataset = ScanNetDataset(
         data_dir=cfg.data_dir,
@@ -60,17 +67,23 @@ def test_caption_head(split: str) -> None:
 
     assert len(dataset) > 0
 
-    import ipdb
-
-    ipdb.set_trace()
     for i in range(len(dataset)):
-        sample = dataset[i]
-        assert isinstance(sample, dict)
-        print(sample.keys())
+        batch_dict = dataset[i]
+        assert isinstance(batch_dict, dict)
+        print(batch_dict.keys())
 
-        labels = torch.LongTensor(sample["labels"])
+        batch_dict = get_caption_batch(
+            cfg.caption_cfg,
+            {},
+            batch_dict,
+            text_encoder,
+            local_rank=0,
+        )
+        batch_dict = vfe(batch_dict)
+
+        labels = torch.LongTensor(batch_dict["labels"])
         rand_feats = torch.randn(labels.shape[0], 512)
-        loss = caption_head.loss(rand_feats, labels)
+        loss = caption_head.loss(rand_feats, batch_dict)
         if i == 0:
             break
 

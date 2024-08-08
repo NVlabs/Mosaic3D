@@ -46,7 +46,7 @@ def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder, local_ran
     }
 
     batch_dict["caption_infos"] = caption_infos
-    batch_dict["num_caption"] = num_captions / batch_dict["batch_size"]
+    batch_dict["num_caption"] = num_captions / batch_dict.get("batch_size", 1)
     return batch_dict
 
 
@@ -111,14 +111,14 @@ def gather_raw_captions(image_captions):
     return image_captions_all, num_caption_list
 
 
+@torch.no_grad()
 def forward_text_encoder(image_captions, text_encoder):
-    with torch.no_grad():
-        if len(image_captions) > 0:
-            # if cfg.MODEL.TASK_HEAD.TEXT_EMBED.NAME == "CLIP":
-            text_tokens = text_encoder.tokenizer(image_captions, truncate=True).cuda()
-            text_embed = text_encoder.encode_text(text_tokens).float()
-        else:
-            text_embed = torch.zeros((0, 512), dtype=torch.float32).cuda()
+    if len(image_captions) > 0:
+        # if cfg.MODEL.TASK_HEAD.TEXT_EMBED.NAME == "CLIP":
+        text_tokens = text_encoder.tokenizer(image_captions, truncate=True).cuda()
+        text_embed = text_encoder.encode_text(text_tokens).float()
+    else:
+        text_embed = torch.zeros((0, 512), dtype=torch.float32).cuda()
     return text_embed
 
 

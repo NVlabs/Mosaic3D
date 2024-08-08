@@ -68,4 +68,7 @@ RUN pip3 install -r /tmp/requirements.txt
 # Install torch_scatter manually
 RUN pip3 install --no-index torch-scatter -f https://data.pyg.org/whl/torch-2.3.0+cu121.html
 
+# Install warp-lang
+RUN git clone git+ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git; cd warp;
+
 RUN chsh -s /usr/bin/bash user
