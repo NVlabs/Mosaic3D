@@ -54,8 +54,7 @@ train_dataset:
 val_dataset:
   _target_: src.data.scannet.dataset.ScanNetDataset
   _partial_: true
-  data_dir: /datasets/scannet_hf
-  # caption_dir: /datasets/regionplc_converted/detic-template_and_kosmos_125k_iou0.2
+  data_dir: ${data.train_dataset.data_dir}
   base_class_idx: ${data.train_dataset.base_class_idx}
   ignore_class_idx: ${data.train_dataset.ignore_class_idx}
   novel_class_idx: ${data.train_dataset.novel_class_idx}
