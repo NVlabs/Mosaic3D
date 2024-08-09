@@ -30,3 +30,8 @@ logger:
 callbacks:
   model_checkpoint:
     monitor: "val/miou"
+
+model:
+  net:
+    task_head_cfg:
+      text_embed_path: /lustre/fsw/portfolios/nvr/projects/nvr_lpr_nvgptvision/datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth

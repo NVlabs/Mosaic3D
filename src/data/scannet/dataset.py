@@ -28,9 +28,10 @@ class ScanNetDataset(Dataset):
     def __init__(
         self,
         data_dir: str,
-        caption_dir: str,
         split: str,
         transforms: None,
+        caption_dir: Optional[str] = None,
+        caption_subset: Optional[str] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -40,11 +41,15 @@ class ScanNetDataset(Dataset):
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
-        self.caption_dir = Path(caption_dir)
         self.split = split
         self.object_sample_ratio = object_sample_ratio
         self.class_names = self.CLASS_LABELS
         self.repeat = repeat
+
+        # set caption dir for train dataset
+        if self.split == "train":
+            self.caption_dir = Path(caption_dir) / caption_subset
+            assert self.caption_dir.exists(), f"{self.caption_dir} not exist."
 
         # read scene names for split
         with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:

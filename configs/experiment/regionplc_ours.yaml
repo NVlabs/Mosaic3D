@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: scannet_ours
+  - override /data: ours_base15
   - override /model: regionplc_fastai
   - override /callbacks: cluster_nolr
   - override /trainer: gpu
