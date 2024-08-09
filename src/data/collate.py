@@ -12,6 +12,8 @@ import numpy as np
 import torch
 from torch.utils.data.dataloader import default_collate
 
+from src.models.components.misc import offset2batch
+
 
 def collate_fn(batch):
     """Collate function for point cloud which support dict and list, 'coord' is necessary to
@@ -43,6 +45,30 @@ def collate_fn(batch):
         return batch
     else:
         return default_collate(batch)
+
+
+def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
+    assert isinstance(
+        batch[0], Mapping
+    )  # currently, only support input_dict, rather than input_list
+    batch = collate_fn(batch)
+
+    # set require fields for regionplc
+    coord = batch["coord"]
+    scale_coord = coord / grid_size
+    grid_coord = scale_coord.int()
+    min_coord = grid_coord.min(0).values
+    grid_coord -= min_coord
+    batch_ids = offset2batch(batch["offset"])
+    batch["points_xyz_voxel_scale"] = torch.cat((batch_ids.unsqueeze(1), grid_coord), dim=-1)
+
+    batch["spatial_shape"] = torch.clip(batch["points_xyz_voxel_scale"].max(0).values[1:] + 1, 128)
+    batch["batch_idxs"] = batch_ids
+    batch["batch_size"] = len(batch["offset"])
+    batch["labels"] = batch["segment"]
+    batch["binary_labels"] = batch["binary"]
+
+    return batch
 
 
 def point_collate_fn(batch, mix_prob=0):

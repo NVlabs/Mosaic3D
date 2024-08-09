@@ -1,149 +1,90 @@
-_target_: src.data.regionplc.datamodule.RegionPLCDataModule
+_target_: src.data.scannet.datamodule.ScanNetDataModule
 
 train_dataset:
-  _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
-  _partial_: True
-  data_dir: /datasets/regionplc
+  _target_: src.data.scannet.dataset.ScanNetDataset
+  _partial_: true
+  data_dir: /datasets/scannet_hf
+  caption_dir: /datasets/regionplc_converted/
+  caption_subset: detic-template_and_kosmos_125k_iou0.2
+  object_sample_ratio: 0.2
   split: train
-  # class labels
+  repeat: 4
+  transforms:
+    - type: Copy
+      keys_dict:
+        coord: origin_coord
+    - type: MeanShift
+    - type: RandomFlip
+      p: 0.5
+    - type: RandomRotate
+      p: 1.0
+      angle: [-1, 1]
+      center: [0, 0, 0]
+      axis: z
+    - type: ChromaticJitter
+      p: 1.0
+      std: 0.007
+    - type: ElasticDistortion
+    - type: SphereCrop
+      point_max: 250000
+      mode: random
+    - type: NormalizeColor
+    - type: ToTensor
+    - type: Collect
+      keys:
+        [
+          "origin_coord",
+          "coord",
+          "color",
+          "segment",
+          "instance",
+          "binary",
+          "caption_data",
+          "origin_idx",
+          "pc_count",
+        ]
+      offset_keys_dict:
+        offset: coord
+      feats_keys: ["color", "coord"]
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
   ignore_label: -100
-  class_names:
-    [
-      wall,
-      floor,
-      cabinet,
-      bed,
-      chair,
-      sofa,
-      table,
-      door,
-      window,
-      bookshelf,
-      picture,
-      counter,
-      desk,
-      curtain,
-      refrigerator,
-      showercurtain,
-      toilet,
-      sink,
-      bathtub,
-      otherfurniture,
-    ]
-  # augmentations
-  aug_cfg:
-    aug_list: [scene_aug, elastic, crop, shuffle]
-    scene_aug:
-      scaling_scene:
-        enabled: False
-        p: 1.0
-        value: [0.9, 1.1]
-
-      rotation:
-        p: 1.0
-        value: [0.0, 0.0, 1.0]
-
-      jitter: True
-      color_jitter: True
-
-      flip:
-        p: 0.5
-
-      random_jitter:
-        enabled: False
-        value: 0.01
-        accord_to_size: False
-        p: 1.0
-
-    elastic:
-      enabled: True
-      value: [[6, 40], [20, 160]]
-      apply_to_feat: False
-      p: 1.0
-
-    crop:
-      step: 32
-
-    shuffle: True
-  # processor
-  repeat: 4
-  rgb_norm: True
-  point_range: 200000000
-  voxel_scale: 50 # voxel_size = 1 / scale, scale 25(0.02m)
-  max_npoint: 250000
-  full_scale: [128, 512]
-  xyz_as_feat: True
-  rgb_as_feat: True
-  min_spatial_shape: 128
-
-  # caption cfg
-  caption_cfg:
-    ENABLED: True
-    CAPTION_PATH: caption/caption_detic-template_and_kosmos_125k_iou0.2.json
-    IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
-    SELECT: ratio
-    NUM: 1
-    RATIO: 0.2
-    SAMPLE: 1
-    GATHER_CAPTION: False
 
 val_dataset:
-  _target_: src.data.regionplc.scannet_dataset.ScanNetDataset
-  _partial_: True
-  data_dir: /datasets/regionplc
-  split: val
-  class_names: ${data.train_dataset.class_names}
+  _target_: src.data.scannet.dataset.ScanNetDataset
+  _partial_: true
+  data_dir: ${data.train_dataset.data_dir}
   base_class_idx: ${data.train_dataset.base_class_idx}
   ignore_class_idx: ${data.train_dataset.ignore_class_idx}
   novel_class_idx: ${data.train_dataset.novel_class_idx}
   ignore_label: ${data.train_dataset.ignore_label}
-  aug_cfg:
-    aug_list: [scene_aug, elastic, crop, shuffle]
-    scene_aug:
-      scaling_scene:
-        enabled: False
-        p: 1.0
-        value: [0.9, 1.1]
-
-      rotation:
-        p: 1.0
-        value: [0.0, 0.0, 1.0]
-
-      jitter: True
-      color_jitter: True
-
-      flip:
-        p: 0.5
-
-      random_jitter:
-        enabled: False
-        value: 0.01
-        accord_to_size: False
-        p: 1.0
-
-    elastic:
-      enabled: True
-      value: [[6, 40], [20, 160]]
-      apply_to_feat: False
-      p: 1.0
-
-    crop:
-      step: 32
-
-    shuffle: True
-
-  repeat: 4
-  rgb_norm: True
-  point_range: 200000000
-  voxel_scale: 50 # voxel_size = 1 / scale, scale 25(0.02m)
-  max_npoint: 250000
-  full_scale: [128, 512]
-  xyz_as_feat: True
-  rgb_as_feat: True
-  min_spatial_shape: 128
-
+  split: val
+  transforms:
+    - type: Copy
+      keys_dict:
+        coord: origin_coord
+    - type: MeanShift
+    - type: NormalizeColor
+    - type: ToTensor
+    - type: Collect
+      keys:
+        [
+          "origin_coord",
+          "coord",
+          "color",
+          "segment",
+          "instance",
+          "binary",
+          "origin_idx",
+          "pc_count",
+        ]
+      offset_keys_dict:
+        offset: coord
+      feats_keys: ["color", "coord"]
+collate_fn:
+  _target_: src.data.collate.point_collate_regionplc_fn
+  _partial_: true
+  grid_size: 0.02
 batch_size: 4
 num_workers: 2

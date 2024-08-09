@@ -1,12 +1,8 @@
 defaults:
-  - regionplc
+  - regionplc_base15
 
 train_dataset:
   # class labels
   base_class_idx: []
   ignore_class_idx: [0, 1, 19]
-
-  # caption cfg
-  caption_cfg:
-    CAPTION_PATH: caption/caption_kosmos_and_sw_and_detic-template_125k_iou0.2_0.1.json
-    IMAGE_CORR_PATH: image_corr/scannet_caption_idx_kosmos_and_sw_and_detic-template_125k_iou0.2_0.1.pkl
+  caption_subset: kosmos_and_sw_and_detic-template_125k_iou0.2_0.1
