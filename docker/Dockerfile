@@ -65,9 +65,6 @@ RUN pip3 install torch==2.2.2 torchvision==0.17.2 --index-url https://download.p
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 
-# Install warp-lang
-RUN git clone git+ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git; cd warp;
-
 # Install warp
 RUN pip3 install warp-lang
 # First copy the warp repository

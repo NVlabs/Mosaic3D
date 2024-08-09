@@ -39,6 +39,13 @@ done
 
 IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
 
+# Prep warp-convnet
+# Check if warp does not exist
+if [ ! -d warp ]; then
+    echo "Cloning warp..."
+    git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
+fi
+
 # Build the Docker image
 # Add --no-cache to force a rebuild
 echo "Building Docker image..."
