@@ -68,4 +68,14 @@ RUN pip3 install -r /tmp/requirements.txt
 # Install warp-lang
 RUN git clone git+ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git; cd warp;
 
+# Install warp
+RUN pip3 install warp-lang
+# First copy the warp repository
+# git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
+COPY ./warp /home/user/warp
+WORKDIR /home/user/warp
+RUN python3 build_lib.py
+# Install warp-minknet
+RUN pip3 install -e .[convnet]
+
 RUN chsh -s /usr/bin/bash user
