@@ -5,7 +5,7 @@ train_dataset:
   _partial_: true
   data_dir: /datasets/scannet_hf
   caption_dir: /datasets/scannet_captions/results_ours_ram++
-  view_sample_ratio: 0.2
+  object_sample_ratio: 0.2
   split: train
   repeat: 4
   transforms:
@@ -24,23 +24,15 @@ train_dataset:
       p: 1.0
       std: 0.007
     - type: ElasticDistortion
-      distortion_params: [[0.12, 0.8], [0.4, 3.2]]
     - type: SphereCrop
       point_max: 250000
       mode: random
-    # - type: GridSample
-    #   grid_size: 0.02
-    #   hash_type: fnv
-    #   mode: train
-    #   keys: ["coord", "color", "segment", "instance", "binary"]
-    #   return_grid_coord: True
-    #   return_inverse: True
     - type: NormalizeColor
     - type: ToTensor
     - type: Collect
-      keys: [
+      keys:
+        [
           "origin_coord",
-          # "grid_coord",
           "coord",
           "color",
           "segment",
@@ -49,7 +41,6 @@ train_dataset:
           "caption_data",
           "origin_idx",
           "pc_count",
-          # "inverse",
         ]
       offset_keys_dict:
         offset: coord
@@ -68,27 +59,18 @@ val_dataset:
   ignore_class_idx: ${data.train_dataset.ignore_class_idx}
   novel_class_idx: ${data.train_dataset.novel_class_idx}
   ignore_label: ${data.train_dataset.ignore_label}
-  # _target_: src.data.regionplc.dataset.RegionPLCDataset
-  # data_dir: /home/junhal/datasets/regionplc
   split: val
   transforms:
     - type: Copy
       keys_dict:
         coord: origin_coord
     - type: MeanShift
-    # - type: GridSample
-    #   grid_size: 0.02
-    #   hash_type: fnv
-    #   mode: train
-    #   keys: ["coord", "color", "segment", "instance", "binary"]
-    #   return_grid_coord: True
-    #   return_inverse: True
     - type: NormalizeColor
     - type: ToTensor
     - type: Collect
-      keys: [
+      keys:
+        [
           "origin_coord",
-          # "grid_coord",
           "coord",
           "color",
           "segment",
@@ -96,7 +78,6 @@ val_dataset:
           "binary",
           "origin_idx",
           "pc_count",
-          # "inverse",
         ]
       offset_keys_dict:
         offset: coord

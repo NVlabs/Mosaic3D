@@ -31,7 +31,7 @@ class ScanNetDataset(Dataset):
         caption_dir: str,
         split: str,
         transforms: None,
-        view_sample_ratio: Optional[float] = None,
+        object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
         ignore_class_idx: Optional[List[int]] = None,
@@ -42,7 +42,7 @@ class ScanNetDataset(Dataset):
         self.data_dir = Path(data_dir)
         self.caption_dir = Path(caption_dir)
         self.split = split
-        self.view_sample_ratio = view_sample_ratio
+        self.object_sample_ratio = object_sample_ratio
         self.class_names = self.CLASS_LABELS
         self.repeat = repeat
 
@@ -106,24 +106,31 @@ class ScanNetDataset(Dataset):
         return length
 
     def load_caption(self, scene_name):
-        caption_files = natsorted(glob.glob(os.path.join(self.caption_dir, f"{scene_name}*")))
-        if self.view_sample_ratio < 1.0:
-            caption_files = np.random.choice(
-                caption_files,
-                max(1, int(len(caption_files) * self.view_sample_ratio)),
+        filepath = os.path.join(self.caption_dir, f"{scene_name}.npz")
+        data = np.load(filepath)
+
+        object_ids = data["object_ids"]
+        captions = data["captions"]
+        point_indices_flatten = data["point_indices"]
+        num_points = data["num_points"]
+
+        cumsum = np.cumsum(num_points)[:-1]
+        point_indices = np.split(point_indices_flatten, cumsum)
+
+        if self.object_sample_ratio < 1.0:
+            sel = np.random.choice(
+                np.arange(len(object_ids)),
+                max(1, int(len(object_ids) * self.object_sample_ratio)),
                 replace=False,
             )
-        caption_list = [np.load(file) for file in caption_files]
+            object_ids = object_ids[sel]
+            captions = captions[sel]
+            num_points = num_points[sel]
+            point_indices = [point_indices[i] for i in sel]
 
-        caption_idx, caption_text = [], []
-        for caption in caption_list:
-            point_indices_flatten = caption["point_indices"]
-            num_points = caption["num_points"]
-            cumsum = np.cumsum(num_points)[:-1]
-            point_indices = np.split(point_indices_flatten, cumsum)
-            caption_idx.extend([torch.from_numpy(indices).int() for indices in point_indices])
-            caption_text.extend(caption["captions"])
-        return caption_idx, caption_text
+        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
+        captions = list(captions)
+        return point_indices, captions
 
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)
@@ -133,25 +140,25 @@ class ScanNetDataset(Dataset):
         # load pcd data
         coord = np.load(scene_dir / "coord.npy")
         color = np.load(scene_dir / "color.npy")
-        label = np.load(scene_dir / "segment20.npy")
+        segment = np.load(scene_dir / "segment20.npy")
         instance = np.load(scene_dir / "instance.npy")
 
         # class mapping
         # base / novel label
         if hasattr(self, "base_class_mapper"):
-            binary_label = self.binary_class_mapper[label.astype(np.int64)].astype(np.float32)
+            binary_label = self.binary_class_mapper[segment.astype(np.int64)].astype(np.float32)
         else:
-            binary_label = np.ones_like(label)
+            binary_label = np.ones_like(segment)
         if self.class_mode == "base":
-            label = self.base_class_mapper[label.astype(np.int64)]
+            segment = self.base_class_mapper[segment.astype(np.int64)]
         elif self.class_mode == "all" and hasattr(self, "ignore_class_idx"):
-            label = self.valid_class_mapper[label.astype(np.int64)]
-        instance[label == self.ignore_label] = self.ignore_label
+            segment = self.valid_class_mapper[segment.astype(np.int64)]
+        instance[segment == self.ignore_label] = self.ignore_label
 
         data_dict = dict(
             coord=coord,
             color=color,
-            segment=label,
+            segment=segment,
             instance=instance,
             binary=binary_label,
             origin_idx=np.arange(coord.shape[0]).astype(np.int64),
