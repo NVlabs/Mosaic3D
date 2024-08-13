@@ -1,14 +1,9 @@
 import functools
 from typing import Optional
 
-import numpy as np
 import spconv.pytorch as spconv
-import torch
 import torch.nn as nn
-from torch_scatter import scatter
 
-from src.models.components.misc import offset2batch
-from src.models.components.structure import Point
 from src.models.regionplc_refactor.modules import ResidualBlock, UBlock, VGGBlock
 from src.utils import RankedLogger
 
@@ -18,7 +13,6 @@ log = RankedLogger(__file__, rank_zero_only=True)
 class SparseUNet(nn.Module):
     def __init__(
         self,
-        grid_size: float,
         in_channel: int,
         mid_channel: int,
         block_reps: int,
@@ -29,8 +23,6 @@ class SparseUNet(nn.Module):
     ):
         super().__init__()
         norm_fn = functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1)
-
-        # self.vfe = VFE(grid_size)
 
         self.in_channel = in_channel
         self.mid_channel = mid_channel

@@ -64,12 +64,8 @@ class RegionPLCLitModule(LightningModule):
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> torch.Tensor:
-        dataset = self.trainer.train_dataloader.dataset
         batch = caption_utils.get_caption_batch(
-            dataset.caption_cfg,
-            batch,
-            self.text_encoder,
-            local_rank=self.local_rank,
+            batch, self.text_encoder, local_rank=self.local_rank
         )
         ret_dict, tb_dict, dist_dict = self.forward(batch)
 

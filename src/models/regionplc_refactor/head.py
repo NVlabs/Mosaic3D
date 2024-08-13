@@ -281,7 +281,7 @@ class CaptionHead(nn.Module):
         if not self.training:
             return point
 
-        caption_infos = point.caption_infos
+        # caption_infos = point.caption_infos
         sparse_tensor = point.sparse_conv_feat
         adapter_feats = sparse_tensor.features[point.v2p_map]
 
@@ -293,14 +293,16 @@ class CaptionHead(nn.Module):
         caption_ret_dict = {}
 
         caption_type = "caption_view"
-        caption_embed = caption_infos[caption_type]["caption_embed"]
+        caption_embed = point.caption_embed
         if caption_embed.shape[0] == 0:
             caption_ret_dict[caption_type] = {"zero_loss": adapter_feats.sum() * 0.0}
         else:
             caption_scores = self.get_caption_scores(adapter_feats, caption_embed, logit_scale)
             caption_ret_dict[caption_type] = self.forward_given_type_caption(
                 point,
-                caption_infos[caption_type],
+                # caption_infos[caption_type],
+                point.select_image_corr,
+                point.caption_idx,
                 caption_scores,
                 logit_scale,
             )
@@ -314,11 +316,13 @@ class CaptionHead(nn.Module):
         caption_scores = nn.LogSoftmax(dim=-1)(caption_logits)
         return caption_scores
 
-    def forward_given_type_caption(self, point, caption_info, caption_scores, logit_scale):
+    def forward_given_type_caption(
+        self, point, select_image_corr, caption_idx, caption_scores, logit_scale
+    ):
         ret_dict = {}
         pooled_scores, real_n_points, if_has_pts = self._forward_given_type_caption_cuda(
             point,
-            caption_info,
+            select_image_corr,
             caption_scores,
         )
         # if some scene don't have suitable image, len(pooled_features) == 0
@@ -327,7 +331,7 @@ class CaptionHead(nn.Module):
             real_n_points = torch.cat(real_n_points, 0)
             exist_caption_idx = torch.cat(if_has_pts, 0)
 
-            caption_idx = caption_info["caption_idx"]
+            # caption_idx = caption_info["caption_idx"]
             caption_labels = self.prepare_caption_labels(caption_idx, exist_caption_idx)
             ret_dict = {
                 "caption_output": pooled_scores,
@@ -338,8 +342,9 @@ class CaptionHead(nn.Module):
         return ret_dict
 
     @force_fp32(apply_to=("caption_scores"))
-    def _forward_given_type_caption_cuda(self, point, caption_info, caption_scores):
-        frame_corr_idx = caption_info["select_image_corr"]
+    def _forward_given_type_caption_cuda(self, point, select_image_corr, caption_scores):
+        frame_corr_idx = select_image_corr
+        # frame_corr_idx = caption_info["select_image_corr"]
         # batch_idx = batch_dict["batch_idxs"]
         # origin_idx = batch_dict["origin_idx"]  # (N, )
         # origin_num_points = batch_dict["pc_count"]

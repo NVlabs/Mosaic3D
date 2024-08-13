@@ -34,7 +34,6 @@ net:
     block_residual: true
     custom_sp1x1: true
     num_blocks: 7
-    grid_size: 0.02
 
   adapter_cfg:
     text_channel: 512

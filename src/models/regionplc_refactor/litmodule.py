@@ -98,16 +98,12 @@ class RegionPLCLitModule(LightningModule):
         )
 
     def training_step(self, batch, batch_idx):
-        dataset = self.trainer.train_dataloader.dataset
-        batch = caption_utils.get_caption_batch(
-            dataset.caption_cfg,
-            batch,
-            self.text_encoder,
-            local_rank=self.local_rank,
+        caption_infos = caption_utils.get_caption_batch_refactor(
+            batch["caption_data"], self.text_encoder, local_rank=self.local_rank
         )
+        batch.update(caption_infos)
 
         point = Point(batch)
-        point.grid_size = 0.02
         point.sparsify(pad=128)
 
         sparse_tensor = point.sparse_conv_feat
