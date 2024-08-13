@@ -27,6 +27,7 @@ RUN apt-get update && \
     cmake \
     curl \
     git \
+    tig \
     zsh \
     tmux \
     vim \
@@ -74,5 +75,8 @@ WORKDIR /home/user/warp
 RUN python3 build_lib.py
 # Install warp-minknet
 RUN pip3 install -e .[convnet]
+
+# Debugging tools
+RUN pip3 install ipdb
 
 RUN chsh -s /usr/bin/bash user
