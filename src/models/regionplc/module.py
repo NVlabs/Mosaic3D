@@ -67,7 +67,6 @@ class RegionPLCLitModule(LightningModule):
         dataset = self.trainer.train_dataloader.dataset
         batch = caption_utils.get_caption_batch(
             dataset.caption_cfg,
-            {},
             batch,
             self.text_encoder,
             local_rank=self.local_rank,

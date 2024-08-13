@@ -42,7 +42,7 @@ def mean_pooling(coordinates, features, return_inverse: bool = True):
     voxel_feats = scatter(features[idx_sort], voxel_ids, dim=0, reduce="mean")
     v2p_map = np.zeros_like(inverse)
     v2p_map[idx_sort] = inverse
-    v2p_map = torch.from_numpy(inverse).to(device).long()
+    v2p_map = torch.from_numpy(v2p_map).to(device).long()
 
     if not return_inverse:
         return voxel_coords, voxel_feats
@@ -151,22 +151,23 @@ class Point(Dict):
             # dict(type="Copy", keys_dict={"grid_size": 0.01}),
             # (adjust `grid_size` to what your want)
             assert {"grid_size", "coord"}.issubset(self.keys())
-            self["grid_coord"] = torch.div(
-                self.coord - self.coord.min(0)[0], self.grid_size, rounding_mode="trunc"
-            ).int()
+            grid_coord = (self.coord / self.grid_size).int()
+            self["grid_coord"] = grid_coord - grid_coord.min(0)[0]
         if "sparse_shape" in self.keys():
             sparse_shape = self.sparse_shape
         else:
             sparse_shape = torch.add(torch.max(self.grid_coord, dim=0).values, pad).tolist()
 
-        indices = torch.cat(
+        batched_coords = torch.cat(
             [self.batch.unsqueeze(-1).int(), self.grid_coord.int()], dim=1
         ).contiguous()
 
-        voxel_coords, voxel_feats, v2p_map = mean_pooling(indices, self.feat, return_inverse=True)
+        voxel_coords, voxel_feats, v2p_map = mean_pooling(
+            batched_coords, self.feat, return_inverse=True
+        )
 
-        self.indices = voxel_coords
-        self.feat = voxel_feats
+        self.voxel_coords = voxel_coords
+        self.voxel_feats = voxel_feats
         self.v2p_map = v2p_map
 
         sparse_conv_feat = spconv.SparseConvTensor(

@@ -65,6 +65,7 @@ def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
     batch["batch_size"] = len(batch["offset"])
     batch["labels"] = batch["segment"]
     batch["binary_labels"] = batch["binary"]
+    batch["feats"] = batch["feat"]
 
     return batch
 

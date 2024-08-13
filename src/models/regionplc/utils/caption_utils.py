@@ -20,7 +20,7 @@ def only_keep_label_names(label_names, caption, idx):
     return new_caption, new_idx
 
 
-def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder, local_rank):
+def get_caption_batch(caption_cfg, batch_dict, text_encoder, local_rank):
     caption_infos = {}
     caption_data = batch_dict["caption_data"]
 
@@ -35,7 +35,7 @@ def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder, local_ran
 
     # caption_embed: (K, 512), caption_idx: (N), (N > K)
     caption_embed, caption_idx = extract_caption_embed(
-        caption, caption_cfg, text_cfg, text_encoder, local_rank
+        caption, caption_cfg, text_encoder, local_rank
     )
     normed_caption_embed = torch.nn.functional.normalize(caption_embed, dim=-1)
 
@@ -50,7 +50,7 @@ def get_caption_batch(caption_cfg, text_cfg, batch_dict, text_encoder, local_ran
     return batch_dict
 
 
-def extract_caption_embed(image_captions, caption_cfg, text_cfg, text_encoder, rank):
+def extract_caption_embed(image_captions, caption_cfg, text_encoder, rank):
     # (B*K, 512)
     if caption_cfg.get("GATHER_CAP_MODE", "cap") == "cap" and caption_cfg.get(
         "GATHER_CAPTION", True
@@ -63,25 +63,19 @@ def extract_caption_embed(image_captions, caption_cfg, text_cfg, text_encoder, r
     caption_embed_all = forward_text_encoder(image_captions_all, text_encoder)
 
     # remove duplicate captions and re-index them
-    if text_cfg.get("REMOVE_DUPLICATE_CAPTIONS", True):
-        if caption_cfg.get("GATHER_CAP_MODE", "cap") == "emb" and caption_cfg.get(
-            "GATHER_CAPTION", True
-        ):
-            caption_embed_all, num_caption_list = gather_caption_embs(
-                caption_cfg, rank, caption_embed_all, image_captions
-            )
-        num_caption_list = torch.LongTensor([0] + num_caption_list).cuda()
-        idx = (
-            torch.arange(num_caption_list[rank + 1]).long().cuda()
-            + torch.cumsum(num_caption_list, 0)[rank]
+    if caption_cfg.get("GATHER_CAP_MODE", "cap") == "emb" and caption_cfg.get(
+        "GATHER_CAPTION", True
+    ):
+        caption_embed_all, num_caption_list = gather_caption_embs(
+            caption_cfg, rank, caption_embed_all, image_captions
         )
-        caption_embeds, unique_indices = torch.unique(
-            caption_embed_all, dim=0, return_inverse=True
-        )
-        caption_idx = unique_indices[idx]
-    else:
-        caption_embeds = caption_embed_all
-        caption_idx = torch.arange(caption_embed_all.shape[0]).long().cuda()
+    num_caption_list = torch.LongTensor([0] + num_caption_list).cuda()
+    idx = (
+        torch.arange(num_caption_list[rank + 1]).long().cuda()
+        + torch.cumsum(num_caption_list, 0)[rank]
+    )
+    caption_embeds, unique_indices = torch.unique(caption_embed_all, dim=0, return_inverse=True)
+    caption_idx = unique_indices[idx]
 
     if caption_cfg.get("WHOLE_LABEL_NAMES", False):
         label_names = caption_cfg.LABEL_NAMES

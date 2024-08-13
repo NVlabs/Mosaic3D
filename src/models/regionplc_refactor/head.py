@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch_scatter import scatter
 
+from src.models.components.structure import Point
 from src.models.regionplc.utils.fp16 import force_fp32
 from src.models.regionplc_refactor.modules import ResidualBlock, UBlockDecoder, VGGBlock
 from src.utils import RankedLogger
@@ -50,15 +51,7 @@ class BinaryHead(nn.Module):
             block_channels = self.num_filters
         else:
             # assert self.num_blocks is not None
-            block_channels = [
-                in_channel,
-                2 * in_channel,
-                3 * in_channel,
-                4 * in_channel,
-                5 * in_channel,
-                6 * in_channel,
-                7 * in_channel,
-            ]
+            block_channels = np.arange(1, 8) * in_channel
 
         self.binary_encoder = UBlockDecoder(
             block_channels,
@@ -72,7 +65,6 @@ class BinaryHead(nn.Module):
         self.binary_classifier = spconv.SparseSequential(
             norm_fn(in_channel), nn.ReLU(), nn.Linear(in_channel, 1)
         )
-        self.forward_ret_dict = {}
         self.binary_loss_func = nn.BCEWithLogitsLoss()
 
         self.apply(self.set_bn_init)
@@ -84,21 +76,21 @@ class BinaryHead(nn.Module):
             m.weight.data.fill_(1.0)
             m.bias.data.fill_(0.0)
 
-    def forward(self, v2p_map):
+    def forward(self, point: Point):
         forward_ret_dict = {}
+
         binary_scores = self.binary_encoder(self.binary_feat_input)
         binary_scores = self.binary_classifier(binary_scores).features
 
-        if self.training and self.voxel_loss:
-            pass
-        else:
-            binary_scores = binary_scores[v2p_map.long()]
+        if not (self.training and self.voxel_loss):
+            binary_scores = binary_scores[point.v2p_map.long()]
 
         binary_preds = (torch.sigmoid(binary_scores) > self.binary_thresh).long()
 
         self.binary_feat_input = []
-        self.forward_ret_dict["binary_scores"] = binary_scores
-        self.forward_ret_dict["binary_preds"] = binary_preds
+
+        forward_ret_dict["binary_scores"] = binary_scores
+        forward_ret_dict["binary_preds"] = binary_preds
 
         return forward_ret_dict
 
@@ -113,9 +105,6 @@ class BinaryHead(nn.Module):
             eval("backbone." + module_name).register_forward_hook(get_features())
 
     def get_loss(self, binary_scores, binary_labels):
-        # binary_scores = self.forward_ret_dict["binary_scores"]
-        # binary_labels = self.forward_ret_dict["binary_labels"]
-
         # filter unannotated categories
         mask = binary_labels != self.ignore_label
         binary_loss = self.binary_loss_func(
@@ -123,8 +112,7 @@ class BinaryHead(nn.Module):
         )
         binary_loss = binary_loss * self.loss_weight
 
-        tb_dict = {"binary_loss": binary_loss.item()}
-        return binary_loss, tb_dict
+        return binary_loss
 
 
 class TextSegHead(nn.Module):
@@ -186,25 +174,21 @@ class TextSegHead(nn.Module):
     def set_cls_head_with_text_embed(self, text_embed):
         self.cls_head.load_state_dict(OrderedDict({"weight": text_embed.float()}))
 
-    def forward(
-        self,
-        adapter_feats,
-        v2p_map,
-        binary_head_output=None,
-    ):
+    def forward(self, point: Point, binary_head_output=None):
         forward_ret_dict = {}
 
-        # adapter_feats = batch_dict["adapter_feats"]
+        sparse_tensor = point.sparse_conv_feat
         if self.feat_norm:
-            adapter_feats = nn.functional.normalize(adapter_feats, dim=-1)
+            features = nn.functional.normalize(sparse_tensor.features, dim=-1)
+            sparse_tensor = sparse_tensor.replace_feature(features)
 
         if isinstance(self.logit_scale, nn.Parameter):
             logit_scale = self.logit_scale.exp()
         else:
             logit_scale = self.logit_scale
 
-        semantic_scores = self.cls_head(adapter_feats) * logit_scale
-        semantic_scores = semantic_scores[v2p_map]
+        semantic_scores = self.cls_head(sparse_tensor.features) * logit_scale
+        semantic_scores = semantic_scores[point.v2p_map]
 
         if self.training:
             if hasattr(self, "base_class_idx"):
@@ -235,34 +219,19 @@ class TextSegHead(nn.Module):
             else:
                 binary_preds = None
 
-        # for 2D fusion
-        # if not self.training and "adapter_feats_mask" in batch_dict:
-        #     semantic_preds[~batch_dict["adapter_feats_mask"].bool().cuda()] = self.ignore_label
-
-        # for captions
-        # batch_dict["seg_scores"] = semantic_scores
-        # batch_dict["seg_preds"] = semantic_preds
-
         forward_ret_dict["seg_scores"] = semantic_scores
         forward_ret_dict["seg_preds"] = semantic_preds
         forward_ret_dict["binary_preds"] = binary_preds
 
-        # save gt label to forward_ret_dict
-        # forward_ret_dict["seg_labels"] = batch_dict["labels"]
-
         return forward_ret_dict
 
     def get_loss(self, seg_scores, seg_labels):
-        # semantic_scores = self.forward_ret_dict["seg_scores"]
-        # semantic_labels = self.forward_ret_dict["seg_labels"]
         seg_loss = self.seg_loss_func(seg_scores, seg_labels) * self.loss_weight
+        return seg_loss
 
-        # tb_dict = {"loss_seg": seg_loss.item()}
-        return seg_loss  # , tb_dict
-
-    def correct_seg_pred_with_binary_pred(self, batch_dict, semantic_scores):
-        binary_preds = batch_dict["binary_ret_dict"]["binary_preds"]
-        binary_scores = batch_dict["binary_ret_dict"]["binary_scores"]
+    def correct_seg_pred_with_binary_pred(self, binary_ret_dict, semantic_scores):
+        binary_preds = binary_ret_dict["binary_preds"]
+        binary_scores = binary_ret_dict["binary_scores"]
 
         base_semantic_scores = semantic_scores[..., self.base_class_idx].softmax(dim=-1)
         novel_semantic_scores = semantic_scores[..., self.novel_class_idx].softmax(dim=-1)
@@ -306,12 +275,15 @@ class CaptionHead(nn.Module):
 
         self.forward_ret_dict = {}
 
-    def forward(self, batch_dict, point, caption_infos, v2p_map, adapter_feat):
+    def forward(self, point: Point):
+        # def forward(self, batch_dict, point, caption_infos, v2p_map, adapter_feat):
         forward_ret_dict = {}
         if not self.training:
-            return batch_dict
+            return point
 
-        adapter_feats = adapter_feat[v2p_map]
+        caption_infos = point.caption_infos
+        sparse_tensor = point.sparse_conv_feat
+        adapter_feats = sparse_tensor.features[point.v2p_map]
 
         if isinstance(self.logit_scale, nn.Parameter):
             logit_scale = self.logit_scale.exp()
@@ -474,7 +446,6 @@ class CaptionHead(nn.Module):
 
     def get_loss(self, forward_ret_dict):
         caption_loss = 0
-        tb_dict = {}
         for caption_type in forward_ret_dict:
             if "caption_output" in forward_ret_dict[caption_type]:
                 caption_output = forward_ret_dict[caption_type]["caption_output"]
@@ -489,12 +460,12 @@ class CaptionHead(nn.Module):
                     cur_caption_loss = (
                         (cur_caption_loss * caption_n_points) / (caption_n_points.sum())
                     ).sum()
-                tb_dict[caption_type] = cur_caption_loss.item()
+                # tb_dict[caption_type] = cur_caption_loss.item()
             else:
-                tb_dict[caption_type] = 0.0
+                # tb_dict[caption_type] = 0.0
                 # if some GPUs don't have loss, some GPUs have loss for backward, the process will stuck
                 cur_caption_loss = forward_ret_dict[caption_type]["zero_loss"]
 
             caption_loss += cur_caption_loss
 
-        return caption_loss, tb_dict
+        return caption_loss  # , tb_dict

@@ -263,7 +263,3 @@ class MLP(nn.Sequential):
         if isinstance(self[-1], nn.Linear):
             nn.init.normal_(self[-1].weight, 0, 0.01)
             nn.init.constant_(self[-1].bias, 0)
-
-    def forward(self, input: spconv.SparseConvTensor):
-        out_feat = self.modules(input.features)
-        return out_feat
