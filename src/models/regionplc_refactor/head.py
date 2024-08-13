@@ -388,7 +388,7 @@ class CaptionHead(nn.Module):
             else:
                 caption_to_point_mapping = torch.cat(caption_to_point_mapping, 0).long().to(device)
 
-            binary_labels = point.binary_labels
+            binary_labels = point.binary
             if self.novel_grad_only and binary_labels is not None:
                 if binary_labels.shape[0] != batch_idx.shape[0]:
                     binary_labels = binary_labels[point.v2p_map]

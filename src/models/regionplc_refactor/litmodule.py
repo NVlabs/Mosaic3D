@@ -126,9 +126,9 @@ class RegionPLCLitModule(LightningModule):
 
         # loss
         binary_loss = self.net.binary_head.get_loss(
-            binary_head_output["binary_scores"], batch["binary_labels"]
+            binary_head_output["binary_scores"], point.binary
         )
-        seg_loss = self.net.task_head.get_loss(task_head_output["seg_scores"], batch["segment"])
+        seg_loss = self.net.task_head.get_loss(task_head_output["seg_scores"], point.segment)
         caption_loss = self.net.caption_head.get_loss(caption_head_output)
         loss = binary_loss + seg_loss + caption_loss
 

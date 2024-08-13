@@ -20,6 +20,7 @@ def only_keep_label_names(label_names, caption, idx):
     return new_caption, new_idx
 
 
+# self.caption_cfg = dict(GATHER_CAPTION=False)
 def get_caption_batch(caption_cfg, batch_dict, text_encoder, local_rank):
     caption_infos = {}
     caption_data = batch_dict["caption_data"]
@@ -46,7 +47,7 @@ def get_caption_batch(caption_cfg, batch_dict, text_encoder, local_rank):
     }
 
     batch_dict["caption_infos"] = caption_infos
-    batch_dict["num_caption"] = num_captions / batch_dict["batch_size"]
+    batch_dict["num_caption"] = num_captions / len(batch_dict["pc_count"])
     return batch_dict
 
 

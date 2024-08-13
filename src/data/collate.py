@@ -70,7 +70,7 @@ def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
     return batch
 
 
-def point_collate_fn(batch, mix_prob=0):
+def point_collate_fn(batch, grid_size, mix_prob=0):
     assert isinstance(
         batch[0], Mapping
     )  # currently, only support input_dict, rather than input_list
@@ -81,6 +81,7 @@ def point_collate_fn(batch, mix_prob=0):
             batch["offset"] = torch.cat(
                 [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
             )
+    batch["grid_size"] = grid_size
     return batch
 
 
