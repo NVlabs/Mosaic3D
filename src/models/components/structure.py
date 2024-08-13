@@ -165,9 +165,6 @@ class Point(Dict):
         voxel_coords, voxel_feats, v2p_map = mean_pooling(
             batched_coords, self.feat, return_inverse=True
         )
-
-        self.voxel_coords = voxel_coords
-        self.voxel_feats = voxel_feats
         self.v2p_map = v2p_map
 
         sparse_conv_feat = spconv.SparseConvTensor(
@@ -176,5 +173,6 @@ class Point(Dict):
             spatial_shape=sparse_shape,
             batch_size=self.batch[-1].tolist() + 1,
         )
+
         self["sparse_shape"] = sparse_shape
         self["sparse_conv_feat"] = sparse_conv_feat

@@ -24,6 +24,7 @@ class BinaryHead(nn.Module):
         block_reps,
         block_residual,
         binary_thresh,
+        num_blocks,
         hook_feature_list: List[str] = [],
         num_filters: Optional[int] = None,
         custom_sp1x1: bool = False,
@@ -34,6 +35,7 @@ class BinaryHead(nn.Module):
         super().__init__()
         self.binary_feat_input = []
         self.binary_thresh = binary_thresh
+        self.num_blocks = num_blocks
         self.in_channel = in_channel
         self.ignore_label = ignore_label
         self.num_filters = num_filters
@@ -50,8 +52,8 @@ class BinaryHead(nn.Module):
         if self.num_filters is not None:
             block_channels = self.num_filters
         else:
-            # assert self.num_blocks is not None
-            block_channels = np.arange(1, 8) * in_channel
+            assert self.num_blocks is not None
+            block_channels = np.arange(1, 1 + self.num_blocks) * in_channel
 
         self.binary_encoder = UBlockDecoder(
             block_channels,
@@ -77,8 +79,6 @@ class BinaryHead(nn.Module):
             m.bias.data.fill_(0.0)
 
     def forward(self, point: Point):
-        forward_ret_dict = {}
-
         binary_scores = self.binary_encoder(self.binary_feat_input)
         binary_scores = self.binary_classifier(binary_scores).features
 
@@ -86,13 +86,12 @@ class BinaryHead(nn.Module):
             binary_scores = binary_scores[point.v2p_map.long()]
 
         binary_preds = (torch.sigmoid(binary_scores) > self.binary_thresh).long()
-
+        # reset hooked features
         self.binary_feat_input = []
 
-        forward_ret_dict["binary_scores"] = binary_scores
-        forward_ret_dict["binary_preds"] = binary_preds
-
-        return forward_ret_dict
+        point.binary_scores = binary_scores
+        point.binary_preds = binary_preds
+        return point
 
     def register_hook_for_binary_head(self, backbone):
         def get_features():
@@ -105,14 +104,12 @@ class BinaryHead(nn.Module):
             eval("backbone." + module_name).register_forward_hook(get_features())
 
     def get_loss(self, binary_scores, binary_labels):
-        # filter unannotated categories
         mask = binary_labels != self.ignore_label
         binary_loss = self.binary_loss_func(
-            binary_scores[mask], binary_labels[mask].reshape(-1, 1)
+            binary_scores[mask],
+            binary_labels[mask].reshape(-1, 1),
         )
-        binary_loss = binary_loss * self.loss_weight
-
-        return binary_loss
+        return binary_loss * self.loss_weight
 
 
 class TextSegHead(nn.Module):
@@ -171,12 +168,7 @@ class TextSegHead(nn.Module):
         self.seg_loss_func = nn.CrossEntropyLoss(ignore_index=self.ignore_label).cuda()
         self.forward_ret_dict = {}
 
-    def set_cls_head_with_text_embed(self, text_embed):
-        self.cls_head.load_state_dict(OrderedDict({"weight": text_embed.float()}))
-
-    def forward(self, point: Point, binary_head_output=None):
-        forward_ret_dict = {}
-
+    def forward(self, point: Point):
         sparse_tensor = point.sparse_conv_feat
         if self.feat_norm:
             features = nn.functional.normalize(sparse_tensor.features, dim=-1)
@@ -208,31 +200,22 @@ class TextSegHead(nn.Module):
             semantic_scores = new_semantic_scores
 
         # get semantic prediction results consider the binary calibrate
-        if (not self.training) and binary_head_output is not None:
-            binary_preds, semantic_preds = self.correct_seg_pred_with_binary_pred(
-                binary_head_output, semantic_scores
+        if (not self.training) and {"binary_preds", "binary_scores"}.issubset(point.keys()):
+            semantic_preds = self.correct_seg_pred_with_binary_pred(
+                point.binary_scores, semantic_scores
             )
         else:
             semantic_preds = semantic_scores.max(1)[1]
-            if binary_head_output is not None:
-                binary_preds = binary_head_output["binary_preds"]
-            else:
-                binary_preds = None
 
-        forward_ret_dict["seg_scores"] = semantic_scores
-        forward_ret_dict["seg_preds"] = semantic_preds
-        forward_ret_dict["binary_preds"] = binary_preds
-
-        return forward_ret_dict
+        point.seg_scores = semantic_scores
+        point.seg_preds = semantic_preds
+        return point
 
     def get_loss(self, seg_scores, seg_labels):
         seg_loss = self.seg_loss_func(seg_scores, seg_labels) * self.loss_weight
         return seg_loss
 
-    def correct_seg_pred_with_binary_pred(self, binary_ret_dict, semantic_scores):
-        binary_preds = binary_ret_dict["binary_preds"]
-        binary_scores = binary_ret_dict["binary_scores"]
-
+    def correct_seg_pred_with_binary_pred(self, binary_scores, semantic_scores):
         base_semantic_scores = semantic_scores[..., self.base_class_idx].softmax(dim=-1)
         novel_semantic_scores = semantic_scores[..., self.novel_class_idx].softmax(dim=-1)
         semantic_scores = semantic_scores.clone().float()
@@ -248,7 +231,7 @@ class TextSegHead(nn.Module):
         semantic_scores = semantic_scores * sigmoid_binary_scores
         semantic_scores /= semantic_scores.sum(-1, keepdim=True)
         semantic_preds = semantic_scores.max(1)[1]
-        return binary_preds, semantic_preds
+        return semantic_preds
 
 
 class CaptionHead(nn.Module):
@@ -269,19 +252,14 @@ class CaptionHead(nn.Module):
         else:
             self.logit_scale = logit_scale if logit_scale is not None else 1.0
 
-        self.loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none")
-        self.loss_weight = loss_weight
         self.novel_grad_only = novel_grad_only
-
-        self.forward_ret_dict = {}
+        self.loss_weight = loss_weight
+        self.loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none")
 
     def forward(self, point: Point):
-        # def forward(self, batch_dict, point, caption_infos, v2p_map, adapter_feat):
-        forward_ret_dict = {}
         if not self.training:
             return point
 
-        # caption_infos = point.caption_infos
         sparse_tensor = point.sparse_conv_feat
         adapter_feats = sparse_tensor.features[point.v2p_map]
 
@@ -290,24 +268,15 @@ class CaptionHead(nn.Module):
         else:
             logit_scale = self.logit_scale
 
-        caption_ret_dict = {}
-
-        caption_type = "caption_view"
         caption_embed = point.caption_embed
         if caption_embed.shape[0] == 0:
-            caption_ret_dict[caption_type] = {"zero_loss": adapter_feats.sum() * 0.0}
+            caption_ret_dict = {"zero_loss": adapter_feats.sum() * 0.0}
         else:
             caption_scores = self.get_caption_scores(adapter_feats, caption_embed, logit_scale)
-            caption_ret_dict[caption_type] = self.forward_given_type_caption(
-                point,
-                # caption_infos[caption_type],
-                point.select_image_corr,
-                point.caption_idx,
-                caption_scores,
-                logit_scale,
-            )
-        forward_ret_dict = caption_ret_dict
-        return forward_ret_dict
+            caption_ret_dict = self.forward_given_type_caption(point, caption_scores, logit_scale)
+
+        point.update(caption_ret_dict)
+        return point
 
     def get_caption_scores(self, adapter_feats, normed_caption_embed, caption_logit_scale):
         if self.feat_norm:
@@ -316,14 +285,10 @@ class CaptionHead(nn.Module):
         caption_scores = nn.LogSoftmax(dim=-1)(caption_logits)
         return caption_scores
 
-    def forward_given_type_caption(
-        self, point, select_image_corr, caption_idx, caption_scores, logit_scale
-    ):
+    def forward_given_type_caption(self, point, caption_scores, logit_scale):
         ret_dict = {}
         pooled_scores, real_n_points, if_has_pts = self._forward_given_type_caption_cuda(
-            point,
-            select_image_corr,
-            caption_scores,
+            point, caption_scores
         )
         # if some scene don't have suitable image, len(pooled_features) == 0
         if len(pooled_scores) > 0:
@@ -331,8 +296,7 @@ class CaptionHead(nn.Module):
             real_n_points = torch.cat(real_n_points, 0)
             exist_caption_idx = torch.cat(if_has_pts, 0)
 
-            # caption_idx = caption_info["caption_idx"]
-            caption_labels = self.prepare_caption_labels(caption_idx, exist_caption_idx)
+            caption_labels = self.prepare_caption_labels(point.caption_idx, exist_caption_idx)
             ret_dict = {
                 "caption_output": pooled_scores,
                 "caption_labels": caption_labels,
@@ -342,24 +306,20 @@ class CaptionHead(nn.Module):
         return ret_dict
 
     @force_fp32(apply_to=("caption_scores"))
-    def _forward_given_type_caption_cuda(self, point, select_image_corr, caption_scores):
-        frame_corr_idx = select_image_corr
-        # frame_corr_idx = caption_info["select_image_corr"]
-        # batch_idx = batch_dict["batch_idxs"]
-        # origin_idx = batch_dict["origin_idx"]  # (N, )
-        # origin_num_points = batch_dict["pc_count"]
-        batch_idx = point.batch
+    def _forward_given_type_caption_cuda(self, point, caption_scores):
+        c2p_map = point.c2p_map
+        batch = point.batch
+        pc_count = point.pc_count
         origin_idx = point.origin_idx
-        origin_num_points = point.pc_count
 
-        num_points = batch_idx.bincount()
+        num_points = batch.bincount()
         device = caption_scores.device
 
         pooled_scores = []
         if_has_pts = []
         real_n_points = []
-        for b in range(len(frame_corr_idx)):
-            caption_to_point_mapping = frame_corr_idx[b]
+        for b in range(len(c2p_map)):
+            caption_to_point_mapping = c2p_map[b]
             N = len(caption_to_point_mapping)
             D = caption_scores.shape[-1]
 
@@ -367,9 +327,9 @@ class CaptionHead(nn.Module):
                 continue
 
             point_to_origin_mapping = torch.full(
-                (origin_num_points[b],), -1, dtype=torch.long, device=device
+                (pc_count[b],), -1, dtype=torch.long, device=device
             )
-            point_to_origin_mapping[origin_idx[batch_idx == b]] = torch.arange(
+            point_to_origin_mapping[origin_idx[batch == b]] = torch.arange(
                 num_points[b], dtype=torch.long, device=device
             )
 
@@ -395,16 +355,16 @@ class CaptionHead(nn.Module):
 
             binary_labels = point.binary
             if self.novel_grad_only and binary_labels is not None:
-                if binary_labels.shape[0] != batch_idx.shape[0]:
+                if binary_labels.shape[0] != batch.shape[0]:
                     binary_labels = binary_labels[point.v2p_map]
                 else:
                     binary_labels = binary_labels
-                base_mask = binary_labels[batch_idx == b] == 1
+                base_mask = binary_labels[batch == b] == 1
             else:
-                base_mask = torch.zeros((batch_idx == b).sum().item())
+                base_mask = torch.zeros((batch == b).sum().item())
             assert caption_scores.dtype == torch.float32
 
-            cur_score = caption_scores[batch_idx == b]
+            cur_score = caption_scores[batch == b]
             if (base_mask > 0).any():
                 cur_score[base_mask] = cur_score[base_mask].detach()
             invalid = (point_to_origin_mapping == -1).float().unsqueeze(-1) * (-1)
@@ -449,28 +409,10 @@ class CaptionHead(nn.Module):
 
         return caption_labels
 
-    def get_loss(self, forward_ret_dict):
-        caption_loss = 0
-        for caption_type in forward_ret_dict:
-            if "caption_output" in forward_ret_dict[caption_type]:
-                caption_output = forward_ret_dict[caption_type]["caption_output"]
-                caption_labels = forward_ret_dict[caption_type]["caption_labels"]
-                cur_caption_loss_weight = self.loss_weight
-                cur_caption_loss = (
-                    self.loss_func(caption_output, caption_labels) * cur_caption_loss_weight
-                )
-                if len(cur_caption_loss.shape) > 0:
-                    caption_n_points = forward_ret_dict[caption_type]["caption_n_points"]
-                    assert len(cur_caption_loss) == len(caption_n_points)
-                    cur_caption_loss = (
-                        (cur_caption_loss * caption_n_points) / (caption_n_points.sum())
-                    ).sum()
-                # tb_dict[caption_type] = cur_caption_loss.item()
-            else:
-                # tb_dict[caption_type] = 0.0
-                # if some GPUs don't have loss, some GPUs have loss for backward, the process will stuck
-                cur_caption_loss = forward_ret_dict[caption_type]["zero_loss"]
+    def get_loss(self, caption_output, caption_labels, caption_n_points):
+        caption_loss = self.loss_func(caption_output, caption_labels) * self.loss_weight
+        if len(caption_loss.shape) > 0:
+            assert len(caption_loss) == len(caption_n_points)
+            caption_loss = ((caption_loss * caption_n_points) / (caption_n_points.sum())).sum()
 
-            caption_loss += cur_caption_loss
-
-        return caption_loss  # , tb_dict
+        return caption_loss

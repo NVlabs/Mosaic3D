@@ -109,23 +109,29 @@ class RegionPLCLitModule(LightningModule):
         sparse_tensor = point.sparse_conv_feat
         backbone_feat = self.net.backbone_3d(sparse_tensor)
         adapter_feat = self.net.adapter(backbone_feat.features)
-
         sparse_tensor = sparse_tensor.replace_feature(adapter_feat)
         point.sparse_conv_feat = sparse_tensor
 
-        binary_head_output = None
         if self.net.binary_head is not None:
-            binary_head_output = self.net.binary_head(point)
+            point = self.net.binary_head(point)
 
-        task_head_output = self.net.task_head(point, binary_head_output)
-        caption_head_output = self.net.caption_head(point)
+        point = self.net.task_head(point)
+        point = self.net.caption_head(point)
 
         # loss
-        binary_loss = self.net.binary_head.get_loss(
-            binary_head_output["binary_scores"], point.binary
-        )
-        seg_loss = self.net.task_head.get_loss(task_head_output["seg_scores"], point.segment)
-        caption_loss = self.net.caption_head.get_loss(caption_head_output)
+        binary_loss, seg_loss, caption_loss = 0, 0, 0
+        if self.net.binary_head is not None and {"binary", "binary_scores"}.issubset(point.keys()):
+            binary_loss = self.net.binary_head.get_loss(point.binary_scores, point.binary)
+
+        if not self.net.task_head.eval_only:
+            seg_loss = self.net.task_head.get_loss(point.seg_scores, point.segment)
+
+        if "zero_loss" in point:
+            caption_loss = point.zero_loss
+        else:
+            caption_loss = self.net.caption_head.get_loss(
+                point.caption_output, point.caption_labels, point.caption_n_points
+            )
         loss = binary_loss + seg_loss + caption_loss
 
         log_metrics = dict(
@@ -145,7 +151,6 @@ class RegionPLCLitModule(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         point = Point(batch)
-        point.grid_size = 0.02
         point.sparsify(pad=128)
 
         sparse_tensor = point.sparse_conv_feat
@@ -154,13 +159,11 @@ class RegionPLCLitModule(LightningModule):
         sparse_tensor = sparse_tensor.replace_feature(adapter_feat)
         point.sparse_conv_feat = sparse_tensor
 
-        binary_head_output = None
         if self.net.binary_head is not None:
-            binary_head_output = self.net.binary_head(point)
+            point = self.net.binary_head(point)
 
-        task_head_output = self.net.task_head(point, binary_head_output)
-        preds = task_head_output["seg_preds"]
-        labels = batch["segment"]
+        point = self.net.task_head(point)
+        preds, labels = point.seg_preds, point.segment
 
         # update and log metrics
         self.val_confmat(preds, labels)

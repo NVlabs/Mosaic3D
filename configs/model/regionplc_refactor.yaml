@@ -37,6 +37,7 @@ net:
     in_channel: ${model.net.backbone_cfg.mid_channel}
     block_reps: ${model.net.backbone_cfg.block_reps}
     block_residual: ${model.net.backbone_cfg.block_residual}
+    num_blocks: ${model.net.backbone_cfg.num_blocks}
     binary_thresh: 0.5
     hook_feature_list:
       [

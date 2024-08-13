@@ -11,7 +11,7 @@ def get_caption_batch_refactor(caption_data, text_encoder, local_rank):
     caption_infos = {
         "caption_embed": caption_embed,
         "caption_idx": caption_idx,
-        "select_image_corr": idx,
+        "c2p_map": idx,  # caption 2 point mapping
     }
     return caption_infos
 
