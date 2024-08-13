@@ -1,70 +1,56 @@
-_target_: src.data.regionplc.scannet_dataset.ScanNetDataset
-_partial_: True
-data_dir: /datasets/regionplc
+_target_: src.data.scannet.dataset.ScanNetDataset
+_partial_: true
+data_dir: /datasets/scannet_hf
+caption_dir: /datasets/regionplc_converted/
+caption_subset: detic-template_and_kosmos_125k_iou0.2
+object_sample_ratio: 0.2
 split: train
-# class labels
+transforms:
+  - type: Copy
+    keys_dict:
+      coord: origin_coord
+  - type: MeanShift
+  - type: RandomFlip
+    p: 0.5
+  - type: RandomRotate
+    p: 1.0
+    angle: [-1, 1]
+    center: [0, 0, 0]
+    axis: z
+  - type: ChromaticJitter
+    p: 1.0
+    std: 0.007
+  - type: ElasticDistortion
+  - type: SphereCrop
+    point_max: 250000
+    mode: random
+  - type: NormalizeColor
+  - type: ToTensor
+  - type: Collect
+    keys:
+      [
+        "origin_coord",
+        "coord",
+        "color",
+        "segment",
+        "instance",
+        "binary",
+        "caption_data",
+        "origin_idx",
+        "pc_count",
+      ]
+    offset_keys_dict:
+      offset: coord
+    feats_keys: ["color", "coord"]
 base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
 ignore_class_idx: [19]
 novel_class_idx: [5, 9, 12, 16]
 ignore_label: -100
-class_names:
-  [
-    wall,
-    floor,
-    cabinet,
-    bed,
-    chair,
-    sofa,
-    table,
-    door,
-    window,
-    bookshelf,
-    picture,
-    counter,
-    desk,
-    curtain,
-    refrigerator,
-    showercurtain,
-    toilet,
-    sink,
-    bathtub,
-    otherfurniture,
-  ]
-# augmentations
-aug_cfg:
-  aug_list: [scene_aug, elastic, crop, shuffle]
-  scene_aug:
-    scaling_scene:
-      enabled: False
-      p: 1.0
-      value: [0.9, 1.1]
 
-    rotation:
-      p: 1.0
-      value: [0.0, 0.0, 1.0]
-
-    jitter: True
-    color_jitter: True
-
-    flip:
-      p: 0.5
-
-    random_jitter:
-      enabled: False
-      value: 0.01
-      accord_to_size: False
-      p: 1.0
-
-  elastic:
-    enabled: True
-    value: [[6, 40], [20, 160]]
-    apply_to_feat: False
-    p: 1.0
-
-  crop:
-    step: 32
-
-  shuffle: True
+collate_fn:
+  _target_: src.data.collate.point_collate_regionplc_fn
+  _partial_: true
+  grid_size: 0.02
 
 # processor
 repeat: 4

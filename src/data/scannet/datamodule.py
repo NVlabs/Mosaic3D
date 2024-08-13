@@ -35,8 +35,11 @@ class ScanNetDataModule(LightningDataModule):
             self.data_val = self.hparams.val_dataset()
 
     def train_dataloader(self) -> DataLoader[Any]:
+        if self.data_train is None:
+            raise ValueError("No training dataset found. Please call `setup('fit')` first.")
         num_data = len(self.data_train)
-        num_batches = len(self.data_train) // (self.hparams.batch_size * self.trainer.world_size)
+        world_size = 1 if self.trainer is None else self.trainer.world_size
+        num_batches = len(self.data_train) // (self.hparams.batch_size * world_size)
         log.info(f"num_data: {num_data}, num_batches: {num_batches}")
         if isinstance(self.data_train, Dataset):
             return DataLoader(
