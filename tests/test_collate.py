@@ -9,6 +9,7 @@ from warp.convnet.geometry.point_collection import PointCollection
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+@pytest.mark.parametrize("fn_name", ["src.data.collate.point_collate_warp_fn"])
 def test_collate_fns(fn_name: str) -> None:
     with open("configs/data/regionplc_base15.yaml") as f:
         omega_config_dict = yaml.safe_load(f.read())
