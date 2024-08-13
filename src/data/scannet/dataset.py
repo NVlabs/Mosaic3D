@@ -167,7 +167,6 @@ class ScanNetDataset(Dataset):
             instance=instance,
             binary=binary_label,
             origin_idx=np.arange(coord.shape[0]).astype(np.int64),
-            pc_count=len(coord),
         )
 
         # load captions

@@ -44,11 +44,16 @@ class IndoorVFE(nn.Module):
         voxel_coords = coords[idx_sort[index]]
         voxel_feats = scatter(batch["feats"][idx_sort], voxel_ids, dim=0, reduce="mean")
 
+        v2p_map_new = np.zeros_like(inverse)
+        v2p_map_new[idx_sort] = inverse
+        v2p_map_new = torch.from_numpy(v2p_map_new).to(voxel_feats.device).long()
+        v2p_map = torch.from_numpy(inverse[idx_sort_rev]).to(voxel_feats.device).long()
+
         batch.update(
             {
                 "voxel_features": voxel_feats,
                 "voxel_coords": voxel_coords,
-                "v2p_map": torch.from_numpy(inverse[idx_sort_rev]).to(voxel_feats.device).long(),
+                "v2p_map": v2p_map,
             }
         )
         return batch
