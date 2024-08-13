@@ -48,9 +48,7 @@ def collate_fn(batch):
 
 
 def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
-    assert isinstance(
-        batch[0], Mapping
-    )  # currently, only support input_dict, rather than input_list
+    assert isinstance(batch[0], Mapping), "batch should be a Mapping object"
     batch = collate_fn(batch)
 
     # set require fields for regionplc
