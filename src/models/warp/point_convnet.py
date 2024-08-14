@@ -5,16 +5,12 @@ import torch.nn as nn
 from jaxtyping import Float
 from omegaconf import DictConfig
 from torch import Tensor
-from warp.convnet.geometry.base_geometry import BatchedFeatures
-from warp.convnet.geometry.point_collection import (
-    BatchedContinuousCoordinates,
-    PointCollection,
-)
+from warp.convnet.geometry.point_collection import PointCollection
 from warp.convnet.models.point_conv_unet import PointConvUNet
+from warp.convnet.nn.mlp import MLPBlock
 
 from src.models.losses.caption_loss import CaptionLoss
 from src.models.losses.clip_alignment_loss import ClipAlignmentHead
-from src.models.warp.mlp import MLPBlock
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
