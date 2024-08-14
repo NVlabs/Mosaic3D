@@ -4,6 +4,7 @@ import hydra
 import lightning as L
 import rootutils
 import torch
+import warp
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
@@ -138,4 +139,5 @@ def main(cfg: DictConfig) -> Optional[float]:
 
 
 if __name__ == "__main__":
+    warp.init()
     main()

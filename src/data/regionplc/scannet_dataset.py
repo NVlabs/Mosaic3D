@@ -165,9 +165,9 @@ class ScanNetDataset(Dataset):
     def load_data(self, index):
         fn = self.data_list[index]
         if self.split != "test":
-            xyz, rgb, label, inst_label, *others = torch.load(fn)
+            xyz, rgb, label, inst_label, *others = torch.load(fn, weights_only=False)
         else:
-            xyz, rgb = torch.load(fn)
+            xyz, rgb = torch.load(fn, weights_only=False)
             label = np.full(xyz.shape[0], self.ignore_label)
             inst_label = np.full(xyz.shape[0], self.ignore_label)
 

@@ -1,12 +1,7 @@
-"""Utils for Datasets.
-
-Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
-Please cite our work if the code is helpful to you.
-"""
-
 import random
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from typing import Dict, List
 
 import numpy as np
 import torch
@@ -68,6 +63,18 @@ def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
     batch["labels"] = batch["segment"]
     batch["binary_labels"] = batch["binary"]
 
+    return batch
+
+
+def point_collate_warp_fn(batch: List[Dict], **kwargs):
+    assert isinstance(batch, List)
+    assert isinstance(batch[0], Mapping)
+    batch = collate_fn(batch)
+
+    # set require fields for warp.convnet.PointCollection
+    batch["offsets"] = torch.cat((torch.zeros(1, dtype=torch.int32), batch["offset"]))
+    batch["labels"] = batch["segment"]
+    batch["binary_labels"] = batch["binary"]
     return batch
 
 
