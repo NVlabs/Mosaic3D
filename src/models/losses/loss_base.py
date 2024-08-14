@@ -1,3 +1,4 @@
+from abc import ABCMeta, abstractmethod
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -7,19 +8,24 @@ from omegaconf import DictConfig
 from torch import Tensor
 
 
-class LossBase(nn.Module):
-    def __init__(self, cfg: DictConfig):
-        super().__init__()
-        self.cfg = cfg
-
-    def compute_loss(
+class LossBase(nn.Module, metaclass=ABCMeta):
+    @abstractmethod
+    def loss(
         self,
         pred: Dict[str, Any],
         target: Dict[str, Any],
         *args,
         **kwargs,
-    ) -> Float[Tensor, ()]:
+    ) -> Tensor:
         raise NotImplementedError
+
+    def predict(
+        self,
+        pred: Dict[str, Any],
+        *args,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        return pred
 
     def forward(
         self,
@@ -27,8 +33,8 @@ class LossBase(nn.Module):
         target: Dict[str, Any],
         *args,
         **kwargs,
-    ) -> Dict[str, Float[Tensor, ()]]:
+    ) -> Dict[str, Tensor]:
         if not self.is_training:
             return {}
 
-        return self.compute_loss(pred, target, *args, **kwargs)
+        return self.loss(pred, target, *args, **kwargs)

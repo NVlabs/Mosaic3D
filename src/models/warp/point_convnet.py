@@ -12,8 +12,8 @@ from warp.convnet.geometry.point_collection import (
 )
 from warp.convnet.models.point_conv_unet import PointConvUNet
 
-from src.models.regionplc.head.caption_head import CaptionHead
-from src.models.regionplc.head.text_seg_head import TextSegHead
+from src.models.losses.caption_loss import CaptionLoss
+from src.models.losses.clip_alignment_loss import ClipAlignmentHead
 from src.models.warp.mlp import MLPBlock
 from src.utils import RankedLogger
 
@@ -65,40 +65,30 @@ class PointConvUNetTextSeg(nn.Module):
 
         self.task_head = None
         if "task_head" in self.module_names and task_head_cfg:
-            self.task_head = TextSegHead(**task_head_cfg)
+            self.task_head = ClipAlignmentHead(**task_head_cfg)
             self.module_list.append(self.task_head)
 
         self.caption_head = None
         if "caption_head" in self.module_names and caption_head_cfg is not None:
-            self.caption_head = CaptionHead(**caption_head_cfg)
+            self.caption_head = CaptionLoss(**caption_head_cfg)
             self.module_list.append(self.caption_head)
 
     def forward(self, batch_dict: Dict):
         offsets = batch_dict["offsets"].cpu().long()
-        pc = PointCollection(
-            batched_coordinates=BatchedContinuousCoordinates(
-                batch_dict["points_xyz"], offsets=offsets
-            ),
-            batched_features=BatchedFeatures(batch_dict["feats"], offsets=offsets),
-        )
+        pc = PointCollection(batch_dict["points_xyz"], batch_dict["feats"], offsets=offsets)
         # Convert the dict to point collection
         out_pcs = self.backbone_3d(pc)
         adapter_feats = self.adapter(out_pcs[0])
+        return adapter_feats
 
-        # out_pcs[0] has the original resolution
-        # out_pcs[1] has the uniform density
-        for cur_module in self.module_list:
-            batch_dict = cur_module(batch_dict)
-
-        ret_dict = self.task_head.forward_ret_dict
-        if self.training:
-            loss, tb_dict, disp_dict = self.get_training_loss()
-            ret_dict["loss"] = loss
-            return ret_dict, tb_dict, disp_dict
-        else:
-            if hasattr(self, "inst_head") and self.inst_head is not None:
-                ret_dict.update(self.inst_head.forward_ret_dict)
-            return ret_dict
+        # if self.training:
+        #     loss, tb_dict, disp_dict = self.get_training_loss()
+        #     ret_dict["loss"] = loss
+        #     return ret_dict, tb_dict, disp_dict
+        # else:
+        #     if hasattr(self, "inst_head") and self.inst_head is not None:
+        #         ret_dict.update(self.inst_head.forward_ret_dict)
+        #     return ret_dict
 
     def get_training_loss(self):
         disp_dict = {}

@@ -8,9 +8,10 @@ from torch import Tensor
 from torch_scatter import segment_csr
 from warp.convnet.geometry.point_collection import PointCollection
 
-from src.models.heads.head_base import BaseHead
+from src.models.losses.loss_base import LossBase
 
 
+# TODO(cchoy): move this to data preprocessing
 # Convert List[List[Tensor]] to concatenated Tensor, and offsets
 def convert_list_list_tensor_to_tensor(
     list_list_tensor: List[List[Int[Tensor, "N"]]],  # noqa: F722, F821
@@ -40,7 +41,7 @@ def convert_list_list_tensor_to_tensor(
     return tensor, offsets, non_empty
 
 
-class CaptionHead(BaseHead):
+class CaptionLoss(LossBase):
     def __init__(
         self,
         normalize_input: bool = True,
@@ -51,6 +52,9 @@ class CaptionHead(BaseHead):
         self.normalize_input = normalize_input
         self.novel_grad_only = novel_grad_only
         self.loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none")
+
+    def forward(self, pc: PointCollection, batch_dict: Dict) -> Tensor:
+        return pc, batch_dict
 
     def loss(self, pc: PointCollection, batch_dict):
         caption_infos = batch_dict["caption_infos"]
@@ -84,7 +88,4 @@ class CaptionHead(BaseHead):
         )
 
         loss = self.loss_func(reduced_caption_scores, caption_idx[non_empty])
-        return loss
-
-    def forward(self, pc: PointCollection, data_dict: Dict):
-        return self.loss(pc, data_dict)
+        return loss.mean()

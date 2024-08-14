@@ -10,6 +10,9 @@ from torch import Tensor
 
 
 class BaseHead(nn.Module, metaclass=ABCMeta):
+    def forward(self, x: Union[Tensor, Tuple[Tensor]]) -> Dict[str, Tensor]:
+        pass
+
     @abstractmethod
     def loss(self, x: Union[Tensor, Tuple[Tensor]], data: Dict[str, Any]) -> Dict[str, Tensor]:
         pass
@@ -27,8 +30,4 @@ class BaseHead(nn.Module, metaclass=ABCMeta):
         Returns:
             list[Tensor]: prediction
         """
-        return self.forward(x)["seg_preds"]
-
-
-class BaseSemanticHead(BaseHead, metaclass=ABCMeta):
-    pass
+        raise NotImplementedError

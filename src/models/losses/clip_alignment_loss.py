@@ -7,14 +7,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 from jaxtyping import Float, Int
 from torch import Tensor
+from warp.convnet.geometry.point_collection import PointCollection
 
-from src.models.heads.head_base import BaseHead
+from src.models.losses.loss_base import LossBase
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-class FixedCLIPAlignmentHead(BaseHead):
+class CLIPAlignmentHead(LossBase):
+    """Given the embedding, compute inner product with the target embedding and compute loss."""
+
     def __init__(
         self,
         normalize_input: bool,
@@ -43,24 +46,28 @@ class FixedCLIPAlignmentHead(BaseHead):
         else:
             raise ValueError(f"Unknown loss type: {self.loss_type}")
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor | PointCollection) -> Tensor:
+        if isinstance(x, PointCollection):
+            x = x.feature_tensor
         if self.normalize_input:
             return F.normalize(x, p=2, dim=1)
         return x
 
     def loss(
-        self, x: Union[Tensor, Tuple[Tensor]], data: Int[Tensor, ("N C")]  # noqa: F821, F722
-    ) -> Dict[str, Tensor]:
+        self,
+        x: Tensor | PointCollection,
+        target: Int[Tensor, ("N")],  # noqa: F821, F722
+    ) -> Tensor:
         pred = self.forward(x)
         logit = torch.matmul(pred, self.emb_target.t())
         if self.loss_type == "cross_entropy":
             # target is the index of the correct class
-            loss = self.loss_fn(logit, data)
+            loss = self.loss_fn(logit, target)
         elif self.loss_type == "contrastive":
             raise NotImplementedError("Contrastive loss not implemented yet")
         else:
             raise ValueError(f"Unknown loss type: {self.loss_type}")
-        return {"loss": loss}
+        return loss
 
     def predict(self, x: Float[Tensor, "N C"]) -> Int[Tensor, "N"]:  # noqa: F821, F722
         pred = self.forward(x)
