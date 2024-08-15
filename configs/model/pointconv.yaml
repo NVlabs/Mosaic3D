@@ -1,0 +1,73 @@
+_target_: src.models.warp.module.WarpLitModule
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 4e-3
+  weight_decay: 1e-4
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.OneCycleLR
+  _partial_: true
+  max_lr: ${model.optimizer.lr}
+  pct_start: 0.39
+  anneal_strategy: cos
+  div_factor: 1
+  final_div_factor: 10000.0
+
+scheduler_interval: step
+
+net:
+  _target_: src.models.warp.point_convnet.PointConvUNetTextSeg
+  _partial_: true
+
+  module_names: ["backbone_3d"]
+
+  backbone_cfg:
+    in_channels: 6
+    out_channels: 32
+    num_levels: 2
+    down_channels: [32, 64, 128]
+    up_channels: [32, 64, 128]
+    # neighbor search args
+    neighbor_search_args:
+      _target_: warp.convnet.geometry.ops.neighbor_search_continuous.NeighborSearchArgs
+      mode: radius
+    neighbor_search_radii: [0.2, 0.4]
+    # pooling args
+    pooling_args:
+      _target_: warp.convnet.geometry.ops.point_pool.FeaturePoolingArgs
+      pooling_mode: reductions
+    downsample_voxel_sizes: [0.1, 0.2]
+
+  adapter_cfg:
+    in_channel: ${model.net.backbone_cfg.out_channels}
+    text_channel: 512
+
+  caption_head_cfg:
+    ignore_label: ${data.train_dataset.ignore_label}
+    feat_norm: true
+    logit_scale: 100.0
+    logit_learnable: true
+    loss_weight: 0.5
+    novel_grad_only: false
+
+  task_head_cfg:
+    in_channel: ${model.net.backbone_cfg.up_channels[0]}
+    text_embed_path: ${data.train_dataset.data_dir}/text_embed/scannet_clip-ViT-B16_id.pth
+    ignore_label: ${data.train_dataset.ignore_label}
+    feat_norm: false
+    loss_weight: 1.0
+    logit_scale: 1.0
+    logit_learnable: false
+    base_class_idx: ${data.train_dataset.base_class_idx}
+    novel_class_idx: ${data.train_dataset.novel_class_idx}
+    ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+    eval_only: false
+
+# compile model for faster training with pytorch 2.0
+text_encoder:
+  name: CLIP
+  backbone: ViT-B/16
+
+compile: false

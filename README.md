@@ -67,6 +67,20 @@ python -m src.data.regionplc.download --download_dir [path/to/save/dataset]
 
 Use of docker is highly recommended.
 
+### Using Warp ConvNet (Not installed by default)
+
+```bash
+conda install pytorch==2.2.2 torchvision==0.17.2 pytorch-cuda=12.1 -c pytorch -c nvidia
+pip install torch-scatter -f https://data.pyg.org/whl/torch-2.2.0+cu121.html
+pip install warp-lang
+git clone https://gitlab-master.nvidia.com/3dmmllm/warp
+cd warp
+# If using conda, install libstdcxx (https://nvidia.github.io/warp/installation.html#conda-environments)
+# conda install -c conda-forge libstdcxx-ng=12.1
+python build_lib.py
+pip install -e .
+```
+
 #### On Local Machines
 
 ```bash

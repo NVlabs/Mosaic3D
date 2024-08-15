@@ -27,6 +27,7 @@ RUN apt-get update && \
     cmake \
     curl \
     git \
+    tig \
     zsh \
     tmux \
     vim \
@@ -61,11 +62,21 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 RUN pip3 install -U pip
 
 # Install torch first for torch scatter installation
-RUN pip3 install torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 --index-url https://download.pytorch.org/whl/cu121
+RUN pip3 install torch==2.2.2 torchvision==0.17.2 --index-url https://download.pytorch.org/whl/cu121
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
 
-# Install torch_scatter manually
-RUN pip3 install --no-index torch-scatter -f https://data.pyg.org/whl/torch-2.3.0+cu121.html
+# Install warp
+RUN pip3 install warp-lang
+# First copy the warp repository
+# git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
+COPY ./warp /home/user/warp
+WORKDIR /home/user/warp
+RUN python3 build_lib.py
+# Install warp-minknet
+RUN pip3 install -e .[convnet]
+
+# Debugging tools
+RUN pip3 install ipdb
 
 RUN chsh -s /usr/bin/bash user

@@ -1,7 +1,7 @@
 # --------- pytorch --------- #
-torch>=2.0.0
+torch==2.2.2
 torchvision>=0.15.0
-lightning>=2.0.0
+lightning==2.2
 torchmetrics>=0.11.4
 
 # --------- hydra --------- #
@@ -24,6 +24,12 @@ pytest          # tests
 black
 fire
 # sh            # for running bash commands in some tests (linux/macos only)
+
+# --------- Warp ConvNet -------- #
+# git+ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
+jaxtyping
+--find-links https://data.pyg.org/whl/torch-2.2.0+cu121.html
+torch-scatter
 
 # --------- RegionPLC --------- #
 numpy

@@ -1,9 +1,6 @@
 import math
 
 import numpy as np
-import scipy.interpolate
-import scipy.ndimage
-import scipy.stats
 
 
 def check_key(key):
@@ -24,6 +21,9 @@ def check_p(key):
 
 
 def elastic(x, gran, mag):
+    import scipy.interpolate
+    import scipy.ndimage
+
     blur0 = np.ones((3, 1, 1)).astype("float32") / 3
     blur1 = np.ones((1, 3, 1)).astype("float32") / 3
     blur2 = np.ones((1, 1, 3)).astype("float32") / 3
