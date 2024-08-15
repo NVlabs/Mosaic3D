@@ -15,7 +15,7 @@ from src.utils import RankedLogger
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-class CLIPAlignmentHead(LossBase):
+class CLIPAlignmentLoss(LossBase):
     """Given the embedding, compute inner product with the target embedding and compute loss."""
 
     def __init__(
