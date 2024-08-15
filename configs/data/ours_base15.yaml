@@ -2,5 +2,5 @@ defaults:
   - regionplc_base15
 
 train_dataset:
-  caption_dir: /datasets/scannet_captions
-  caption_subset: results_ours_ram++
+  caption_dir: /datasets/scannet_captions_gathered
+  caption_subset: ours_ram++
