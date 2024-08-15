@@ -182,12 +182,7 @@ class TextSegHead(nn.Module):
         semantic_scores = self.cls_head(sparse_tensor.features) * logit_scale
         semantic_scores = semantic_scores[point.v2p_map]
 
-        if self.training:
-            if hasattr(self, "base_class_idx"):
-                semantic_scores = semantic_scores[..., self.base_class_idx]
-            else:
-                semantic_scores = semantic_scores[..., self.valid_class_idx]
-        else:
+        if not self.training:
             new_semantic_scores = semantic_scores.detach().clone()
             new_semantic_scores[:] = (
                 -1e6
