@@ -302,7 +302,8 @@ class CaptionHead(nn.Module):
                 "caption_labels": caption_labels,
                 "caption_n_points": real_n_points,
             }
-        ret_dict["zero_loss"] = 0.0 * caption_scores.sum() * logit_scale
+        else:
+            ret_dict["zero_loss"] = 0.0 * caption_scores.sum() * logit_scale
         return ret_dict
 
     @force_fp32(apply_to=("caption_scores"))
