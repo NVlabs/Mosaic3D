@@ -1,20 +1,16 @@
-import functools
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import numpy as np
-import torch
 import torch.nn as nn
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
 import src.models.regionplc.utils.caption_utils as caption_utils
-from src.models.components.structure import Point
+from src.models.losses.caption_loss import CaptionLoss
+from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
 from src.models.optimization.fastai_lrscheduler import OneCycle
 from src.models.regionplc.text_models import build_text_model
-from src.models.regionplc_refactor.backbone import SparseUNet
-from src.models.regionplc_refactor.blocks import MLP
-from src.models.regionplc_refactor.head import BinaryHead, CaptionHead, TextSegHead
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
@@ -29,14 +25,19 @@ class RegionPLCLitModule(LightningModule):
         scheduler_interval: str,
         text_encoder: Dict,
         compile: bool,
+        #
+        loss_cfg: Dict,
     ):
         super().__init__()
 
         self.save_hyperparameters(logger=False)
 
         self.net = None
-        # loss function
-        self.criterion = torch.nn.CrossEntropyLoss()
+
+        # loss functions
+        self.caption_loss = CaptionLoss(**loss_cfg["caption_loss"])
+        self.seg_loss = CLIPAlignmentLoss(**loss_cfg["seg_loss"])
+        self.binary_loss = nn.BCEWithLogitsLoss() if loss_cfg.get("binary_loss", None) else None
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
@@ -50,43 +51,13 @@ class RegionPLCLitModule(LightningModule):
         if self.net is not None:
             return
 
-        backbone = SparseUNet(**self.hparams.net.backbone_cfg)
-
-        mid_channel, text_channel = (
-            self.hparams.net.backbone_cfg.mid_channel,
-            self.hparams.net.adapter_cfg.text_channel,
-        )
-        adapter_channel_list = [mid_channel, text_channel]
-        if self.hparams.net.adapter_cfg.num_layers == 2:
-            multiplier = int(np.log2(text_channel / mid_channel))
-            adapter_channel_list = [mid_channel, mid_channel * multiplier, text_channel]
-        adapter = MLP(
-            adapter_channel_list,
-            norm_fn=functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1),
-            num_layers=self.hparams.net.adapter_cfg.num_layers,
-            last_norm_fn=self.hparams.net.adapter_cfg.last_norm,
-        )
-
-        binary_head = None
-        if self.hparams.net.enable_binary_head:
-            binary_head = BinaryHead(**self.hparams.net.binary_head_cfg)
-            binary_head.register_hook_for_binary_head(backbone)
-
-        task_head = TextSegHead(**self.hparams.net.task_head_cfg)
-        caption_head = CaptionHead(**self.hparams.net.caption_head_cfg)
-
-        self.net = nn.ModuleDict(
-            {
-                "backbone_3d": backbone,
-                "adapter": adapter,
-                "binary_head": binary_head,
-                "task_head": task_head,
-                "caption_head": caption_head,
-            }
-        )
+        self.net = self.hparams.net()
 
         # text encoder
         self.text_encoder = build_text_model(self.hparams.text_encoder)
+        # freeze text encoder
+        for params in self.text_encoder.parameters():
+            params.requires_grad = False
 
     def setup(self, stage: str) -> None:
         val_dataloader = self.trainer.datamodule.val_dataloader()
@@ -97,48 +68,39 @@ class RegionPLCLitModule(LightningModule):
             ignore_index=val_dataloader.dataset.ignore_label,
         )
 
+        self.base_class_idx = val_dataloader.dataset.base_class_idx
+        self.novel_class_idx = val_dataloader.dataset.novel_class_idx
+        self.valid_class_idx = val_dataloader.dataset.valid_class_idx
+
     def training_step(self, batch, batch_idx):
         caption_infos = caption_utils.get_caption_batch_refactor(
             batch["caption_data"], self.text_encoder, local_rank=self.local_rank
         )
         batch.update(caption_infos)
 
-        point = Point(batch)
-        point.sparsify(pad=128)
-
-        sparse_tensor = point.sparse_conv_feat
-        backbone_feat = self.net.backbone_3d(sparse_tensor)
-        adapter_feat = self.net.adapter(backbone_feat.features)
-        sparse_tensor = sparse_tensor.replace_feature(adapter_feat)
-        point.sparse_conv_feat = sparse_tensor
-
-        if self.net.binary_head is not None:
-            point = self.net.binary_head(point)
-
-        point = self.net.task_head(point)
-        point = self.net.caption_head(point)
+        point = self.net(batch)
+        adapter_feat = point.sparse_conv_feat.features[point.v2p_map]
 
         # loss
         binary_loss, seg_loss, caption_loss = 0, 0, 0
-        if self.net.binary_head is not None and {"binary", "binary_scores"}.issubset(point.keys()):
-            binary_loss = self.net.binary_head.get_loss(point.binary_scores, point.binary)
 
-        if not self.net.task_head.eval_only:
-            seg_loss = self.net.task_head.get_loss(point.seg_scores, point.segment)
-
-        if "zero_loss" in point:
-            caption_loss = point.zero_loss
-        else:
-            caption_loss = self.net.caption_head.get_loss(
-                point.caption_output, point.caption_labels, point.caption_n_points
+        if self.binary_loss is not None:
+            binary_loss = self.binary_loss(
+                point.binary_scores[point.binary != -100],
+                point.binary[point.binary != -100].reshape(-1, 1),
             )
-        loss = binary_loss + seg_loss + caption_loss
+
+        seg_loss = self.seg_loss.loss(adapter_feat, batch["segment"])
+        caption_loss = self.caption_loss.loss(adapter_feat, batch)
+
+        loss = (
+            binary_loss * self.hparams.loss_cfg.binary_loss_weight
+            + seg_loss * self.hparams.loss_cfg.seg_loss_weight
+            + caption_loss * self.hparams.loss_cfg.caption_loss_weight
+        )
 
         log_metrics = dict(
-            loss=loss,
-            binary_loss=binary_loss,
-            caption_loss=caption_loss,
-            seg_loss=seg_loss,
+            loss=loss, binary_loss=binary_loss, caption_loss=caption_loss, seg_loss=seg_loss
         )
         self.log_dict(
             {f"train/{key}": value for key, value in log_metrics.items()},
@@ -150,20 +112,11 @@ class RegionPLCLitModule(LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        point = Point(batch)
-        point.sparsify(pad=128)
+        point = self.net(batch)
+        adapter_feat = point.sparse_conv_feat.features[point.v2p_map]
 
-        sparse_tensor = point.sparse_conv_feat
-        backbone_feat = self.net.backbone_3d(sparse_tensor)
-        adapter_feat = self.net.adapter(backbone_feat.features)
-        sparse_tensor = sparse_tensor.replace_feature(adapter_feat)
-        point.sparse_conv_feat = sparse_tensor
-
-        if self.net.binary_head is not None:
-            point = self.net.binary_head(point)
-
-        point = self.net.task_head(point)
-        preds, labels = point.seg_preds, point.segment
+        preds = self.seg_loss.predict(adapter_feat)
+        labels = point.segment
 
         # update and log metrics
         self.val_confmat(preds, labels)
@@ -180,7 +133,7 @@ class RegionPLCLitModule(LightningModule):
             class_ious[class_name] = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0
             class_accs[class_name] = tp / (tp + fn) if (tp + fn) > 0 else 0
 
-        valid_class_idx = self.net.task_head.valid_class_idx
+        valid_class_idx = self.valid_class_idx
         miou = np.nanmean([class_ious[self.class_names[i]] for i in valid_class_idx])
         macc = np.nanmean([class_accs[self.class_names[i]] for i in valid_class_idx])
         self.val_miou_best.update(miou)
@@ -195,12 +148,12 @@ class RegionPLCLitModule(LightningModule):
         )
 
         if (
-            hasattr(self.net.task_head, "base_class_idx")
-            and self.net.task_head.base_class_idx is not None
-            and len(self.net.task_head.base_class_idx) > 0
+            hasattr(self, "base_class_idx")
+            and self.base_class_idx is not None
+            and len(self.base_class_idx) > 0
         ):
-            base_class_idx = self.net.task_head.base_class_idx
-            novel_class_idx = self.net.task_head.novel_class_idx
+            base_class_idx = self.base_class_idx
+            novel_class_idx = self.novel_class_idx
             miou_base = np.nanmean([class_ious[self.class_names[i]] for i in base_class_idx])
             miou_novel = np.nanmean([class_ious[self.class_names[i]] for i in novel_class_idx])
             hiou = 2 * miou_base * miou_novel / (miou_base + miou_novel + 1e-8)
@@ -224,9 +177,9 @@ class RegionPLCLitModule(LightningModule):
 
     def configure_optimizers(self) -> Dict[str, Any]:
         if self.hparams.optimizer.func.__name__.startswith("build_"):
-            optimizer = self.hparams.optimizer(model=self.net)
+            optimizer = self.hparams.optimizer(model=self)
         else:
-            optimizer = self.hparams.optimizer(params=self.net.parameters())
+            optimizer = self.hparams.optimizer(params=self.parameters())
         if self.hparams.scheduler is not None:
             if self.hparams.scheduler.func.__name__ == "OneCycleLR":
                 scheduler = self.hparams.scheduler(
@@ -258,3 +211,13 @@ class RegionPLCLitModule(LightningModule):
             scheduler.step()
         else:
             scheduler.step(metric)
+
+    def children(self):
+        for name, module in self.named_children():
+            if name != "text_encoder":
+                yield module
+
+    def parameters(self):
+        for name, params in self.named_parameters():
+            if "text_encoder" not in name:
+                yield params

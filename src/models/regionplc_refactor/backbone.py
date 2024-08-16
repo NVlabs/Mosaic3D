@@ -4,13 +4,14 @@ from typing import Optional
 import spconv.pytorch as spconv
 import torch.nn as nn
 
+from src.models.components.structure import Point
 from src.models.regionplc_refactor.blocks import ResidualBlock, UBlock, VGGBlock
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
 
 
-class SparseUNet(nn.Module):
+class SparseConvUNet(nn.Module):
     def __init__(
         self,
         in_channel: int,
@@ -67,9 +68,12 @@ class SparseUNet(nn.Module):
             m.weight.data.fill_(1.0)
             m.bias.data.fill_(0.0)
 
-    def forward(self, sparse_tensor: spconv.SparseConvTensor):
+    def forward(self, point: Point):
+        sparse_tensor = point.sparse_conv_feat
+
         output = self.input_conv(sparse_tensor)
         output = self.unet(output)
         output = self.output_layer(output)
 
-        return output
+        point.sparse_conv_feat = output
+        return point

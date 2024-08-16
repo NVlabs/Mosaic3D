@@ -24,6 +24,7 @@ class CLIPAlignmentLoss(LossBase):
         text_clip_path: str,
         loss_type: Literal["cross_entropy", "contrastive"],
         ignore_label: int = -100,
+        learnable_logit: bool = False,
     ):
         super().__init__()
         self.normalize_input = normalize_input
@@ -36,6 +37,11 @@ class CLIPAlignmentLoss(LossBase):
 
         # create embedding
         self.emb_target = nn.Parameter(text_embeddings.float(), requires_grad=False)
+
+        # learable logit
+        self.logit_scale = 1.0
+        if learnable_logit:
+            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07), requires_grad=True)
 
         # loss type
         self.loss_type = loss_type
@@ -59,7 +65,7 @@ class CLIPAlignmentLoss(LossBase):
         target: Int[Tensor, ("N")],  # noqa: F821, F722
     ) -> Tensor:
         pred = self.forward(x)
-        logit = torch.matmul(pred, self.emb_target.t())
+        logit = torch.matmul(pred, self.emb_target.t()) * self.logit_scale
         if self.loss_type == "cross_entropy":
             # target is the index of the correct class
             loss = self.loss_fn(logit, target)
@@ -71,5 +77,5 @@ class CLIPAlignmentLoss(LossBase):
 
     def predict(self, x: Float[Tensor, "N C"]) -> Int[Tensor, "N"]:  # noqa: F821, F722
         pred = self.forward(x)
-        logit = torch.matmul(pred, self.emb_target.t())
+        logit = torch.matmul(pred, self.emb_target.t()) * self.logit_scale
         return logit.argmax(dim=1)
