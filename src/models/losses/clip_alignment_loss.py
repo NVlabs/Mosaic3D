@@ -75,7 +75,15 @@ class CLIPAlignmentLoss(LossBase):
             raise ValueError(f"Unknown loss type: {self.loss_type}")
         return loss
 
-    def predict(self, x: Float[Tensor, "N C"]) -> Int[Tensor, "N"]:  # noqa: F821, F722
+    def predict(
+        self,
+        x: Float[Tensor, "N C"],  # noqa: F821, F722
+        return_logit: bool = False,
+    ) -> Int[Tensor, "N"]:  # noqa: F821, F722
         pred = self.forward(x)
         logit = torch.matmul(pred, self.emb_target.t()) * self.logit_scale
+
+        if return_logit:
+            return logit
+
         return logit.argmax(dim=1)

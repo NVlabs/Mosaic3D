@@ -1,6 +1,7 @@
 from typing import Any, Dict
 
 import numpy as np
+import torch
 import torch.nn as nn
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
@@ -115,7 +116,27 @@ class RegionPLCLitModule(LightningModule):
         point = self.net(batch)
         adapter_feat = point.sparse_conv_feat.features[point.v2p_map]
 
-        preds = self.seg_loss.predict(adapter_feat)
+        logits = self.seg_loss.predict(adapter_feat, return_logit=True)
+        new_logits = torch.full_like(logits, torch.finfo(logits.dtype).min)
+        new_logits[..., self.valid_class_idx] = logits[..., self.valid_class_idx]
+
+        if self.binary_loss is not None:
+            base_scores = new_logits[..., self.base_class_idx].softmax(dim=-1)
+            novel_scores = new_logits[..., self.novel_class_idx].softmax(dim=-1)
+            scores = new_logits.clone().float()
+            scores[..., self.base_class_idx] = base_scores
+            scores[..., self.novel_class_idx] = novel_scores
+
+            weights = torch.sigmoid(point.binary_scores)
+            weights = weights.repeat(1, scores.shape[-1])
+            weights[..., self.novel_class_idx] = 1 - weights[..., self.novel_class_idx]
+
+            scores = scores * weights
+            scores /= scores.sum(-1, keepdim=True)
+            preds = scores.max(1)[1]
+        else:
+            preds = new_logits.max(1)[1]
+
         labels = point.segment
 
         # update and log metrics
