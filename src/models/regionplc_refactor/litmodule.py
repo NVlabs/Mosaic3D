@@ -13,8 +13,8 @@ from src.models.components.structure import Point
 from src.models.optimization.fastai_lrscheduler import OneCycle
 from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc_refactor.backbone import SparseUNet
+from src.models.regionplc_refactor.blocks import MLP
 from src.models.regionplc_refactor.head import BinaryHead, CaptionHead, TextSegHead
-from src.models.regionplc_refactor.modules import MLP
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)

@@ -4,7 +4,7 @@ from typing import Optional
 import spconv.pytorch as spconv
 import torch.nn as nn
 
-from src.models.regionplc_refactor.modules import ResidualBlock, UBlock, VGGBlock
+from src.models.regionplc_refactor.blocks import ResidualBlock, UBlock, VGGBlock
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)

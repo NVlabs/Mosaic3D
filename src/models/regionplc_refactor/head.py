@@ -10,7 +10,7 @@ from torch_scatter import scatter
 
 from src.models.components.structure import Point
 from src.models.regionplc.utils.fp16 import force_fp32
-from src.models.regionplc_refactor.modules import ResidualBlock, UBlockDecoder, VGGBlock
+from src.models.regionplc_refactor.blocks import ResidualBlock, UBlockDecoder, VGGBlock
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
