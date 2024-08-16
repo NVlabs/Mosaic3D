@@ -1,0 +1,25 @@
+defaults:
+  - regionplc_refactor
+
+net:
+  binary_head_cfg: false # disable binary head
+
+  caption_head_cfg:
+    loss_weight: 1.0
+    novel_grad_only: false
+
+  task_head_cfg:
+    eval_only: true
+
+loss_cfg:
+  binary_loss: false # disable binary loss
+  seg_loss:
+    eval_only: true
+  caption_loss_weight: 1.0
+
+# compile model for faster training with pytorch 2.0
+text_encoder:
+  name: CLIP
+  backbone: ViT-B/16
+
+compile: false

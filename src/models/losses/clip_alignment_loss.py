@@ -25,9 +25,11 @@ class CLIPAlignmentLoss(LossBase):
         loss_type: Literal["cross_entropy", "contrastive"],
         ignore_label: int = -100,
         learnable_logit: bool = False,
+        eval_only: bool = False,
     ):
         super().__init__()
         self.normalize_input = normalize_input
+        self.eval_only = eval_only
 
         # load pre-computed text embeddings (e.g. CLIP text embedding with shape NxC)
         assert Path(text_clip_path).exists(), f"Text embedding file not found: {text_clip_path}"

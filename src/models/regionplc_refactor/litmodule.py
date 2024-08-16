@@ -86,19 +86,25 @@ class RegionPLCLitModule(LightningModule):
         binary_loss, seg_loss, caption_loss = 0, 0, 0
 
         if self.binary_loss is not None:
-            binary_loss = self.binary_loss(
-                point.binary_scores[point.binary != -100],
-                point.binary[point.binary != -100].reshape(-1, 1),
+            binary_loss = (
+                self.binary_loss(
+                    point.binary_scores[point.binary != -100],
+                    point.binary[point.binary != -100].reshape(-1, 1),
+                )
+                * self.hparams.loss_cfg.binary_loss_weight
             )
 
-        seg_loss = self.seg_loss.loss(adapter_feat, batch["segment"])
-        caption_loss = self.caption_loss.loss(adapter_feat, batch)
+        if not self.seg_loss.eval_only:
+            seg_loss = (
+                self.seg_loss.loss(adapter_feat, batch["segment"])
+                * self.hparams.loss_cfg.seg_loss_weight
+            )
 
-        loss = (
-            binary_loss * self.hparams.loss_cfg.binary_loss_weight
-            + seg_loss * self.hparams.loss_cfg.seg_loss_weight
-            + caption_loss * self.hparams.loss_cfg.caption_loss_weight
+        caption_loss = (
+            self.caption_loss.loss(adapter_feat, batch) * self.hparams.loss_cfg.caption_loss_weight
         )
+
+        loss = binary_loss + seg_loss + caption_loss
 
         log_metrics = dict(
             loss=loss, binary_loss=binary_loss, caption_loss=caption_loss, seg_loss=seg_loss
