@@ -97,7 +97,10 @@ class CaptionLoss(LossBase):
         origin_idx = batch_dict["origin_idx"]
 
         # Compute caption scores
-        caption_logits = adapter_feats @ caption_embed.float().T * self.logit_scale
+        logit_scale = self.logit_scale
+        if isinstance(logit_scale, nn.Parameter):
+            logit_scale = logit_scale.exp()
+        caption_logits = adapter_feats @ caption_embed.float().T * logit_scale
         caption_scores = nn.LogSoftmax(dim=-1)(caption_logits)
 
         if self.novel_grad_only:

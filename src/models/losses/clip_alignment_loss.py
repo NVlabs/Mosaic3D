@@ -66,8 +66,7 @@ class CLIPAlignmentLoss(LossBase):
         x: Tensor | PointCollection,
         target: Int[Tensor, ("N")],  # noqa: F821, F722
     ) -> Tensor:
-        pred = self.forward(x)
-        logit = torch.matmul(pred, self.emb_target.t()) * self.logit_scale
+        logit = self.predict(x, return_logit=True)
         if self.loss_type == "cross_entropy":
             # target is the index of the correct class
             loss = self.loss_fn(logit, target)
@@ -83,7 +82,10 @@ class CLIPAlignmentLoss(LossBase):
         return_logit: bool = False,
     ) -> Int[Tensor, "N"]:  # noqa: F821, F722
         pred = self.forward(x)
-        logit = torch.matmul(pred, self.emb_target.t()) * self.logit_scale
+        logit_scale = self.logit_scale
+        if isinstance(self.logit_scale):
+            logit_scale = logit_scale.exp()
+        logit = torch.matmul(pred, self.emb_target.t()) * logit_scale
 
         if return_logit:
             return logit
