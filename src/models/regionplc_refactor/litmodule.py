@@ -120,9 +120,10 @@ class RegionPLCLitModule(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         point = self.net(batch)
-        adapter_feat = point.sparse_conv_feat.features[point.v2p_map]
+        adapter_feat = point.sparse_conv_feat.features
 
         logits = self.seg_loss.predict(adapter_feat, return_logit=True)
+        logits = logits[point.v2p_map]
         new_logits = torch.full_like(logits, torch.finfo(logits.dtype).min)
         new_logits[..., self.valid_class_idx] = logits[..., self.valid_class_idx]
 
