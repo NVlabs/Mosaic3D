@@ -131,6 +131,7 @@ class RegionPLCLitModule(LightningModule):
             base_scores = new_logits[..., self.base_class_idx].softmax(dim=-1)
             novel_scores = new_logits[..., self.novel_class_idx].softmax(dim=-1)
             scores = new_logits.clone().float()
+            scores[:] = 0.0
             scores[..., self.base_class_idx] = base_scores
             scores[..., self.novel_class_idx] = novel_scores
 
