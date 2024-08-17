@@ -83,7 +83,7 @@ class CLIPAlignmentLoss(LossBase):
     ) -> Int[Tensor, "N"]:  # noqa: F821, F722
         pred = self.forward(x)
         logit_scale = self.logit_scale
-        if isinstance(self.logit_scale):
+        if isinstance(self.logit_scale, nn.Parameter):
             logit_scale = logit_scale.exp()
         logit = torch.matmul(pred, self.emb_target.t()) * logit_scale
 
