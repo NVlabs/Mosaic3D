@@ -60,7 +60,7 @@ class ScanNetDataset(Dataset):
         self.novel_class_idx = novel_class_idx
         self.ignore_class_idx = ignore_class_idx
         self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
-        if base_class_idx is not None:
+        if base_class_idx is not None and len(base_class_idx):
             self.base_class_mapper = self.build_class_mapper(base_class_idx, ignore_label)
             self.binary_class_mapper = self.build_binary_class_mapper(
                 base_class_idx, novel_class_idx, ignore_class_idx, ignore_label
@@ -68,13 +68,8 @@ class ScanNetDataset(Dataset):
         if ignore_class_idx is not None:
             for c in ignore_class_idx:
                 self.valid_class_idx.remove(c)
-        self.valid_class_mapper = self.build_class_mapper(
-            self.valid_class_idx, ignore_label, squeeze_label=self.split == "train"
-        )
+        self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, ignore_label)
         self.ignore_label = ignore_label
-        self.class_mode = (
-            "base" if (self.split == "train" and hasattr(self, "base_class_mapper")) else "all"
-        )
 
         # data transform
         self.transforms = Compose(OmegaConf.to_container(transforms))
@@ -84,8 +79,12 @@ class ScanNetDataset(Dataset):
         # backward compatibility for regionplc
         self.caption_cfg = dict(GATHER_CAPTION=False)
 
+    @property
+    def use_base_class_mapper(self):
+        return self.split == "train" and hasattr(self, "base_class_mapper")
+
     @staticmethod
-    def build_class_mapper(class_idx, ignore_label, squeeze_label=True):
+    def build_class_mapper(class_idx, ignore_label, squeeze_label=False):
         remapper = np.ones(256, dtype=np.int64) * ignore_label
         for i, x in enumerate(class_idx):
             if squeeze_label:
@@ -154,9 +153,10 @@ class ScanNetDataset(Dataset):
             binary_label = self.binary_class_mapper[segment.astype(np.int64)].astype(np.float32)
         else:
             binary_label = np.ones_like(segment)
-        if self.class_mode == "base":
+
+        if self.use_base_class_mapper:
             segment = self.base_class_mapper[segment.astype(np.int64)]
-        elif self.class_mode == "all" and hasattr(self, "ignore_class_idx"):
+        elif not self.use_base_class_mapper and hasattr(self, "ignore_class_idx"):
             segment = self.valid_class_mapper[segment.astype(np.int64)]
         instance[segment == self.ignore_label] = self.ignore_label
 

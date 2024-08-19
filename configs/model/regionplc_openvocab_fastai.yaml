@@ -2,9 +2,19 @@ defaults:
   - regionplc_fastai
 
 net:
-  module_names: ["vfe", "backbone_3d", "adapter", "caption_head", "task_head"]
-  task_head_cfg:
+  binary_head_cfg: false # disable binary head
+
+loss_cfg:
+  binary_loss: false # disable binary loss
+  seg_loss:
     eval_only: true
-  caption_head_cfg:
+  caption_loss:
     novel_grad_only: false
-    loss_weight: 1.0
+  caption_loss_weight: 1.0
+
+# compile model for faster training with pytorch 2.0
+text_encoder:
+  name: CLIP
+  backbone: ViT-B/16
+
+compile: false

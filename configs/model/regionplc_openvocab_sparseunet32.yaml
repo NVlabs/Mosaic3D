@@ -1,6 +1,0 @@
-defaults:
-  - regionplc_openvocab
-
-net:
-  backbone_cfg:
-    mid_channel: 32

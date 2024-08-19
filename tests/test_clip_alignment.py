@@ -46,7 +46,7 @@ class TestCLIPAlignmentLoss(unittest.TestCase):
             pc = PointCollection(
                 data_dict["coord"],
                 rand_feats,
-                offsets=data_dict["offsets"],
+                offsets=data_dict["offset"],
             )
             loss = alignment_head.loss(pc, labels)
             print(loss)

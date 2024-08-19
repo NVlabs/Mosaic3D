@@ -9,23 +9,23 @@ from warp.convnet.geometry.point_collection import PointCollection
 
 from src.models.losses.caption_loss import CaptionLoss
 from src.models.regionplc.text_models import build_text_model
-from src.models.regionplc.utils.caption_utils import get_caption_batch
+from src.models.regionplc.utils.caption_utils import get_caption_batch_refactor
 
 text_encoder_str = """text_encoder:
 name: CLIP
 backbone: ViT-B/16
 """
 
-caption_cfg_str = """
-ENABLED: True
-CAPTION_PATH: caption/caption_detic-template_and_kosmos_125k_iou0.2.json
-IMAGE_CORR_PATH: image_corr/scannet_caption_idx_detic-template_and_kosmos_125k_iou0.2.pkl
-SELECT: ratio
-NUM: 1
-RATIO: 0.2
-SAMPLE: 1
-GATHER_CAPTION: False
-"""
+
+def to_device(item, device):
+    if isinstance(item, torch.Tensor):
+        return item.to(device)
+    elif isinstance(item, list):
+        return [to_device(sub_item, device) for sub_item in item]
+    elif isinstance(item, dict):
+        return {k: to_device(v, device) for k, v in item.items()}
+    else:
+        return item
 
 
 class TestCaptionLoss(unittest.TestCase):
@@ -51,24 +51,20 @@ class TestCaptionLoss(unittest.TestCase):
         text_encoder_cfg = OmegaConf.create(text_encoder_str)
         text_encoder = build_text_model(text_encoder_cfg).to(device)
 
-        caption_cfg = OmegaConf.create(caption_cfg_str)
         datamodule.setup("fit")
         loader = datamodule.train_dataloader()
 
         for i, batch_dict in enumerate(loader):
             assert isinstance(batch_dict, dict)
-
-            batch_dict = get_caption_batch(
-                caption_cfg,
-                {},
-                batch_dict,
-                text_encoder,
-                local_rank=0,
+            batch_dict = to_device(batch_dict, device)
+            caption_infos = get_caption_batch_refactor(
+                batch_dict["caption_data"], text_encoder, local_rank=0
             )
+            batch_dict.update(caption_infos)
 
             rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
             pc = PointCollection(
-                batch_dict["coord"], rand_feats, offsets=batch_dict["offsets"]
+                batch_dict["coord"].cpu(), rand_feats, offsets=batch_dict["offset"].cpu()
             ).to(device)
 
             loss = caption_head.loss(pc, batch_dict)
