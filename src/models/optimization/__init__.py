@@ -9,7 +9,7 @@ from .fastai_lrscheduler import CosineWarmupLR, OneCycle
 from .fastai_optim import OptimWrapper
 
 
-def build_optimizer(model, optim_cfg):
+def build_optimizer(model, optim_cfg, **kwargs):
     if optim_cfg.OPTIMIZER == "adam":
         optimizer = optim.Adam(
             model.parameters(), lr=optim_cfg.LR, weight_decay=optim_cfg.WEIGHT_DECAY
@@ -59,7 +59,7 @@ def build_optimizer(model, optim_cfg):
     return optimizer
 
 
-def build_scheduler(optimizer, total_steps, last_epoch, optim_cfg):
+def build_scheduler(optimizer, total_steps, last_epoch, optim_cfg, **kwargs):
     if optim_cfg.SCHEDULER == "poly":
         lr_scheduler = PolyLR(optimizer, max_iter=total_steps, power=optim_cfg.POWER)
     elif optim_cfg.OPTIMIZER == "adam_onecycle":
