@@ -1,13 +1,17 @@
 import functools
 from typing import Optional
 
+import spconv.pytorch as spconv
 import torch.nn as nn
 
-from src.models.regionplc.utils.spconv_utils import spconv
-from src.models.regionplc.utils.unet_blocks import ResidualBlock, UBlock, VGGBlock
+from src.models.components.structure import Point
+from src.models.regionplc.blocks import ResidualBlock, UBlock, VGGBlock
+from src.utils import RankedLogger
+
+log = RankedLogger(__file__, rank_zero_only=True)
 
 
-class SparseUNetIndoor(nn.Module):
+class SparseConvUNet(nn.Module):
     def __init__(
         self,
         in_channel: int,
@@ -64,17 +68,12 @@ class SparseUNetIndoor(nn.Module):
             m.weight.data.fill_(1.0)
             m.bias.data.fill_(0.0)
 
-    def forward(self, batch_dict):
-        input_sp_tensor = spconv.SparseConvTensor(
-            batch_dict["voxel_features"],
-            batch_dict["voxel_coords"].int(),
-            batch_dict["spatial_shape"],
-            batch_dict["batch_size"],
-        )
-        output = self.input_conv(input_sp_tensor)
+    def forward(self, point: Point):
+        sparse_tensor = point.sparse_conv_feat
+
+        output = self.input_conv(sparse_tensor)
         output = self.unet(output)
         output = self.output_layer(output)
-        output_feats = output.features
 
-        batch_dict["backbone_3d_feats"] = output_feats
-        return batch_dict
+        point.sparse_conv_feat = output
+        return point

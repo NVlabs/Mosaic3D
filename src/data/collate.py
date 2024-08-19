@@ -37,33 +37,10 @@ def collate_fn(batch):
         for key in batch.keys():
             if "offset" in key:
                 batch[key] = torch.cumsum(batch[key], dim=0)
+                batch[key] = torch.cat((torch.zeros(1, dtype=torch.int32), batch[key]))
         return batch
     else:
         return default_collate(batch)
-
-
-def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
-    assert isinstance(
-        batch[0], Mapping
-    )  # currently, only support input_dict, rather than input_list
-    batch = collate_fn(batch)
-
-    # set require fields for regionplc
-    coord = batch["coord"]
-    scale_coord = coord / grid_size
-    grid_coord = scale_coord.int()
-    min_coord = grid_coord.min(0).values
-    grid_coord -= min_coord
-    batch_ids = offset2batch(batch["offset"])
-    batch["points_xyz_voxel_scale"] = torch.cat((batch_ids.unsqueeze(1), grid_coord), dim=-1)
-
-    batch["spatial_shape"] = torch.clip(batch["points_xyz_voxel_scale"].max(0).values[1:] + 1, 128)
-    batch["batch_idxs"] = batch_ids
-    batch["batch_size"] = len(batch["offset"])
-    batch["labels"] = batch["segment"]
-    batch["binary_labels"] = batch["binary"]
-
-    return batch
 
 
 def point_collate_warp_fn(batch: List[Dict], **kwargs):
@@ -72,13 +49,12 @@ def point_collate_warp_fn(batch: List[Dict], **kwargs):
     batch = collate_fn(batch)
 
     # set require fields for warp.convnet.PointCollection
-    batch["offsets"] = torch.cat((torch.zeros(1, dtype=torch.int32), batch["offset"]))
     batch["labels"] = batch["segment"]
     batch["binary_labels"] = batch["binary"]
     return batch
 
 
-def point_collate_fn(batch, mix_prob=0):
+def point_collate_fn(batch, grid_size, mix_prob=0):
     assert isinstance(
         batch[0], Mapping
     )  # currently, only support input_dict, rather than input_list
@@ -89,6 +65,7 @@ def point_collate_fn(batch, mix_prob=0):
             batch["offset"] = torch.cat(
                 [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
             )
+    batch["grid_size"] = grid_size
     return batch
 
 

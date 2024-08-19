@@ -3,7 +3,6 @@ import os
 import torch
 from clip import clip
 
-from src.models.regionplc.utils import commu_utils
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -15,7 +14,6 @@ def get_clip_model(backbone_name, local_rank=0):
         model_path = clip._download(url, os.path.expanduser("~/.cache/clip"))
     else:
         model_path = _return_clip_path(url, os.path.expanduser("~/.cache/clip"))
-    commu_utils.synchronize()
 
     try:
         # loading JIT archive

@@ -1,6 +1,7 @@
 defaults:
-  - regionplc_openvocab
+  - ours_base15
 
 train_dataset:
-  caption_dir: /datasets/scannet_captions
-  caption_subset: results_ours_ram++
+  # class labels
+  base_class_idx: []
+  ignore_class_idx: [0, 1, 19]
