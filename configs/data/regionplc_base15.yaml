@@ -82,6 +82,7 @@ val_dataset:
         offset: coord
         pc_count: origin_coord
       feats_keys: ["color", "coord"]
+
 collate_fn:
   _target_: src.data.collate.point_collate_regionplc_fn
   _partial_: true

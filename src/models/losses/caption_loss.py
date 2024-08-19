@@ -45,12 +45,10 @@ class CaptionLoss(LossBase):
     def __init__(
         self,
         normalize_input: bool = True,
-        novel_grad_only: bool = False,
         ignore_label: int = -100,
     ):
         super().__init__()
         self.normalize_input = normalize_input
-        self.novel_grad_only = novel_grad_only
         self.loss_func = nn.NLLLoss(ignore_index=ignore_label, reduction="none")
 
     def forward(self, pc: PointCollection, batch_dict: Dict) -> Tensor:

@@ -41,6 +41,13 @@ def build_text_model(model_cfg):
     return text_encoder
 
 
+class TextModel:
+    def __init__(self, model_cfg, caption_cfg, text_cfg):
+        self.text_cfg = text_cfg
+        self.caption_cfg = caption_cfg
+        self.text_encoder = build_text_model(model_cfg.text_encoder)
+
+
 def load_text_embedding_from_path(text_emb_path):
     text_embedding = torch.load(text_emb_path, map_location=torch.device("cpu")).detach()
     text_embedding /= text_embedding.norm(dim=-1, keepdim=True)
