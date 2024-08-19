@@ -35,7 +35,6 @@ net:
     num_layers: 2
     last_norm: true
 
-  enable_binary_head: true
   binary_head_cfg:
     ignore_label: ${data.train_dataset.ignore_label}
     in_channel: ${model.net.backbone_cfg.mid_channel}
