@@ -74,7 +74,7 @@ class RegionPLCLitModule(LightningModule):
         self.valid_class_idx = val_dataloader.dataset.valid_class_idx
 
     def training_step(self, batch, batch_idx):
-        caption_infos = caption_utils.get_caption_batch_refactor(
+        caption_infos = caption_utils.get_caption_batch(
             batch["caption_data"], self.text_encoder, local_rank=self.local_rank
         )
         batch.update(caption_infos)

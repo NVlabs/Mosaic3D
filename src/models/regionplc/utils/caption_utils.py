@@ -1,7 +1,7 @@
 import torch
 
 
-def get_caption_batch_refactor(caption_data, text_encoder, local_rank):
+def get_caption_batch(caption_data, text_encoder, local_rank):
     caption, idx = caption_data["caption"], caption_data["idx"]
 
     # caption_embed: (K, 512), caption_idx: (N), (N > K)
@@ -14,26 +14,6 @@ def get_caption_batch_refactor(caption_data, text_encoder, local_rank):
         "c2p_map": idx,  # caption 2 point mapping
     }
     return caption_infos
-
-
-def get_caption_batch(batch_dict, text_encoder, local_rank):
-    caption_infos = {}
-    caption_data = batch_dict["caption_data"]
-
-    caption, idx = caption_data["caption"], caption_data["idx"]
-
-    # caption_embed: (K, 512), caption_idx: (N), (N > K)
-    caption_embed, caption_idx = extract_caption_embed(caption, text_encoder, local_rank)
-    normed_caption_embed = torch.nn.functional.normalize(caption_embed, dim=-1)
-
-    caption_infos["caption_view"] = {
-        "caption_embed": normed_caption_embed,
-        "caption_idx": caption_idx,
-        "select_image_corr": idx,
-    }
-
-    batch_dict["caption_infos"] = caption_infos
-    return batch_dict
 
 
 def extract_caption_embed(image_captions, text_encoder, rank):
