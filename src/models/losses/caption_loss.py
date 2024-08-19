@@ -95,6 +95,7 @@ class CaptionLoss(LossBase):
         caption_embed = batch_dict["caption_embed"]
         caption_idx = batch_dict["caption_idx"]
         origin_idx = batch_dict["origin_idx"]
+        batch_offset = batch_dict["offset"]
 
         # Compute caption scores
         logit_scale = self.logit_scale
@@ -113,11 +114,9 @@ class CaptionLoss(LossBase):
             caption_scores = new_caption_scores
 
         # Convert data to CSR format
-        offset = batch_dict["offset"]
-        zero_offset = torch.cat((torch.zeros(1, dtype=offset.dtype, device=offset.device), offset))
         corr_idx, offsets, non_empty, counts = convert_list_list_tensor_to_tensor(
             c2p_map,
-            zero_offset,
+            batch_offset,
             remove_empty_list=True,
             origin_idx=origin_idx,
             pc_count=batch_dict["pc_count"],

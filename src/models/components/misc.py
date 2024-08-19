@@ -3,7 +3,10 @@ import torch
 
 @torch.inference_mode()
 def offset2bincount(offset):
-    return torch.diff(offset, prepend=torch.tensor([0], device=offset.device, dtype=torch.long))
+    prepend = None
+    if offset[0] != 0:
+        prepend = torch.tensor([0], device=offset.device, dtype=torch.long)
+    return torch.diff(offset, prepend=prepend)
 
 
 @torch.inference_mode()

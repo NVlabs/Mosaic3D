@@ -70,7 +70,7 @@ class PointConvUNetTextSeg(nn.Module):
             self.module_list.append(self.caption_head)
 
     def forward(self, batch_dict: Dict):
-        offsets = batch_dict["offsets"].cpu().long()
+        offsets = batch_dict["offset"].cpu().long()
         pc = PointCollection(batch_dict["points_xyz"], batch_dict["feats"], offsets=offsets)
         # Convert the dict to point collection
         out_pcs = self.backbone_3d(pc)

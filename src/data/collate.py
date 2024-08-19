@@ -37,6 +37,7 @@ def collate_fn(batch):
         for key in batch.keys():
             if "offset" in key:
                 batch[key] = torch.cumsum(batch[key], dim=0)
+                batch[key] = torch.cat((torch.zeros(1, dtype=torch.int32), batch[key]))
         return batch
     else:
         return default_collate(batch)
@@ -71,7 +72,6 @@ def point_collate_warp_fn(batch: List[Dict], **kwargs):
     batch = collate_fn(batch)
 
     # set require fields for warp.convnet.PointCollection
-    batch["offsets"] = torch.cat((torch.zeros(1, dtype=torch.int32), batch["offset"]))
     batch["labels"] = batch["segment"]
     batch["binary_labels"] = batch["binary"]
     return batch
