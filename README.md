@@ -110,22 +110,49 @@ python src/train.py experiment=regionplc logger=wandb
 If you run the experiments on ORD, use the following command for sbatch job submission
 
 ```bash
-DATASET_ROOT=/lustre/fsw/portfolios/nvr/projects/nvr_lpr_nvgptvision/datasets
+# scannet base 15
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
      trainer=ddp \
      trainer.devices=8 \
      data.train_dataset.data_dir="${DATASET_ROOT}/regionplc" \
      data.val_dataset.data_dir="${DATASET_ROOT}/regionplc" \
-     logger=auto_resume_wandb
+     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
+     logger=auto_resume_wandb \
+     +trainer.precision="16-mixed"
 
-# mixed-precision training
+# scannet base 12
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
+     data=regionplc_base12 \
      trainer=ddp \
      trainer.devices=8 \
      data.train_dataset.data_dir="${DATASET_ROOT}/regionplc" \
      data.val_dataset.data_dir="${DATASET_ROOT}/regionplc" \
+     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
+     logger=auto_resume_wandb \
+     +trainer.precision="16-mixed"
+
+# scannet base 10
+sbatch --gres=gpu:8 ./scripts/train.sbatch \
+     experiment=regionplc \
+     data=regionplc_base10 \
+     trainer=ddp \
+     trainer.devices=8 \
+     data.train_dataset.data_dir="${DATASET_ROOT}/regionplc" \
+     data.val_dataset.data_dir="${DATASET_ROOT}/regionplc" \
+     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
+     logger=auto_resume_wandb \
+     +trainer.precision="16-mixed"
+
+# scannet zero-shot
+sbatch --gres=gpu:8 ./scripts/train.sbatch \
+     experiment=regionplc_openvocab \
+     trainer=ddp \
+     trainer.devices=8 \
+     data.train_dataset.data_dir="${DATASET_ROOT}/regionplc" \
+     data.val_dataset.data_dir="${DATASET_ROOT}/regionplc" \
+     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
      logger=auto_resume_wandb \
      +trainer.precision="16-mixed"
 ```
