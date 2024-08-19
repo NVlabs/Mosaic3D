@@ -7,13 +7,8 @@ import torch
 import torch.nn as nn
 
 from src.models.components.structure import Point
-from src.models.regionplc_refactor.backbone import SparseConvUNet
-from src.models.regionplc_refactor.blocks import (
-    MLP,
-    ResidualBlock,
-    UBlockDecoder,
-    VGGBlock,
-)
+from src.models.regionplc.backbone import SparseConvUNet
+from src.models.regionplc.blocks import MLP, ResidualBlock, UBlockDecoder, VGGBlock
 
 
 class Adapter(nn.Module):

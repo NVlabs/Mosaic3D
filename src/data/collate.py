@@ -43,29 +43,6 @@ def collate_fn(batch):
         return default_collate(batch)
 
 
-def point_collate_regionplc_fn(batch, grid_size: float = 0.02):
-    assert isinstance(batch[0], Mapping), "batch should be a Mapping object"
-    batch = collate_fn(batch)
-
-    # set require fields for regionplc
-    coord = batch["coord"]
-    scale_coord = coord / grid_size
-    grid_coord = scale_coord.int()
-    min_coord = grid_coord.min(0).values
-    grid_coord -= min_coord
-    batch_ids = offset2batch(batch["offset"])
-    batch["points_xyz_voxel_scale"] = torch.cat((batch_ids.unsqueeze(1), grid_coord), dim=-1)
-
-    batch["spatial_shape"] = torch.clip(batch["points_xyz_voxel_scale"].max(0).values[1:] + 1, 128)
-    batch["batch_idxs"] = batch_ids
-    batch["batch_size"] = len(batch["offset"])
-    batch["labels"] = batch["segment"]
-    batch["binary_labels"] = batch["binary"]
-    batch["feats"] = batch["feat"]
-
-    return batch
-
-
 def point_collate_warp_fn(batch: List[Dict], **kwargs):
     assert isinstance(batch, List)
     assert isinstance(batch[0], Mapping)
