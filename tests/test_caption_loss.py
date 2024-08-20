@@ -9,7 +9,7 @@ from warp.convnet.geometry.point_collection import PointCollection
 
 from src.models.losses.caption_loss import CaptionLoss
 from src.models.regionplc.text_models import build_text_model
-from src.models.regionplc.utils.caption_utils import get_caption_batch_refactor
+from src.models.regionplc.utils.caption_utils import get_caption_batch
 
 text_encoder_str = """text_encoder:
 name: CLIP
@@ -57,7 +57,7 @@ class TestCaptionLoss(unittest.TestCase):
         for i, batch_dict in enumerate(loader):
             assert isinstance(batch_dict, dict)
             batch_dict = to_device(batch_dict, device)
-            caption_infos = get_caption_batch_refactor(
+            caption_infos = get_caption_batch(
                 batch_dict["caption_data"], text_encoder, local_rank=0
             )
             batch_dict.update(caption_infos)
