@@ -1,3 +1,4 @@
+import abc
 from typing import Any, Dict, Optional, Tuple
 
 import hydra
@@ -9,6 +10,8 @@ from omegaconf import DictConfig
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
+from src.models.losses.caption_loss import CaptionLoss
+from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
 from src.models.optimization.fastai_lrscheduler import OneCycle
 from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc.utils import caption_utils
@@ -17,24 +20,7 @@ from src.utils import RankedLogger
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-class LitModuleBase(LightningModule):
-    def __init__(
-        self,
-        net: nn.Module,
-        losses: nn.Module,
-        optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler,
-        *args,
-        **kwargs,
-    ) -> None:
-        super().__init__()
-
-        self.save_hyperparameters(logger=False)
-
-        self.net = None
-
-        self.val_results = []
-
+class LitModuleBase(LightningModule, metaclass=abc.ABCMeta):
     def configure_model(self) -> None:
         if self.net is not None:
             return
@@ -54,20 +40,13 @@ class LitModuleBase(LightningModule):
         self.loss_weights = self.hparams.loss_weights
 
     def setup(self, stage: str) -> None:
-        val_dataloader = self.trainer.datamodule.val_dataloader()
-        self.class_names = val_dataloader.dataset.class_names
-
-        self.val_confmat = MulticlassConfusionMatrix(
-            num_classes=len(self.class_names),
-            ignore_index=val_dataloader.dataset.ignore_label,
-        )
+        """Setup the model for training, validation, and testing."""
 
     def forward(self, batch) -> Any:
         return self.net(batch)
 
-    def training_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
-    ) -> torch.Tensor:
+    def training_step(self, batch: Dict, batch_idx: int) -> torch.Tensor:
+        """Training step for the model."""
         ret_dict, tb_dict, dist_dict = self.forward(batch)
 
         # compute loss
@@ -98,12 +77,12 @@ class LitModuleBase(LightningModule):
         self.val_results.append(ret_dict)
 
     def on_validation_epoch_end(self) -> None:
-        # Aggregate results
-        val_results = {}
-        for key in self.val_results[0].keys():
-            val_results[key] = torch.cat([x[key] for x in self.val_results], dim=0).mean(dim=0)
-        self.val_results = []
-        self.log_dict(val_results, sync_dist=True, logger=True)
+        """Validation epoch end hook."""
+        # compute metrics
+        # self.compute_metrics()
+
+        # reset val_results
+        # self.val_results = []
 
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         self.validation_step(batch, batch_idx)
@@ -113,9 +92,9 @@ class LitModuleBase(LightningModule):
 
     def configure_optimizers(self) -> Dict[str, Any]:
         if self.hparams.optimizer.func.__name__.startswith("build_"):
-            optimizer = self.hparams.optimizer(model=self.net)
+            optimizer = self.hparams.optimizer(model=self)
         else:
-            optimizer = self.hparams.optimizer(params=self.net.parameters())
+            optimizer = self.hparams.optimizer(params=self.parameters())
         if self.hparams.scheduler is not None:
             if self.hparams.scheduler.func.__name__ == "OneCycleLR":
                 scheduler = self.hparams.scheduler(

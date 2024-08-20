@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -20,25 +20,31 @@ class ToFeatureAdapter(nn.Module):
         self,
         in_channel: int,
         text_channel: int,
+        binary_channel: int = 0,
         last_norm: bool = True,
-        eps: float = 1e-6,
     ):
         super().__init__()
-        self.in_channel = in_channel
+        channels = text_channel + binary_channel
         self.text_channel = text_channel
-        self.last_norm = last_norm
-        self.eps = eps
+        self.use_binary = binary_channel > 0
 
         # vision adapter
         self.adapter = nn.Sequential(
-            MLPBlock(in_channel, hidden_channels=text_channel, out_channels=text_channel),
-            nn.Linear(text_channel, text_channel),
-            nn.Identity() if not last_norm else nn.LayerNorm(text_channel),
+            MLPBlock(in_channel, hidden_channels=text_channel, out_channels=channels),
+            nn.Linear(channels, channels),
+            nn.Identity() if not last_norm else nn.LayerNorm(channels),
         )
 
-    def forward(self, x: PointCollection) -> Float[Tensor, "N C"]:  # noqa: F722
+    def forward(
+        self, x: PointCollection
+    ) -> Tuple[Float[Tensor, "N C"], Float[Tensor, "N"]]:  # noqa: F722, F821
         feats = self.adapter(x.batched_features.batched_tensor)
-        return feats
+        if self.use_binary:
+            # split the features into text and binary features
+            text_feats = feats[:, : self.text_channel]
+            binary_feats = feats[:, self.text_channel :]
+            return text_feats, binary_feats
+        return (feats, None)
 
 
 class PointConvUNetToCLIP(NetworkBase):
@@ -55,17 +61,20 @@ class PointConvUNetToCLIP(NetworkBase):
         self.adapter = ToFeatureAdapter(**adapter_cfg)
 
     def data_dict_to_input(self, batch_dict: Dict) -> Dict:
-        offsets = batch_dict["offsets"].cpu().long()
+        offsets = batch_dict["offset"].cpu().long()
         # Convert the dict to point collection
-        pc = PointCollection(batch_dict["coord"], batch_dict["feats"], offsets=offsets).to(
+        pc = PointCollection(batch_dict["coord"], batch_dict["feat"], offsets=offsets).to(
             self.device
         )
         return pc
 
-    def forward(self, batch_dict: Dict):
+    def forward(self, batch_dict: Dict) -> Dict[str, Tensor]:
         pc = self.data_dict_to_input(batch_dict)
         # PointConvUNet returns a list of output from each layer from the last layer to the first layer
         # [Last layer, ..., First layer]
         out_pcs = self.backbone_3d(pc)
-        adapter_feats = self.adapter(out_pcs[0])
-        return adapter_feats
+        clip_feat, binary_scores = self.adapter(out_pcs[0])
+        out_dict = dict(clip_feat=clip_feat, pcs=out_pcs)
+        if binary_scores is not None:
+            out_dict["binary_scores"] = binary_scores
+        return out_dict

@@ -1,4 +1,5 @@
-_target_: src.models.lightning_modules.module_base.LitModuleBase
+# _target_: src.models.lightning_modules.module_base.LitModuleBase
+_target_: src.models.networks.warp.litmodule.WarpLitModule
 
 optimizer:
   _target_: torch.optim.AdamW
@@ -43,27 +44,31 @@ net:
   adapter_cfg:
     in_channel: ${model.net.backbone_cfg.out_channels}
     text_channel: 512
+    # Automatically set the binary_channel to 1 if binary_loss is enabled
+    binary_channel: ${model.loss_cfg.binary_loss}
 
-losses:
-  - caption_loss:
-      _target_: src.models.losses.caption_loss.CaptionLoss
-      normalize_input: true
-      ignore_label: ${data.train_dataset.ignore_label}
-
-  - clip_alignment_loss:
-      _target_: src.models.losses.clip_alignment_loss.CLIPAlignmentLoss
-      normalize_input: false
-      text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
-      loss_type: cross_entropy
-      ignore_label: ${data.train_dataset.ignore_label}
-
-loss_weights:
-  caption_loss: 1.0
-  clip_alignment_loss: 1.0
+loss_cfg:
+  caption_loss:
+    normalize_input: true
+    novel_grad_only: true
+    ignore_label: ${data.train_dataset.ignore_label}
+    learnable_logit: true
+  seg_loss:
+    normalize_input: false
+    text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
+    loss_type: cross_entropy
+    ignore_label: ${data.train_dataset.ignore_label}
+    learnable_logit: false
+  binary_loss: true
+  binary_loss_weight: 1.0
+  caption_loss_weight: 0.5
+  seg_loss_weight: 1.0
+  caption_learnable_logit_scale: true
+  clip_learnable_logit_scale: false
 
 # compile model for faster training with pytorch 2.0
-# text_encoder:
-#   name: CLIP
-#   backbone: ViT-B/16
+text_encoder:
+  name: CLIP
+  backbone: ViT-B/16
 
 compile: false
