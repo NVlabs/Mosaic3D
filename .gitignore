@@ -153,3 +153,8 @@ configs/local/default.yaml
 
 # Aim logging
 .aim
+
+# Results and outputs
+results/
+outputs/
+slurm_outputs/

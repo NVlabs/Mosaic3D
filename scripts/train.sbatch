@@ -12,11 +12,9 @@
 # Usage:
 #
 # sbatch --gres=gpu:8 ./scripts/train.sbatch \
-#     experiment=train_lseg3d \
-#     trainer=ddp \
-#     trainer.devices=8 \
-#     data.train_dataset.data_dir=${DATASET_ROOT}/SceneVerse \
-#     data.val_dataset.datapath_prefix=${DATASET_ROOT}/OpenScene/scannet_3d
+#      experiment=regionplc_openvocab \
+#      trainer=ddp \
+#      logger=auto_resume_wandb
 
 # Get the number of gpus from scontrol and strip all the white spaces and new lines
 # example output
@@ -34,10 +32,13 @@ ACCOUNT=nvr_lpr_nvgptvision
 LUSTRE_NVR=/lustre/fsw/portfolios/nvr
 LUSTRE_HOME="${LUSTRE_NVR}/users/${USER}"
 PROJECT_ROOT="${LUSTRE_NVR}/projects/${ACCOUNT}"
+DATA_DIR="${PROJECT_ROOT}/datasets"
 
 # Image and code root
-IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d"
-CODE_ROOT="${LUSTRE_HOME}/projects/openvocab-3d"
+TAG="warp"
+IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:$TAG"
+# Get the absolute current working directory
+CODE_ROOT=$(pwd)
 CURR_SCRIPT="${CODE_ROOT}/scripts/train.sbatch"
 
 # HF_HOME for credentials and other Hugging Face data.
@@ -72,6 +73,12 @@ else
     IMAGE_CACHE_FILE=${IMAGE_URL}
 fi
 
+TRAINER="ddp"  # Default trainer
+# If GPU_COUNT==1, set trainer to 'gpu'
+if [ "$GPU_COUNT" -eq 1 ]; then
+    TRAINER="gpu"
+fi
+
 # Your training script here
 CMD="
 TZ=America/Los_Angeles date;
@@ -83,6 +90,8 @@ torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \
     src/train.py \
+    trainer=${TRAINER} \
+    trainer.devices=${GPU_COUNT} \
     ${TRAINING_ARGS[@]}
 "
 
@@ -90,7 +99,7 @@ set -x
 # Pass CMD with double quotes
 srun \
     --container-image=$IMAGE_CACHE_FILE \
-    --container-mounts="$HOME:/root,/lustre:/lustre,${CODE_ROOT}:/workspace" \
+    --container-mounts="$HOME:/root,/lustre:/lustre,${CODE_ROOT}:/workspace,${DATA_DIR}:/datasets" \
     bash -c "$CMD"
 
 # Get the status from $OUTPUT_FOLDER/status.txt
@@ -105,4 +114,3 @@ if [ -f $STATUS_FILE ]; then
 else
     echo "Status file not found: $STATUS_FILE"
 fi
-

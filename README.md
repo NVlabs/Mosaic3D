@@ -113,12 +113,6 @@ If you run the experiments on ORD, use the following command for sbatch job subm
 # scannet base 15
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
-     trainer=ddp \
-     trainer.devices=8 \
-     trainer.max_epochs=128 \
-     data.train_dataset.data_dir="${DATASET_ROOT}/scannet_hf" \
-     data.train_dataset.caption_dir="${DATASET_ROOT}/regionplc_converted" \
-     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
      logger=auto_resume_wandb \
      seed=${SEED[0]} \
      +trainer.precision="16-mixed"
@@ -127,11 +121,6 @@ sbatch --gres=gpu:8 ./scripts/train.sbatch \
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
      data=regionplc_base12 \
-     trainer=ddp \
-     trainer.devices=8 \
-     data.train_dataset.data_dir="${DATASET_ROOT}/scannet_hf" \
-     data.train_dataset.caption_dir="${DATASET_ROOT}/regionplc_converted" \
-     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
      logger=auto_resume_wandb \
      +trainer.precision="16-mixed"
 
@@ -139,24 +128,22 @@ sbatch --gres=gpu:8 ./scripts/train.sbatch \
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
      data=regionplc_base10 \
-     trainer=ddp \
-     trainer.devices=8 \
-     data.train_dataset.data_dir="${DATASET_ROOT}/scannet_hf" \
-     data.train_dataset.caption_dir="${DATASET_ROOT}/regionplc_converted" \
-     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
      logger=auto_resume_wandb \
      +trainer.precision="16-mixed"
 
 # scannet zero-shot
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc_openvocab \
-     trainer=ddp \
-     trainer.devices=8 \
-     data.train_dataset.data_dir="${DATASET_ROOT}/scannet_hf" \
-     data.train_dataset.caption_dir="${DATASET_ROOT}/regionplc_converted" \
-     model.loss_cfg.seg_loss.text_clip_path="${DATASET_ROOT}/regionplc/text_embed/scannet_clip-ViT-B16_id.pth" \
+     trainer.max_epochs=128 \
      logger=auto_resume_wandb \
+     seed=${SEED} \
      +trainer.precision="16-mixed"
+
+# Warp PointConv
+sbatch --gres=gpu:8 ./scripts/train.sbatch \
+     experiment=regionplc \
+     model=warp_pointconv \
+     logger=auto_resume_wandb
 ```
 
 ## Development
