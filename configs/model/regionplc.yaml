@@ -65,7 +65,7 @@ loss_cfg:
     learnable_logit: true
   seg_loss:
     normalize_input: false
-    text_clip_path: ???
+    text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
     loss_type: cross_entropy
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: false
