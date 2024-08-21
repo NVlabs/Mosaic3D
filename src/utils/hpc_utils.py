@@ -168,8 +168,8 @@ def hpc_config(cfg: DictConfig) -> None:
             cfg.ckpt_path = checkpoint_path
 
     # Replace the logger.wandb._target_ to AutoResumeWandbLogger
-    if "wandb" in cfg.logger:
-        #cfg.logger.wandb._target_ = "src.utils.autoresume_wandb_logger.AutoResumeWandbLogger"
+    if "debug" not in cfg.task_name and "wandb" in cfg.logger:
+        # cfg.logger.wandb._target_ = "src.utils.autoresume_wandb_logger.AutoResumeWandbLogger"
         assert (
             str(cfg.logger.wandb._target_)
             == "src.utils.auto_resume_wandb_logger.AutoResumeWandbLogger"

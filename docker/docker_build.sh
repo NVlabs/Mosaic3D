@@ -44,6 +44,12 @@ IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
 if [ ! -d warp ]; then
     echo "Cloning warp..."
     git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
+# Check if warp exists but is not up to date
+elif [ -d warp ]; then
+    echo "Updating warp..."
+    cd warp || exit
+    git pull
+    cd ..
 fi
 
 # Build the Docker image
