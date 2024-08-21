@@ -114,6 +114,7 @@ If you run the experiments on ORD, use the following command for sbatch job subm
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
      logger=auto_resume_wandb \
+     seed=${SEED[0]} \
      +trainer.precision="16-mixed"
 
 # scannet base 12
