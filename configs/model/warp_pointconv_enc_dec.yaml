@@ -19,26 +19,29 @@ scheduler:
 scheduler_interval: step
 
 net:
-  _target_: src.models.networks.warp.point_convnet.PointConvUNetToCLIP
+  _target_: src.models.networks.warp.point_convnet.PointConvEncoderDecoderToCLIP
   _partial_: true
 
-  # warp.convnet.models.point_conv_unet.PointConvUNet
+  # warp.convnet.models.point_conv_unet.PointConvEncoderDecoder
   backbone_cfg:
     in_channels: 6
-    out_channels: 32
-    num_levels: 2
-    down_channels: [32, 64, 128]
-    up_channels: [32, 64, 128]
+    out_channels: 512
+    encoder_channels: [32, 64, 128, 192, 256]
+    decoder_channels: [256, 512]
+    num_encoder_blocks_per_level: [1, 1, 1, 1]
+    num_decoder_blocks_per_level: [1]
     # neighbor search args
     neighbor_search_args:
       _target_: warp.convnet.geometry.ops.neighbor_search_continuous.NeighborSearchArgs
       mode: radius
-    neighbor_search_radii: [0.2, 0.4]
+    neighbor_search_radii: [0.1, 0.2, 0.4, 0.8]
     # pooling args
     pooling_args:
       _target_: warp.convnet.geometry.ops.point_pool.FeaturePoolingArgs
       pooling_mode: reductions
-    downsample_voxel_sizes: [0.1, 0.2]
+    downsample_voxel_sizes: [0.05, 0.1, 0.2, 0.4]
+    num_levels_enc: 4
+    num_levels_dec: 1
 
   # last mlp
   adapter_cfg:

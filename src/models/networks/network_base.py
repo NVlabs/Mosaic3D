@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Dict
 
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 
 class NetworkBase(nn.Module, metaclass=ABCMeta):
@@ -22,4 +22,14 @@ class NetworkBase(nn.Module, metaclass=ABCMeta):
 
     @abstractmethod
     def data_dict_to_input(self, data_dict: Dict) -> Any:
+        pass
+
+
+class NetworkBaseDict(NetworkBase):
+    @abstractmethod
+    def forward(self, data_dict: Dict) -> Dict:
+        pass
+
+    @abstractmethod
+    def data_dict_to_input(self, data_dict: Dict) -> Dict:
         pass

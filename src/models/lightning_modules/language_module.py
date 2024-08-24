@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
@@ -72,20 +72,30 @@ class DenseLanguageLitModule(LitModuleBase):
         self.novel_class_idx = val_dataloader.dataset.novel_class_idx
         self.valid_class_idx = val_dataloader.dataset.valid_class_idx
 
-    def forward(self, batch) -> Dict[str, Any]:
+    def forward(self, batch: Any) -> Dict[str, Any]:
         point = self.net(batch)
-        out_dict = self._output_to_dict(point)
+        out_dict = self._output_to_dict(point, batch)
         return out_dict
 
-    def _output_to_dict(self, point: Any) -> Dict[str, Any]:
+    def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def match_labels(self, batch: Dict[str, Any], pred_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Match the output of the network to the labels in the batch."""
+        return batch
+
     def training_step(self, batch, batch_idx):
+        # Prepare caption data
         caption_infos = caption_utils.get_caption_batch(
             batch["caption_data"], self.text_encoder, local_rank=self.local_rank
         )
         batch.update(caption_infos)
+
+        # Forward
         out_dict = self(batch)
+
+        # Match labels
+        batch = self.match_labels(batch=batch, pred_dict=out_dict)
 
         # loss
         binary_loss, seg_loss, caption_loss = 0, 0, 0
@@ -132,6 +142,7 @@ class DenseLanguageLitModule(LitModuleBase):
 
     def validation_step(self, batch, batch_idx):
         out_dict = self(batch)
+        batch = self.match_labels(batch=batch, pred_dict=out_dict)
         logits = out_dict["logits"]
 
         new_logits = torch.full_like(logits, torch.finfo(logits.dtype).min)

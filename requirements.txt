@@ -23,6 +23,7 @@ rich            # beautiful text formatting in terminal
 pytest          # tests
 black
 fire
+overrides
 # sh            # for running bash commands in some tests (linux/macos only)
 
 # --------- Warp ConvNet -------- #
