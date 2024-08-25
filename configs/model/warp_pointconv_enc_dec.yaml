@@ -47,8 +47,6 @@ net:
   adapter_cfg:
     in_channel: ${model.net.backbone_cfg.out_channels}
     text_channel: 512
-    # Automatically set the binary_channel to 1 if binary_loss is enabled
-    binary_channel: ${model.loss_cfg.binary_loss}
 
 loss_cfg:
   caption_loss:
@@ -62,12 +60,9 @@ loss_cfg:
     loss_type: cross_entropy
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: false
-  binary_loss: true
-  binary_loss_weight: 1.0
+  binary_loss: false
   caption_loss_weight: 0.5
   seg_loss_weight: 1.0
-  caption_learnable_logit_scale: true
-  clip_learnable_logit_scale: false
 
 # compile model for faster training with pytorch 2.0
 text_encoder:

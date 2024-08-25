@@ -39,7 +39,8 @@ class WarpLitModule(DenseLanguageLitModule):
 
         # clip_feat
         output["clip_feat"] = output["clip_feat"][orig_map]
-        output["binary_scores"] = output["binary_scores"][orig_map]
+        if "binary_scores" in output:
+            output["binary_scores"] = output["binary_scores"][orig_map]
 
         if not self.training:
             logits = self.clip_alignment_loss.predict(output["clip_feat"], return_logit=True)

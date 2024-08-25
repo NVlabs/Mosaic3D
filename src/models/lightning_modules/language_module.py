@@ -25,7 +25,6 @@ class DenseLanguageLitModule(LitModuleBase):
         scheduler_interval: str,
         text_encoder: Dict,
         compile: bool,
-        #
         loss_cfg: Dict,
     ):
         super().__init__()
@@ -85,11 +84,12 @@ class DenseLanguageLitModule(LitModuleBase):
         return batch
 
     def training_step(self, batch, batch_idx):
-        # Prepare caption data
-        caption_infos = caption_utils.get_caption_batch(
-            batch["caption_data"], self.text_encoder, local_rank=self.local_rank
-        )
-        batch.update(caption_infos)
+        # Prepare caption data in bf16
+        with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
+            caption_infos = caption_utils.get_caption_batch(
+                batch["caption_data"], self.text_encoder, local_rank=self.local_rank
+            )
+            batch.update(caption_infos)
 
         # Forward
         out_dict = self(batch)
@@ -127,10 +127,12 @@ class DenseLanguageLitModule(LitModuleBase):
 
         log_metrics = dict(
             loss=loss,
-            binary_loss=binary_loss,
             caption_loss=caption_loss,
             seg_loss=seg_loss,
         )
+        if self.binary_loss is not None:
+            log_metrics["binary_loss"] = binary_loss
+
         self.log_dict(
             {f"train/{key}": value for key, value in log_metrics.items()},
             prog_bar=True,

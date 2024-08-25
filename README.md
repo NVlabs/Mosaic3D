@@ -114,7 +114,7 @@ If you run the experiments on ORD, use the following command for sbatch job subm
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
      experiment=regionplc \
      logger=auto_resume_wandb \
-     seed=${SEED[0]} \
+     seed=${SEED} \
      +trainer.precision="16-mixed"
 
 # scannet base 12
@@ -139,10 +139,12 @@ sbatch --gres=gpu:8 ./scripts/train.sbatch \
      seed=${SEED} \
      +trainer.precision="16-mixed"
 
-# Warp PointConv
+# Warp PointConv zero-shot
 sbatch --gres=gpu:8 ./scripts/train.sbatch \
-     experiment=regionplc \
-     model=warp_pointconv \
+     experiment=regionplc_openvocab \
+     model=warp_pointconv_enc_dec \
+     trainer.max_epochs=128 \
+     data.batch_size=2 \
      logger=auto_resume_wandb
 ```
 
