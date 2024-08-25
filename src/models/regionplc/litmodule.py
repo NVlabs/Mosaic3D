@@ -20,6 +20,5 @@ class RegionPLCLitModule(DenseLanguageLitModule):
 
         if not self.training:
             logits = self.clip_alignment_loss.predict(clip_feat, return_logit=True)
-            logits = logits[output.v2p_map]
             out_dict["logits"] = logits
         return out_dict
