@@ -45,12 +45,18 @@ class DenseLanguageLitModule(LitModuleBase):
         self.val_confmat = None
         self.val_miou_best = MaxMetric()
 
+        # Sync distributed metrics
+        self.train_sync_dist = loss_cfg.get("sync_dist", False)
+
     def configure_model(self) -> None:
         # network
         if self.net is not None:
             return
 
         self.net = self.hparams.net()
+        # Print network on the first GPU
+        if self.local_rank == 0:
+            log.info(self.net)
 
         # text encoder
         self.text_encoder = build_text_model(self.hparams.text_encoder)
@@ -128,10 +134,11 @@ class DenseLanguageLitModule(LitModuleBase):
         log_metrics = dict(
             loss=loss,
             caption_loss=caption_loss,
-            seg_loss=seg_loss,
         )
         if self.binary_loss is not None:
             log_metrics["binary_loss"] = binary_loss
+        if not self.clip_alignment_loss.eval_only:
+            log_metrics["seg_loss"] = seg_loss
 
         self.log_dict(
             {f"train/{key}": value for key, value in log_metrics.items()},
@@ -139,6 +146,7 @@ class DenseLanguageLitModule(LitModuleBase):
             logger=True,
             on_step=True,
             on_epoch=False,
+            sync_dist=self.train_sync_dist,
         )
         return loss
 

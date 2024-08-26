@@ -2,19 +2,28 @@
 _target_: src.models.networks.warp.litmodule.WarpLitModule
 
 optimizer:
-  _target_: torch.optim.AdamW
+  _target_: src.models.optimization.build_optimizer
   _partial_: true
-  lr: 4e-3
-  weight_decay: 1e-4
+  optim_cfg:
+    BATCH_SIZE_PER_GPU: 4
+    NUM_EPOCHS: 128
+    LR: 4e-3
+    SCHEDULER: adam_onecycle
+    OPTIMIZER: adam_onecycle
+    WEIGHT_DECAY: 0.0001
+    MOMENTUM: 0.9
+    STEP_EPOCH: 50
+    MULTIPLIER: 0.1
+    CLIP_GRAD: False
+    PCT_START: 0.39
+    DIV_FACTOR: 1
+    MOMS: [0.95, 0.85]
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.OneCycleLR
+  _target_: src.models.optimization.build_scheduler
   _partial_: true
-  max_lr: ${model.optimizer.lr}
-  pct_start: 0.39
-  anneal_strategy: cos
-  div_factor: 1
-  final_div_factor: 10000.0
+  last_epoch: -1
+  optim_cfg: ${model.optimizer.optim_cfg}
 
 scheduler_interval: step
 
@@ -26,8 +35,8 @@ net:
   backbone_cfg:
     in_channels: 6
     out_channels: 512
-    encoder_channels: [32, 64, 128, 192, 256]
-    decoder_channels: [256, 512]
+    encoder_channels: [32, 64, 96, 128, 160]
+    decoder_channels: [160, 256]
     num_encoder_blocks_per_level: [1, 1, 1, 1]
     num_decoder_blocks_per_level: [1]
     # neighbor search args
@@ -47,11 +56,13 @@ net:
   adapter_cfg:
     in_channel: ${model.net.backbone_cfg.out_channels}
     text_channel: 512
+    last_norm: true
+    normalize_output: true
 
 loss_cfg:
   caption_loss:
-    normalize_input: true
-    novel_grad_only: true
+    normalize_input: false
+    novel_grad_only: false
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: true
   seg_loss:
@@ -61,8 +72,9 @@ loss_cfg:
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: false
   binary_loss: false
-  caption_loss_weight: 0.5
+  caption_loss_weight: 1.0
   seg_loss_weight: 1.0
+  sync_dist: false # print synced loss (0.82 it/s vs 84 it/s)
 
 # compile model for faster training with pytorch 2.0
 text_encoder:

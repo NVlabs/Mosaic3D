@@ -87,6 +87,7 @@ conda deactivate;
 nvidia-smi;
 export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \

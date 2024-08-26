@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from jaxtyping import Float
 from omegaconf import DictConfig
 from overrides import override
@@ -22,12 +23,15 @@ class ToFeatureAdapter(nn.Module):
         in_channel: int,
         text_channel: int,
         binary_channel: int = 0,
-        last_norm: bool = True,
+        last_norm: bool = False,
+        normalize_output: bool = False,
     ):
         super().__init__()
         channels = text_channel + binary_channel
         self.text_channel = text_channel
         self.use_binary = binary_channel > 0
+        self.last_norm = last_norm
+        self.normalize_output = normalize_output
 
         # vision adapter
         self.adapter = nn.Sequential(
@@ -44,8 +48,14 @@ class ToFeatureAdapter(nn.Module):
             # split the features into text and binary features
             text_feats = feats[:, : self.text_channel]
             binary_feats = feats[:, self.text_channel :]
-            return text_feats, binary_feats
-        return (feats, None)
+        else:
+            text_feats = feats
+            binary_feats = None
+
+        if self.normalize_output:
+            text_feats = F.normalize(text_feats, p=2, dim=-1)
+
+        return text_feats, binary_feats
 
 
 class PointConvUNetToCLIP(NetworkBaseDict):

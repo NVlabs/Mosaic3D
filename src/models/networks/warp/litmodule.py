@@ -23,6 +23,9 @@ class WarpLitModule(DenseLanguageLitModule):
 
     @override
     def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
+        # clear cache memory
+        torch.cuda.empty_cache()
+
         # binary, segment, and captions(c2pmap, caption_idx, origin_idx, offset)
         # Find mappings
         pc = output["pcs"][0]
