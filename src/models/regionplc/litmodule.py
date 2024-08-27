@@ -1,18 +1,22 @@
 from typing import Any, Dict, Tuple
 
 import torch
+from overrides import override
 
 from src.models.components.structure import Point
 from src.models.lightning_modules.language_module import DenseLanguageLitModule
 
 
 class RegionPLCLitModule(DenseLanguageLitModule):
-    def _output_to_dict(self, point: Any) -> Dict[str, Any]:
-        clip_feat = point.sparse_conv_feat.features[point.v2p_map]
-        out_dict = dict(point=point, clip_feat=clip_feat)
+    @override
+    def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
+        assert isinstance(output, Point)
+        output: Point = output
+        clip_feat = output.sparse_conv_feat.features[output.v2p_map]
+        out_dict = dict(point=output, clip_feat=clip_feat)
         # Check if binary scores are present
-        if hasattr(point, "binary_scores"):
-            out_dict["binary_scores"] = point.binary_scores
+        if hasattr(output, "binary_scores"):
+            out_dict["binary_scores"] = output.binary_scores
 
         if not self.training:
             logits = self.clip_alignment_loss.predict(clip_feat, return_logit=True)

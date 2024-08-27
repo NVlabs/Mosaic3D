@@ -92,7 +92,8 @@ class CaptionLoss(LossBase):
 
         # Extract caption information
         c2p_map = batch_dict["c2p_map"]
-        caption_embed = batch_dict["caption_embed"]
+        # clone to use an inference mode tensor in training
+        caption_embed = batch_dict["caption_embed"].clone()
         caption_idx = batch_dict["caption_idx"]
         origin_idx = batch_dict["origin_idx"]
         batch_offset = batch_dict["offset"]

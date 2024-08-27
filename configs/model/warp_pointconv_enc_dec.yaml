@@ -2,55 +2,67 @@
 _target_: src.models.networks.warp.litmodule.WarpLitModule
 
 optimizer:
-  _target_: torch.optim.AdamW
+  _target_: src.models.optimization.build_optimizer
   _partial_: true
-  lr: 4e-3
-  weight_decay: 1e-4
+  optim_cfg:
+    BATCH_SIZE_PER_GPU: 4
+    NUM_EPOCHS: 128
+    LR: 4e-3
+    SCHEDULER: adam_onecycle
+    OPTIMIZER: adam_onecycle
+    WEIGHT_DECAY: 0.0001
+    MOMENTUM: 0.9
+    STEP_EPOCH: 50
+    MULTIPLIER: 0.1
+    CLIP_GRAD: False
+    PCT_START: 0.39
+    DIV_FACTOR: 1
+    MOMS: [0.95, 0.85]
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.OneCycleLR
+  _target_: src.models.optimization.build_scheduler
   _partial_: true
-  max_lr: ${model.optimizer.lr}
-  pct_start: 0.39
-  anneal_strategy: cos
-  div_factor: 1
-  final_div_factor: 10000.0
+  last_epoch: -1
+  optim_cfg: ${model.optimizer.optim_cfg}
 
 scheduler_interval: step
 
 net:
-  _target_: src.models.networks.warp.point_convnet.PointConvUNetToCLIP
+  _target_: src.models.networks.warp.point_convnet.PointConvEncoderDecoderToCLIP
   _partial_: true
 
-  # warp.convnet.models.point_conv_unet.PointConvUNet
+  # warp.convnet.models.point_conv_unet.PointConvEncoderDecoder
   backbone_cfg:
     in_channels: 6
-    out_channels: 32
-    num_levels: 2
-    down_channels: [32, 64, 128]
-    up_channels: [32, 64, 128]
+    out_channels: 512
+    encoder_channels: [32, 64, 96, 128, 160]
+    decoder_channels: [160, 256]
+    num_encoder_blocks_per_level: [1, 1, 1, 1]
+    num_decoder_blocks_per_level: [1]
     # neighbor search args
     neighbor_search_args:
       _target_: warp.convnet.geometry.ops.neighbor_search_continuous.NeighborSearchArgs
       mode: radius
-    neighbor_search_radii: [0.2, 0.4]
+    neighbor_search_radii: [0.1, 0.2, 0.4, 0.8]
     # pooling args
     pooling_args:
       _target_: warp.convnet.geometry.ops.point_pool.FeaturePoolingArgs
       pooling_mode: reductions
-    downsample_voxel_sizes: [0.1, 0.2]
+    downsample_voxel_sizes: [0.05, 0.1, 0.2, 0.4]
+    num_levels_enc: 4
+    num_levels_dec: 1
 
   # last mlp
   adapter_cfg:
     in_channel: ${model.net.backbone_cfg.out_channels}
     text_channel: 512
-    # Automatically set the binary_channel to 1 if binary_loss is enabled
-    binary_channel: ${model.loss_cfg.binary_loss}
+    last_norm: true
+    normalize_output: true
 
 loss_cfg:
   caption_loss:
-    normalize_input: true
-    novel_grad_only: true
+    normalize_input: false
+    novel_grad_only: false
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: true
   seg_loss:
@@ -59,12 +71,10 @@ loss_cfg:
     loss_type: cross_entropy
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: false
-  binary_loss: true
-  binary_loss_weight: 1.0
-  caption_loss_weight: 0.5
+  binary_loss: false
+  caption_loss_weight: 1.0
   seg_loss_weight: 1.0
-  caption_learnable_logit_scale: true
-  clip_learnable_logit_scale: false
+  sync_dist: false # print synced loss (0.82 it/s vs 84 it/s)
 
 # compile model for faster training with pytorch 2.0
 text_encoder:

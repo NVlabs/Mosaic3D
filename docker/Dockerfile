@@ -27,6 +27,7 @@ RUN apt-get update && \
     cmake \
     curl \
     git \
+    git-lfs \
     tig \
     zsh \
     tmux \
@@ -49,6 +50,9 @@ RUN apt-get update && \
     vim-tiny \
     wget && \
     rm -rf /var/lib/apt/lists/*
+
+# Git lfs
+RUN git lfs install
 
 # Create non root user and setup environment.
 RUN useradd -m -d /home/user -g root -G sudo -u 1000 user
