@@ -92,10 +92,9 @@ class DenseLanguageLitModule(LitModuleBase):
     def training_step(self, batch, batch_idx):
         # Prepare caption data in bf16
         with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-            caption_infos = caption_utils.get_caption_batch(
-                batch["caption_data"], self.text_encoder, local_rank=self.local_rank
+            caption_embeds = caption_utils.get_caption_batch(
+                batch["caption_data"]["caption"], self.text_encoder
             )
-            batch.update(caption_infos)
 
         # Forward
         out_dict = self(batch)
@@ -126,7 +125,14 @@ class DenseLanguageLitModule(LitModuleBase):
             )
 
         caption_loss = (
-            self.caption_loss.loss(clip_feat, batch) * self.hparams.loss_cfg.caption_loss_weight
+            self.caption_loss.loss(
+                clip_feat,
+                caption_embeddings=caption_embeds,
+                batched_list_of_point_indices=batch["caption_data"]["idx"],
+                input_batch_offsets=batch["offset"],
+                mappings=out_dict.get("mappings", None),
+            )
+            * self.hparams.loss_cfg.caption_loss_weight
         )
 
         loss = binary_loss + seg_loss + caption_loss

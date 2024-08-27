@@ -59,10 +59,7 @@ net:
 
 loss_cfg:
   caption_loss:
-    normalize_input: true
-    novel_grad_only: true
-    ignore_label: ${data.train_dataset.ignore_label}
-    learnable_logit: true
+    loss_reduction: weighted
   seg_loss:
     normalize_input: false
     text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth

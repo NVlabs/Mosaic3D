@@ -61,11 +61,9 @@ net:
 
 loss_cfg:
   caption_loss:
-    normalize_input: false
-    novel_grad_only: false
-    ignore_label: ${data.train_dataset.ignore_label}
-    learnable_logit: true
+    loss_reduction: weighted
   seg_loss:
+    eval_only: true # no seg loss training if set to true
     normalize_input: false
     text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
     loss_type: cross_entropy
@@ -74,7 +72,7 @@ loss_cfg:
   binary_loss: false
   caption_loss_weight: 1.0
   seg_loss_weight: 1.0
-  sync_dist: false # print synced loss (0.82 it/s vs 84 it/s)
+  sync_dist: true # print synced loss (0.82 it/s vs 84 it/s)
 
 # compile model for faster training with pytorch 2.0
 text_encoder:

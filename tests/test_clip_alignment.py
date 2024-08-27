@@ -19,8 +19,6 @@ class TestCLIPAlignmentLoss(unittest.TestCase):
         with open("configs/data/regionplc_base15.yaml") as f:
             omega_config_dict = yaml.safe_load(f.read())
         cfg = OmegaConf.create(omega_config_dict)
-        cfg.collate_fn._target_ = "src.data.collate.point_collate_warp_fn"
-
         cfg.val_dataset = cfg.train_dataset
         datamodule = hydra.utils.instantiate(cfg)
 

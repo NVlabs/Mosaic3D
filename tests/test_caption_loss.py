@@ -2,6 +2,7 @@ import unittest
 
 import hydra
 import torch
+import warp as wp
 import yaml
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
@@ -39,13 +40,9 @@ class TestCaptionLoss(unittest.TestCase):
         with open("configs/data/regionplc_base15.yaml") as f:
             omega_config_dict = yaml.safe_load(f.read())
         cfg = OmegaConf.create(omega_config_dict)
-        cfg.collate_fn._target_ = "src.data.collate.point_collate_warp_fn"
-
         cfg.val_dataset = cfg.train_dataset
         datamodule: LightningDataModule = hydra.utils.instantiate(cfg)
-        caption_head = CaptionLoss(
-            normalize_input=True,
-        )
+        caption_head = CaptionLoss()
 
         device = torch.device("cuda:0")
         text_encoder_cfg = OmegaConf.create(text_encoder_str)
@@ -57,17 +54,27 @@ class TestCaptionLoss(unittest.TestCase):
         for i, batch_dict in enumerate(loader):
             assert isinstance(batch_dict, dict)
             batch_dict = to_device(batch_dict, device)
-            caption_infos = get_caption_batch(
-                batch_dict["caption_data"], text_encoder, local_rank=0
-            )
-            batch_dict.update(caption_infos)
+            caption_embed = get_caption_batch(batch_dict["caption_data"]["caption"], text_encoder)
 
             rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
             pc = PointCollection(
-                batch_dict["coord"].cpu(), rand_feats, offsets=batch_dict["offset"].cpu()
+                batch_dict["coord"].cpu(),
+                rand_feats,
+                offsets=batch_dict["offset"].cpu(),
             ).to(device)
 
-            loss = caption_head.loss(pc, batch_dict)
+            loss = caption_head.loss(
+                pc.feature_tensor,
+                caption_embeddings=caption_embed,
+                batched_list_of_point_indices=batch_dict["caption_data"]["idx"],
+                input_batch_offsets=batch_dict["offset"],
+                mappings=None,
+            )
             print(loss)
             if i == 0:
                 break
+
+
+if __name__ == "__main__":
+    wp.init()
+    unittest.main()

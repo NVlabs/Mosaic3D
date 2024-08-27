@@ -8,6 +8,4 @@ loss_cfg:
   binary_loss: false # disable binary loss
   seg_loss:
     eval_only: true
-  caption_loss:
-    novel_grad_only: false
   caption_loss_weight: 1.0
