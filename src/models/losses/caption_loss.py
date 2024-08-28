@@ -48,13 +48,15 @@ def convert_list_list_tensor_to_tensor(
     return point_indices, offsets, counts
 
 
-class CaptionLoss(LossBase):
+class CaptionAlignmentLoss(LossBase):
     def __init__(
         self,
         loss_reduction: Literal["mean", "weighted"] = "weighted",
+        normalize_input: bool = True,
     ):
         super().__init__()
         self.loss_reduction = loss_reduction
+        self.normalize_input = normalize_input
         self.sim_func = nn.CosineSimilarity(dim=-1)
 
     def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
@@ -105,6 +107,8 @@ class CaptionLoss(LossBase):
             )
 
         # Reduce features
+        if self.normalize_input:
+            pred_feats = nn.functional.normalize(pred_feats, dim=-1)
         rep_pred_feats = pred_feats[corr_idx]
         reduced_pred_feats = segment_csr(
             rep_pred_feats,
@@ -122,4 +126,68 @@ class CaptionLoss(LossBase):
             loss = loss.mean()
         elif self.loss_reduction == "weighted":
             loss = (loss * counts).sum() / counts.sum()
+        return loss
+
+
+class CaptionLoss(LossBase):
+    def __init__(
+        self,
+        normalize_input: bool = True,
+        ignore_index: int = -100,
+        **kwargs,
+    ):
+        super().__init__()
+        self.normalize_input = normalize_input
+        self.loss_func = nn.CrossEntropyLoss(ignore_index=ignore_index)
+        self.kwargs = kwargs
+
+    def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
+        return pred_feats, batch_dict
+
+    def loss(
+        self,
+        pred_feats: Float[Tensor, "M 512"],  # noqa: F821, F722
+        unique_caption_embeds: Float[Tensor, "N 512"],  # noqa: F821, F722
+        caption_targets: Int[Tensor, "M"],  # noqa: F821, F722
+        batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821, F722
+        input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821, F722
+        mappings: Optional[Tuple[Tensor, Tensor]] = None,
+    ) -> Tensor:
+        """Compute the caption loss.
+
+        Args:
+            x: The input tensor
+            caption_embeddings: Batched caption embeddings. e.g. [all_caption_embeddings_for_batch0, all_caption_embeddings_for_batch1, ...]
+            batched_list_of_point_indices: The list of point indices. e.g. [[point_indices_for_batch0_obj0, point_indices_for_batch0_obj1, ...], [point_indices_for_batch1_obj0, point_indices_for_batch1_obj1, ...], ...]
+            batch_offsets: The batch offsets for the input tensor. e.g. [0, num_points_in_batch0, num_points_in_batch0 + num_points_in_batch1, ...]
+            mappings: The mappings.
+            binary_labels: The binary labels.
+        """
+        batch_size = len(batched_list_of_point_indices)
+        assert len(input_batch_offsets) == batch_size + 1
+        # assert len(unique_caption_embeds) == len(np.unique(caption_targets))
+
+        # Convert data to CSR format
+        corr_idx, offsets, counts = convert_list_list_tensor_to_tensor(
+            batched_list_of_point_indices, batch_offsets=input_batch_offsets
+        )
+
+        # Reduce features
+        if self.normalize_input:
+            pred_feats = nn.functional.normalize(pred_feats, dim=-1)
+
+        rep_pred_feats = pred_feats[corr_idx]
+        reduced_pred_feats = segment_csr(
+            rep_pred_feats,
+            offsets.to(rep_pred_feats.device),
+            reduce="sum",
+        )
+
+        reduced_pred_feats = nn.functional.normalize(reduced_pred_feats, dim=-1)
+
+        # Get the inner products
+        inner_products = torch.matmul(reduced_pred_feats, unique_caption_embeds.T)
+
+        # Compute the cosine similarity
+        loss = self.loss_func(inner_products, caption_targets.to(inner_products.device))
         return loss

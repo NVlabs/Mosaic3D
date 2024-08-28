@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -92,8 +92,9 @@ class DenseLanguageLitModule(LitModuleBase):
     def training_step(self, batch, batch_idx):
         # Prepare caption data in bf16
         with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-            caption_embeds = caption_utils.get_caption_batch(
-                batch["caption_data"]["caption"], self.text_encoder
+            batched_captions: List[List[str]] = batch["caption_data"]["caption"]
+            caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(
+                batched_captions, self.text_encoder
             )
 
         # Forward
@@ -127,7 +128,8 @@ class DenseLanguageLitModule(LitModuleBase):
         caption_loss = (
             self.caption_loss.loss(
                 clip_feat,
-                caption_embeddings=caption_embeds,
+                unique_caption_embeds=caption_embeds,
+                caption_targets=caption_targets,
                 batched_list_of_point_indices=batch["caption_data"]["idx"],
                 input_batch_offsets=batch["offset"],
                 mappings=out_dict.get("mappings", None),
