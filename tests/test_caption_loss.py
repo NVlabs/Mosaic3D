@@ -63,7 +63,9 @@ class TestCaptionLoss(unittest.TestCase):
             assert isinstance(batch_dict, dict)
             batch_dict = to_device(batch_dict, self.device)
             captions = batch_dict["caption_data"]["caption"]
-            caption_embed, caption_target = get_unique_caption_batch(captions, self.text_encoder)
+            unique_caption_embed, caption_target = get_unique_caption_batch(
+                captions, self.text_encoder
+            )
 
             rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
             pc = PointCollection(
@@ -74,7 +76,7 @@ class TestCaptionLoss(unittest.TestCase):
 
             loss = caption_head.loss(
                 pc.feature_tensor,
-                unique_caption_embeds=caption_embed,
+                unique_caption_embeds=unique_caption_embed,
                 caption_targets=caption_target,
                 batched_list_of_point_indices=batch_dict["caption_data"]["idx"],
                 input_batch_offsets=batch_dict["offset"],
@@ -119,7 +121,7 @@ class TestCaptionLoss(unittest.TestCase):
 
             loss = caption_head.loss(
                 pc.feature_tensor,
-                unique_caption_embeds=caption_embed,
+                caption_embed,
                 batched_list_of_point_indices=batch_dict["caption_data"]["idx"],
                 input_batch_offsets=batch_dict["offset"],
                 mappings=None,

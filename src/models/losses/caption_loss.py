@@ -180,21 +180,20 @@ class CaptionLoss(LossBase):
         if self.normalize_input:
             pred_feats = nn.functional.normalize(pred_feats, dim=-1)
 
-        rep_pred_feats = pred_feats[corr_idx]
-        reduced_pred_feats = segment_csr(
-            rep_pred_feats,
-            offsets.to(rep_pred_feats.device),
-            reduce="sum",
-        )
-
-        reduced_pred_feats = nn.functional.normalize(reduced_pred_feats, dim=-1)
-
-        # Get the inner products
-        caption_logits = reduced_pred_feats @ unique_caption_embeds.T.to(reduced_pred_feats)
+        # Logit
+        device = pred_feats.device
+        caption_logits = pred_feats @ unique_caption_embeds.T.to(device)
         caption_scores = F.log_softmax(caption_logits, dim=-1)
 
+        rep_caption_scores = caption_scores[corr_idx]
+        reduced_caption_scores = segment_csr(
+            rep_caption_scores,
+            offsets.to(device),
+            reduce="mean",
+        )
+
         # Compute the loss
-        loss = self.loss_func(caption_scores, caption_targets.to(caption_scores.device))
+        loss = self.loss_func(reduced_caption_scores, caption_targets.to(caption_scores.device))
 
         # Compute the cosine similarity
         if self.loss_reduction == "mean":
