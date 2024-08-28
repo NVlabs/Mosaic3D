@@ -1,3 +1,4 @@
+import os
 import unittest
 
 import hydra
@@ -33,11 +34,18 @@ def to_device(item, device):
 
 
 class TestCaptionLoss(unittest.TestCase):
+    data_path = "/datasets"
+
     def setUp(self):
         with open("configs/data/regionplc_base15.yaml") as f:
             omega_config_dict = yaml.safe_load(f.read())
         cfg = OmegaConf.create(omega_config_dict)
+        cfg.train_dataset.data_dir = os.path.join(self.data_path, "scannet_hf")
+        cfg.train_dataset.caption_dir = os.path.join(self.data_path, "regionplc_converted")
         cfg.val_dataset = cfg.train_dataset
+
+        # Set the data_path in the configuration
+
         datamodule: LightningDataModule = hydra.utils.instantiate(cfg)
         self.device = torch.device("cuda:0")
         text_encoder_cfg = OmegaConf.create(text_encoder_str)
@@ -50,15 +58,9 @@ class TestCaptionLoss(unittest.TestCase):
         self.text_encoder = text_encoder
 
     def test_caption_loss(self):
-        """Tests `MNISTDataModule` to verify that it can be downloaded correctly, that the
-        necessary attributes were created (e.g., the dataloader objects), and that dtypes and batch
-        sizes correctly match.
+        """Tests the caption loss."""
 
-        :param batch_size: Batch size of the data to be loaded by the dataloader.
-        """
-
-        caption_head = CaptionLoss()
-
+        caption_loss = CaptionLoss()
         for i, batch_dict in enumerate(self.loader):
             assert isinstance(batch_dict, dict)
             batch_dict = to_device(batch_dict, self.device)
@@ -74,7 +76,7 @@ class TestCaptionLoss(unittest.TestCase):
                 offsets=batch_dict["offset"].cpu(),
             ).to(self.device)
 
-            loss = caption_head.loss(
+            loss = caption_loss.loss(
                 pc.feature_tensor,
                 unique_caption_embeds=unique_caption_embed,
                 caption_targets=caption_target,
@@ -87,25 +89,13 @@ class TestCaptionLoss(unittest.TestCase):
                 break
 
     def test_caption_alignment_loss(self):
-        """Tests `MNISTDataModule` to verify that it can be downloaded correctly, that the
-        necessary attributes were created (e.g., the dataloader objects), and that dtypes and batch
-        sizes correctly match.
+        """Tests the caption alignment loss."""
 
-        :param batch_size: Batch size of the data to be loaded by the dataloader.
-        """
-        with open("configs/data/regionplc_base15.yaml") as f:
-            omega_config_dict = yaml.safe_load(f.read())
-        cfg = OmegaConf.create(omega_config_dict)
-        cfg.val_dataset = cfg.train_dataset
-        datamodule: LightningDataModule = hydra.utils.instantiate(cfg)
         caption_head = CaptionAlignmentLoss()
 
-        device = torch.device("cuda:0")
-        text_encoder_cfg = OmegaConf.create(text_encoder_str)
-        text_encoder = build_text_model(text_encoder_cfg).to(device)
-
-        datamodule.setup("fit")
-        loader = datamodule.train_dataloader()
+        loader = self.loader
+        device = self.device
+        text_encoder = self.text_encoder
 
         for i, batch_dict in enumerate(loader):
             assert isinstance(batch_dict, dict)
@@ -131,6 +121,28 @@ class TestCaptionLoss(unittest.TestCase):
                 break
 
 
-if __name__ == "__main__":
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run caption loss tests")
+    parser.add_argument(
+        "--data_path", type=str, default="path/to/default/data", help="Path to the data"
+    )
+    args = parser.parse_args()
+
+    # Set the data_path as a class attribute
+    TestCaptionLoss.data_path = args.data_path
+
+    # Print the data_path to verify it's set correctly
+    print(f"Data path set to: {TestCaptionLoss.data_path}")
+
+    # Create a test suite with our TestCaptionLoss class
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestCaptionLoss)
+
+    # Run the tests
     wp.init()
-    unittest.main()
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+
+if __name__ == "__main__":
+    main()

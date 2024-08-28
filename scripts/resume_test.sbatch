@@ -105,4 +105,3 @@ if [ -f $STATUS_FILE ]; then
 else
     echo "Status file not found: $STATUS_FILE"
 fi
-
