@@ -6,6 +6,7 @@ import torch.nn as nn
 import warp as wp
 from jaxtyping import Float, Int
 from torch import Tensor
+from torch.nn import functional as F
 from torch_scatter import segment_csr
 
 from src.models.losses.loss_base import LossBase
@@ -134,11 +135,14 @@ class CaptionLoss(LossBase):
         self,
         normalize_input: bool = True,
         ignore_index: int = -100,
+        loss_reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
         **kwargs,
     ):
         super().__init__()
         self.normalize_input = normalize_input
-        self.loss_func = nn.CrossEntropyLoss(ignore_index=ignore_index)
+        self.loss_func = nn.NLLLoss(ignore_index=ignore_index, reduction="none")
+        assert loss_reduction in ["mean", "weighted_sum"]
+        self.loss_reduction = loss_reduction
         self.kwargs = kwargs
 
     def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
@@ -186,10 +190,17 @@ class CaptionLoss(LossBase):
         reduced_pred_feats = nn.functional.normalize(reduced_pred_feats, dim=-1)
 
         # Get the inner products
-        inner_products = torch.matmul(
-            reduced_pred_feats, unique_caption_embeds.T.to(reduced_pred_feats)
-        )
+        caption_logits = reduced_pred_feats @ unique_caption_embeds.T.to(reduced_pred_feats)
+        caption_scores = F.log_softmax(caption_logits, dim=-1)
+
+        # Compute the loss
+        loss = self.loss_func(caption_scores, caption_targets.to(caption_scores.device))
 
         # Compute the cosine similarity
-        loss = self.loss_func(inner_products, caption_targets.to(inner_products.device))
-        return loss
+        if self.loss_reduction == "mean":
+            return loss.mean()
+        elif self.loss_reduction == "weighted_sum":
+            counts = counts.to(loss.device)
+            return (loss * counts).sum() / (counts.sum())
+        else:
+            raise ValueError(f"Unknown reduce type: {self.reduce}")

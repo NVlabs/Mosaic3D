@@ -59,7 +59,7 @@ net:
 
 loss_cfg:
   caption_loss:
-    loss_reduction: weighted
+    loss_reduction: weighted_sum
   seg_loss:
     normalize_input: false
     text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
