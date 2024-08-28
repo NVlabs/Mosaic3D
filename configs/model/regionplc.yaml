@@ -72,6 +72,7 @@ loss_cfg:
   seg_loss_weight: 1.0
   caption_learnable_logit_scale: true
   clip_learnable_logit_scale: false
+  sync_dist: true
 
 # compile model for faster training with pytorch 2.0
 text_encoder:
