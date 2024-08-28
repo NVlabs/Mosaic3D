@@ -186,7 +186,9 @@ class CaptionLoss(LossBase):
         reduced_pred_feats = nn.functional.normalize(reduced_pred_feats, dim=-1)
 
         # Get the inner products
-        inner_products = torch.matmul(reduced_pred_feats, unique_caption_embeds.T)
+        inner_products = torch.matmul(
+            reduced_pred_feats, unique_caption_embeds.T.to(reduced_pred_feats)
+        )
 
         # Compute the cosine similarity
         loss = self.loss_func(inner_products, caption_targets.to(inner_products.device))

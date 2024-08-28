@@ -96,6 +96,8 @@ class DenseLanguageLitModule(LitModuleBase):
             caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(
                 batched_captions, self.text_encoder
             )
+        # copy for backward
+        caption_embeds = caption_embeds.clone()
 
         # Forward
         out_dict = self(batch)
