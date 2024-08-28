@@ -19,6 +19,11 @@ class WarpLitModule(DenseLanguageLitModule):
         """Match the output of the network to the labels in the batch."""
         pc = pred_dict["pcs"][0]
         assert isinstance(pc, PointCollection)
+
+        # segment
+        orig_map, pc_map, valid = pred_dict["mappings"]
+        batch["segment"] = batch["segment"][pc_map]
+
         return batch
 
     @override
@@ -30,7 +35,7 @@ class WarpLitModule(DenseLanguageLitModule):
         # Find mappings
         pc = output["pcs"][0]
 
-        orig_map, pc_map = voxel_downsample_mapping(
+        orig_map, pc_map, valid = voxel_downsample_mapping(
             pc.coordinate_tensor,
             pc.offsets,
             batch[
@@ -48,4 +53,7 @@ class WarpLitModule(DenseLanguageLitModule):
         if not self.training:
             logits = self.clip_alignment_loss.predict(output["clip_feat"], return_logit=True)
             output["logits"] = logits
+
+        # Save the mappings
+        output["mappings"] = (orig_map, pc_map, valid)
         return output

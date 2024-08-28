@@ -1,35 +1,49 @@
+from typing import Dict, List, Literal, Optional, Tuple
+
+import numpy as np
 import torch
+import torch.nn as nn
+from jaxtyping import Float, Int
+from torch import Tensor
 
 
-def get_caption_batch(caption_data, text_encoder, local_rank):
-    caption, idx = caption_data["caption"], caption_data["idx"]
+def get_caption_batch(
+    batched_captions: List[List[str]], text_encoder: nn.Module
+) -> List[Float[Tensor, "N 512"]]:  # noqa: F821, F722
+    # Get the size of each batch
+    num_captions_per_batch = [len(captions) for captions in batched_captions]
 
-    # caption_embed: (K, 512), caption_idx: (N), (N > K)
-    caption_embed, caption_idx = extract_caption_embed(caption, text_encoder, local_rank)
+    # Flatten the caption list
+    flat_captions = [caption for sublist in batched_captions for caption in sublist]
+
+    caption_embed = forward_text_encoder(flat_captions, text_encoder)
     caption_embed = torch.nn.functional.normalize(caption_embed, dim=-1)
 
-    caption_infos = {
-        "caption_embed": caption_embed,
-        "caption_idx": caption_idx,
-        "c2p_map": idx,  # caption 2 point mapping
-    }
-    return caption_infos
+    # Split the caption_embed into the original batch size
+    caption_embeds = torch.split(caption_embed, num_captions_per_batch)
+    return caption_embeds
 
 
-def extract_caption_embed(image_captions, text_encoder, rank):
-    num_caption_list = [0] * 100
-    num_caption_list[rank] = len(image_captions)
-    caption_embed_all = forward_text_encoder(image_captions, text_encoder)
+def get_unique_caption_batch(
+    batched_captions: List[List[str]], text_encoder: nn.Module
+) -> Tuple[Float[Tensor, "N 512"], Int[Tensor, "M"]]:  # noqa: F821, F722
+    # Flatten the caption list
+    flat_captions = [caption for sublist in batched_captions for caption in sublist]
+    flat_caption_hash = [hash(caption) for caption in flat_captions]
 
-    num_caption_list = torch.LongTensor([0] + num_caption_list).cuda()
-    idx = (
-        torch.arange(num_caption_list[rank + 1]).long().cuda()
-        + torch.cumsum(num_caption_list, 0)[rank]
+    # Get unique captions and their indices
+    _, to_unique_indices, from_unique_indices = np.unique(
+        flat_caption_hash, return_index=True, return_inverse=True
     )
-    caption_embeds, unique_indices = torch.unique(caption_embed_all, dim=0, return_inverse=True)
-    caption_idx = unique_indices[idx]
 
-    return caption_embeds, caption_idx
+    unique_captions = [flat_captions[i] for i in to_unique_indices]
+    caption_embeds = forward_text_encoder(unique_captions, text_encoder)
+    caption_embeds = torch.nn.functional.normalize(caption_embeds, dim=-1)
+
+    return (
+        caption_embeds,  # embedding
+        torch.tensor(from_unique_indices),  # target
+    )
 
 
 @torch.no_grad()

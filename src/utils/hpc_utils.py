@@ -170,7 +170,12 @@ def hpc_config(cfg: DictConfig) -> None:
     # Replace the logger.wandb._target_ to AutoResumeWandbLogger
     if "debug" not in cfg.task_name and "wandb" in cfg.logger:
         # cfg.logger.wandb._target_ = "src.utils.autoresume_wandb_logger.AutoResumeWandbLogger"
-        assert (
+        # Print warning if not using AutoResumeWandbLogger
+        if (
             str(cfg.logger.wandb._target_)
-            == "src.utils.auto_resume_wandb_logger.AutoResumeWandbLogger"
-        )
+            != "src.utils.auto_resume_wandb_logger.AutoResumeWandbLogger"
+        ):
+            log.warning(
+                "Using WandbLogger without AutoResumeWandbLogger. "
+                "Please make sure to resume the run manually."
+            )

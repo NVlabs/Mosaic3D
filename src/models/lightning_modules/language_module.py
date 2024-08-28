@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
@@ -92,10 +92,12 @@ class DenseLanguageLitModule(LitModuleBase):
     def training_step(self, batch, batch_idx):
         # Prepare caption data in bf16
         with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-            caption_infos = caption_utils.get_caption_batch(
-                batch["caption_data"], self.text_encoder, local_rank=self.local_rank
+            batched_captions: List[List[str]] = batch["caption_data"]["caption"]
+            caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(
+                batched_captions, self.text_encoder
             )
-            batch.update(caption_infos)
+        # copy for backward
+        caption_embeds = caption_embeds.clone()
 
         # Forward
         out_dict = self(batch)
@@ -126,7 +128,15 @@ class DenseLanguageLitModule(LitModuleBase):
             )
 
         caption_loss = (
-            self.caption_loss.loss(clip_feat, batch) * self.hparams.loss_cfg.caption_loss_weight
+            self.caption_loss.loss(
+                clip_feat,
+                unique_caption_embeds=caption_embeds,
+                caption_targets=caption_targets,
+                batched_list_of_point_indices=batch["caption_data"]["idx"],
+                input_batch_offsets=batch["offset"],
+                mappings=out_dict.get("mappings", None),
+            )
+            * self.hparams.loss_cfg.caption_loss_weight
         )
 
         loss = binary_loss + seg_loss + caption_loss

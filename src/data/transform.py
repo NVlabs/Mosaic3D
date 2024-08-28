@@ -5,11 +5,11 @@ Inspirited by chrischoy/SpatioTemporalSegmentation
 Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
 Please cite our work if the code is helpful to you.
 """
-
 import copy
 import numbers
 import random
 from collections.abc import Mapping, Sequence
+from typing import List, Optional
 
 import numpy as np
 import scipy
@@ -17,6 +17,8 @@ import scipy.interpolate
 import scipy.ndimage
 import scipy.stats
 import torch
+from jaxtyping import Int
+from torch import Tensor
 
 from src.utils.registry import Registry
 
@@ -874,11 +876,12 @@ class SphereCrop:
 
         assert "coord" in data_dict.keys()
         if self.mode == "all":
+            raise NotImplementedError("Deprecated")
             # TODO: Optimize
             if "index" not in data_dict.keys():
                 data_dict["index"] = np.arange(data_dict["coord"].shape[0])
             data_part_list = []
-            # coord_list, color_list, dist2_list, idx_list, offset_list = [], [], [], [], []
+            coord_list, color_list, dist2_list, idx_list, offset_list = [], [], [], [], []
             if data_dict["coord"].shape[0] > point_max:
                 coord_p, idx_uni = np.random.rand(data_dict["coord"].shape[0]) * 1e-3, np.array([])
                 while idx_uni.size != data_dict["index"].shape[0]:
@@ -925,6 +928,7 @@ class SphereCrop:
                 center = data_dict["coord"][data_dict["coord"].shape[0] // 2]
             else:
                 raise NotImplementedError
+            num_points_before = data_dict["coord"].shape[0]
             idx_crop = np.argsort(np.sum(np.square(data_dict["coord"] - center), 1))[:point_max]
             if "coord" in data_dict.keys():
                 data_dict["coord"] = data_dict["coord"][idx_crop]
@@ -946,6 +950,52 @@ class SphereCrop:
                 data_dict["strength"] = data_dict["strength"][idx_crop]
             if "origin_idx" in data_dict.keys():
                 data_dict["origin_idx"] = data_dict["origin_idx"][idx_crop]
+            if "caption_data" in data_dict.keys():
+                caption_dict = data_dict["caption_data"]
+                captions = caption_dict["caption"]
+                # List of point indices for each caption
+                caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
+                assert len(captions) == len(caption_point_indices)
+                # Filter point_indices that are not in idx_crop and replace it with the new index
+                new_index = np.arange(len(idx_crop))
+                to_new_index = np.ones(num_points_before, dtype=int) * -1
+                to_new_index[idx_crop] = new_index
+                new_caption_index = [
+                    to_new_index[point_indices] for point_indices in caption_point_indices
+                ]
+                # Remove -1 index
+                new_caption_index = [
+                    point_indices[point_indices != -1] for point_indices in new_caption_index
+                ]
+                data_dict["caption_data"] = {
+                    "caption": captions,
+                    "idx": new_caption_index,
+                }
+
+        # Filter out captions that have no points
+        if "caption_data" in data_dict:
+            caption_dict = data_dict["caption_data"]
+            captions = caption_dict["caption"]
+            # List of point indices for each caption
+            caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
+
+            # Filter out captions that have no points
+            valid_caption_indices = [
+                i
+                for i, point_indices in enumerate(caption_point_indices)
+                if len(point_indices) > 0
+            ]
+            # Filter out captions that have no points
+            if len(valid_caption_indices) != len(captions):
+                caption_point_indices = [caption_point_indices[i] for i in valid_caption_indices]
+                captions = [captions[i] for i in valid_caption_indices]
+            # Assert that all captions have points
+            assert all(len(point_indices) > 0 for point_indices in caption_point_indices)
+            data_dict["caption_data"] = {
+                "caption": captions,
+                "idx": caption_point_indices,
+            }
+
         return data_dict
 
 

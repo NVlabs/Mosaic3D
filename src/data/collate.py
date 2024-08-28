@@ -19,10 +19,11 @@ def collate_fn(batch):
     if isinstance(batch[0], torch.Tensor):
         return torch.cat(list(batch))
     elif isinstance(batch[0], str):
-        # str is also a kind of Sequence, judgement should before Sequence
+        # str is an instance of Sequence, so need to check it first
         return list(batch)
     elif isinstance(batch[0], Sequence) and isinstance(batch[0][0], str):
-        batch = [item for sublist in batch for item in sublist]
+        # Do not collate str list to distinguish from batch
+        # batch = [item for sublist in batch for item in sublist]
         return batch
     elif isinstance(batch[0], Sequence) and isinstance(batch[0][0], torch.Tensor):
         return batch
@@ -41,17 +42,6 @@ def collate_fn(batch):
         return batch
     else:
         return default_collate(batch)
-
-
-def point_collate_warp_fn(batch: List[Dict], **kwargs):
-    assert isinstance(batch, List)
-    assert isinstance(batch[0], Mapping)
-    batch = collate_fn(batch)
-
-    # set require fields for warp.convnet.PointCollection
-    batch["labels"] = batch["segment"]
-    batch["binary_labels"] = batch["binary"]
-    return batch
 
 
 def point_collate_fn(batch, grid_size, mix_prob=0):
