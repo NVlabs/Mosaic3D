@@ -21,7 +21,7 @@ class WarpLitModule(DenseLanguageLitModule):
         assert isinstance(pc, PointCollection)
 
         # segment
-        orig_map, pc_map, valid = pred_dict["mappings"]
+        _, pc_map = pred_dict["mapping_indices"]
         batch["segment"] = batch["segment"][pc_map]
 
         return batch
@@ -47,13 +47,11 @@ class WarpLitModule(DenseLanguageLitModule):
 
         # clip_feat
         output["clip_feat"] = output["clip_feat"][orig_map]
-        if "binary_scores" in output:
-            output["binary_scores"] = output["binary_scores"][orig_map]
-
         if not self.training:
             logits = self.clip_alignment_loss.predict(output["clip_feat"], return_logit=True)
             output["logits"] = logits
 
         # Save the mappings
-        output["mappings"] = (orig_map, pc_map, valid)
+        output["mapping_indices"] = (orig_map, pc_map)
+        output["mapping_valid_mask"] = valid
         return output

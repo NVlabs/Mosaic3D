@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import warp as wp
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from torch.nn import functional as F
 from torch_scatter import segment_csr
@@ -17,6 +17,7 @@ from src.models.losses.loss_base import LossBase
 def convert_list_list_tensor_to_tensor(
     batched_list_of_point_indices: List[List[Int[Tensor, "N"]]],  # noqa: F722, F821
     batch_offsets: Optional[Int[Tensor, "B + 1"]] = None,  # noqa: F722, F821
+    valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F722, F821
 ) -> Tuple[Int[Tensor, "L"], Int[Tensor, "M + 1"], Int[Tensor, "M"]]:  # noqa: F722, F821
     """Convert List[List[Tensor]] to concatenated indices, offsets, and counts."""
     # Get the counts of inner lists
@@ -46,6 +47,29 @@ def convert_list_list_tensor_to_tensor(
     offsets = np.cumsum(num_points_per_cap)
     offsets = torch.tensor([0] + offsets.tolist())
     counts = torch.tensor(num_points_per_cap)
+
+    # Apply valid mask
+    if valid_mask is not None:
+        valid_point_indices = valid_mask[point_indices]
+        point_indices = point_indices[valid_point_indices]
+
+        # Use cumsum to efficiently compute valid counts
+        cumulative_valid = torch.cumsum(valid_point_indices, dim=0)
+
+        # Compute new offsets directly from cumulative_valid
+        new_offsets = torch.zeros_like(offsets)
+        new_offsets[1:] = cumulative_valid[offsets[1:] - 1]
+
+        # Compute valid counts
+        valid_counts = new_offsets[1:] - new_offsets[:-1]
+
+        offsets = new_offsets
+        counts = valid_counts
+
+        # Convert point_indices to compacted indices
+        compacted_indices = torch.cumsum(valid_mask, dim=0)
+        point_indices = compacted_indices[point_indices] - 1
+
     return point_indices, offsets, counts
 
 
@@ -69,7 +93,7 @@ class CaptionAlignmentLoss(LossBase):
         caption_embeddings: List[Float[Tensor, "N 512"]],  # noqa: F821, F722
         batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821, F722
         input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821, F722
-        mappings: Optional[Tuple[Tensor, Tensor]] = None,
+        valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F821
     ) -> Tensor:
         """Compute the caption loss.
 
@@ -93,19 +117,12 @@ class CaptionAlignmentLoss(LossBase):
         assert len(caption_embeddings) == batch_size
         assert len(input_batch_offsets) == batch_size + 1
 
-        if mappings is not None:
-            # Convert data to CSR format
-            raise NotImplementedError("Not implemented yet")
-            corr_idx, offsets = convert_list_list_tensor_to_tensor(
-                batched_list_of_point_indices,
-                input_batch_offsets,
-                valid_mask=mappings[2],
-            )
-        else:
-            # Convert data to CSR format
-            corr_idx, offsets, counts = convert_list_list_tensor_to_tensor(
-                batched_list_of_point_indices, batch_offsets=input_batch_offsets
-            )
+        # Convert data to CSR format
+        corr_idx, offsets, counts = convert_list_list_tensor_to_tensor(
+            batched_list_of_point_indices,
+            batch_offsets=input_batch_offsets,
+            valid_mask=valid_mask,
+        )
 
         # Reduce features
         if self.normalize_input:
@@ -150,12 +167,12 @@ class CaptionLoss(LossBase):
 
     def loss(
         self,
-        pred_feats: Float[Tensor, "M 512"],  # noqa: F821, F722
-        unique_caption_embeds: Float[Tensor, "N 512"],  # noqa: F821, F722
-        caption_targets: Int[Tensor, "M"],  # noqa: F821, F722
-        batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821, F722
-        input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821, F722
-        mappings: Optional[Tuple[Tensor, Tensor]] = None,
+        pred_feats: Float[Tensor, "M 512"],  # noqa: F722
+        unique_caption_embeds: Float[Tensor, "N 512"],  # noqa: F722
+        caption_targets: Int[Tensor, "M"],  # noqa: F821
+        batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821
+        input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821
+        valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F821
     ) -> Tensor:
         """Compute the caption loss.
 
@@ -173,7 +190,9 @@ class CaptionLoss(LossBase):
 
         # Convert data to CSR format
         corr_idx, offsets, counts = convert_list_list_tensor_to_tensor(
-            batched_list_of_point_indices, batch_offsets=input_batch_offsets
+            batched_list_of_point_indices,
+            batch_offsets=input_batch_offsets,
+            valid_mask=valid_mask,
         )
 
         # Reduce features

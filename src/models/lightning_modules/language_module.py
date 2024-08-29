@@ -134,7 +134,7 @@ class DenseLanguageLitModule(LitModuleBase):
                 caption_targets=caption_targets,
                 batched_list_of_point_indices=batch["caption_data"]["idx"],
                 input_batch_offsets=batch["offset"],
-                mappings=out_dict.get("mappings", None),
+                valid_mask=out_dict.get("mapping_valid_mask", None),
             )
             * self.hparams.loss_cfg.caption_loss_weight
         )

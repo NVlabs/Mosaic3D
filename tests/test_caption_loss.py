@@ -82,7 +82,7 @@ class TestCaptionLoss(unittest.TestCase):
                 caption_targets=caption_target,
                 batched_list_of_point_indices=batch_dict["caption_data"]["idx"],
                 input_batch_offsets=batch_dict["offset"],
-                mappings=None,
+                valid_mask=None,
             )
             print(loss)
             if i == 0:
@@ -114,7 +114,7 @@ class TestCaptionLoss(unittest.TestCase):
                 caption_embed,
                 batched_list_of_point_indices=batch_dict["caption_data"]["idx"],
                 input_batch_offsets=batch_dict["offset"],
-                mappings=None,
+                valid_mask=None,
             )
             print(loss)
             if i == 0:
