@@ -171,8 +171,8 @@ class ScanNetDataset(Dataset):
 
         # load captions
         if self.split == "train":
-            caption_idx, caption_text = self.load_caption(scene_name)
-            data_dict["caption_data"] = {"idx": caption_idx, "caption": caption_text}
+            point_indices, captions = self.load_caption(scene_name)
+            data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
         data_dict = self.transforms(data_dict)
         return data_dict
