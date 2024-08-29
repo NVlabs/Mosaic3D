@@ -103,6 +103,15 @@ repos:
     hooks:
       - id: shellcheck
 
+  # bash and sbatch script formatter
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.7.0-1
+    hooks:
+      - id: shfmt
+        args: ["-i", "4", "-ci", "-bn", "-sr"]
+        types: [shell, bash]
+        files: '\.(sh|bash|sbatch)$'
+
   # md formatting
   - repo: https://github.com/executablebooks/mdformat
     rev: 0.7.16

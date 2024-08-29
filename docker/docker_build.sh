@@ -7,28 +7,34 @@ usage() {
     echo "  -p, --push    Push the Docker image after building"
     echo "  -h, --help    Display this help message"
     echo "  -t, --tag     Tag the Docker image with the provided version"
+    echo "  -n, --no-cache Build the Docker image without using cache"
     echo "VERSION defaults to 'latest' if not provided"
 }
 
 # Initialize variables
 PUSH=false
 VERSION="latest"
-TAG="junhal/openvocab-3d:${VERSION}"
+TAG="openvocab-3d:${VERSION}"
+NO_CACHE=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -p|--push)
+        -p | --push)
             PUSH=true
             shift
             ;;
-        -h|--help)
+        -h | --help)
             usage
             exit 0
             ;;
-        -t|--tag)
+        -t | --tag)
             TAG=$2
             shift 2
+            ;;
+        -n | --no-cache)
+            NO_CACHE="--no-cache"
+            shift
             ;;
         *)
             VERSION=$1
@@ -56,27 +62,12 @@ fi
 # Add --no-cache to force a rebuild
 echo "Building Docker image..."
 docker build \
+    $NO_CACHE \
     -t "$TAG" \
     -f docker/Dockerfile .
 
-# shellcheck disable=SC2181
-# Exit if previous build failed
-if [ $? -ne 0 ]; then
-    echo "Docker build failed"
-    exit 1
-fi
-
 # Test docker
-docker \
-    run \
-    --gpus all \
-    -it --rm \
-    "$TAG" \
-    python -c "import torch;print(torch.cuda.is_available());"
-
-# shellcheck disable=SC2181
-# Get the exit code and return if failed
-if [ $? -ne 0 ]; then
+if ! docker run --gpus all -it --rm "$TAG" python -c "import torch;print(torch.cuda.is_available());"; then
     echo "Docker test failed"
     exit 1
 fi

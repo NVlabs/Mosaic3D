@@ -19,7 +19,7 @@
 # Get the number of gpus from scontrol and strip all the white spaces and new lines
 # example output
 # >    TresPerNode=gres:gpu:2
-GPU_COUNT=$(scontrol show job $SLURM_JOBID | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
+GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
 
 # Training arguments
 TRAINING_ARGS=("$@")
@@ -39,7 +39,6 @@ TAG="warp"
 IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:$TAG"
 # Get the absolute current working directory
 CODE_ROOT=$(pwd)
-CURR_SCRIPT="${CODE_ROOT}/scripts/train.sbatch"
 
 # HF_HOME for credentials and other Hugging Face data.
 # HF_HUB_CACHE for caching repositories from the Hub.
@@ -57,23 +56,24 @@ Running a GPU job on
     User: ${USER}
     Image: ${IMAGE_URL}
     GPU_COUNT: ${GPU_COUNT}
-    TRAINING_ARGS: ${TRAINING_ARGS[@]}
+    TRAINING_ARGS: ${TRAINING_ARGS[*]}
 "
 
 # Cache docker file
 # Check if the cache_image.sh exists
-if [ -f $LUSTRE_HOME/sbatch/cache_image.sh ]; then
+if [ -f "$LUSTRE_HOME/sbatch/cache_image.sh" ]; then
     # Cache the image
-    source $LUSTRE_HOME/sbatch/cache_image.sh
+    # shellcheck source=/dev/null
+    source "$LUSTRE_HOME/sbatch/cache_image.sh"
 
     SQSH_CACHE_DIR=${PROJECT_ROOT}/enroot-cache
-    IMAGE_CACHE_FILE=$(cache_image $IMAGE_URL $ACCOUNT $SQSH_CACHE_DIR)
+    IMAGE_CACHE_FILE=$(cache_image "$IMAGE_URL" "$ACCOUNT" "$SQSH_CACHE_DIR")
 else
     echo "$LUSTRE_HOME/sbatch/cache_image.sh does not exist. Using ${IMAGE_URL} without caching."
     IMAGE_CACHE_FILE=${IMAGE_URL}
 fi
 
-TRAINER="ddp"  # Default trainer
+TRAINER="ddp" # Default trainer
 # If GPU_COUNT==1, set trainer to 'gpu'
 if [ "$GPU_COUNT" -eq 1 ]; then
     TRAINER="gpu"
@@ -94,24 +94,24 @@ torchrun \
     src/train.py \
     trainer=${TRAINER} \
     trainer.devices=${GPU_COUNT} \
-    ${TRAINING_ARGS[@]}
+    ${TRAINING_ARGS[*]}
 "
 
 set -x
 # Pass CMD with double quotes
 srun \
-    --container-image=$IMAGE_CACHE_FILE \
+    --container-image="$IMAGE_CACHE_FILE" \
     --container-mounts="$HOME:/root,/lustre:/lustre,${CODE_ROOT}:/workspace,${DATA_DIR}:/datasets" \
     bash -c "$CMD"
 
 # Get the status from $OUTPUT_FOLDER/status.txt
 STATUS_FILE="results/${SLURM_JOB_ID}/status.txt"
-if [ -f $STATUS_FILE ]; then
-    STATUS=$(cat $STATUS_FILE)
+if [ -f "$STATUS_FILE" ]; then
+    STATUS=$(cat "$STATUS_FILE")
     echo "Status: $STATUS"
     if [ "${STATUS}" == "STOPPED" ] || [ "${STATUS}" == "RUNNING" ]; then
-        echo "Resubmitting the job with script: ${SCRIPT_PATH} ${@}"
-        scontrol requeue $SLURM_JOB_ID
+        echo "Resubmitting the job with script: ${SCRIPT_PATH} ${*}"
+        scontrol requeue "$SLURM_JOB_ID"
     fi
 else
     echo "Status file not found: $STATUS_FILE"

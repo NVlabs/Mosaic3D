@@ -3,18 +3,18 @@ import unittest
 
 import hydra
 import torch
-import warp as wp
 import yaml
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
-from warp.convnet.geometry.point_collection import PointCollection
 
+import warp as wp
 from src.models.losses.caption_loss import CaptionAlignmentLoss, CaptionLoss
 from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc.utils.caption_utils import (
     get_caption_batch,
     get_unique_caption_batch,
 )
+from warp.convnet.geometry.point_collection import PointCollection
 
 text_encoder_str = """text_encoder:
 name: CLIP

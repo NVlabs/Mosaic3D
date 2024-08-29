@@ -3,12 +3,12 @@ from typing import Dict, List, Literal, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-import warp as wp
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from torch.nn import functional as F
 from torch_scatter import segment_csr
 
+import warp as wp
 from src.models.losses.loss_base import LossBase
 
 

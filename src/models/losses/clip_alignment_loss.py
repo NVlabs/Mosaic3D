@@ -7,10 +7,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from jaxtyping import Float, Int
 from torch import Tensor
-from warp.convnet.geometry.point_collection import PointCollection
 
 from src.models.losses.loss_base import LossBase
 from src.utils import RankedLogger
+from warp.convnet.geometry.point_collection import PointCollection
 
 log = RankedLogger(__name__, rank_zero_only=True)
 

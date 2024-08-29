@@ -6,10 +6,10 @@ import torch
 import yaml
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
-from warp.convnet.geometry.point_collection import PointCollection
 
 from src.data.regionplc.scannet_dataset import ScanNetDataset
 from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
+from warp.convnet.geometry.point_collection import PointCollection
 
 EMBED_PATH = "/datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth"
 

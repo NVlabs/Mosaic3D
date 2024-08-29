@@ -4,12 +4,13 @@ import hydra
 import numpy as np
 import pytest
 import torch
-import warp as wp
 import yaml
 from jaxtyping import Int
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
 from torch import Tensor
+
+import warp as wp
 from warp.convnet.geometry.ops.voxel_ops import voxel_downsample_random_indices
 from warp.convnet.geometry.point_collection import PointCollection
 

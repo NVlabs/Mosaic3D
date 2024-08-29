@@ -7,12 +7,12 @@ from jaxtyping import Float
 from omegaconf import DictConfig
 from overrides import override
 from torch import Tensor
-from warp.convnet.geometry.point_collection import PointCollection
-from warp.convnet.models.point_conv_unet import PointConvEncoderDecoder, PointConvUNet
-from warp.convnet.nn.mlp import MLPBlock
 
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
+from warp.convnet.geometry.point_collection import PointCollection
+from warp.convnet.models.point_conv_unet import PointConvEncoderDecoder, PointConvUNet
+from warp.convnet.nn.mlp import MLPBlock
 
 log = RankedLogger(__name__, rank_zero_only=True)
 

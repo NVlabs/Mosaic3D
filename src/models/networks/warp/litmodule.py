@@ -4,11 +4,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from overrides import override
-from warp.convnet.geometry.ops.voxel_ops import voxel_downsample_mapping
-from warp.convnet.geometry.point_collection import PointCollection
 
 from src.models.lightning_modules.language_module import DenseLanguageLitModule
 from src.utils import RankedLogger
+from warp.convnet.geometry.ops.voxel_ops import voxel_downsample_mapping
+from warp.convnet.geometry.point_collection import PointCollection
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
