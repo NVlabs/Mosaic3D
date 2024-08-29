@@ -60,7 +60,7 @@ class TestCaptionLoss(unittest.TestCase):
     def test_caption_loss(self):
         """Tests the caption loss."""
 
-        caption_loss = CaptionLoss()
+        caption_loss = CaptionLoss(use_logit_scale=True)
         for i, batch_dict in enumerate(self.loader):
             assert isinstance(batch_dict, dict)
             batch_dict = to_device(batch_dict, self.device)
@@ -125,9 +125,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Run caption loss tests")
-    parser.add_argument(
-        "--data_path", type=str, default="path/to/default/data", help="Path to the data"
-    )
+    parser.add_argument("--data_path", type=str, default="/datasets", help="Path to the data")
     args = parser.parse_args()
 
     # Set the data_path as a class attribute

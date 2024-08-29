@@ -8,7 +8,6 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch_scatter import segment_csr
 
-import warp as wp
 from src.models.losses.loss_base import LossBase
 
 
@@ -152,6 +151,7 @@ class CaptionLoss(LossBase):
         self,
         normalize_input: bool = True,
         ignore_index: int = -100,
+        use_logit_scale: Optional[bool] = False,
         loss_reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
         **kwargs,
     ):
@@ -160,6 +160,10 @@ class CaptionLoss(LossBase):
         self.loss_func = nn.NLLLoss(ignore_index=ignore_index, reduction="none")
         assert loss_reduction in ["mean", "weighted_sum"]
         self.loss_reduction = loss_reduction
+        self.use_logit_scale = use_logit_scale
+        if use_logit_scale:
+            self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07), requires_grad=True)
+
         self.kwargs = kwargs
 
     def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
@@ -202,6 +206,8 @@ class CaptionLoss(LossBase):
         # Logit
         device = pred_feats.device
         caption_logits = pred_feats @ unique_caption_embeds.T.to(device)
+        if self.use_logit_scale:
+            caption_logits = self.logit_scale.exp() * caption_logits
         caption_scores = F.log_softmax(caption_logits, dim=-1)
 
         rep_caption_scores = caption_scores[corr_idx]
