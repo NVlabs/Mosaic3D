@@ -40,7 +40,8 @@ class Collect:
         if isinstance(self.keys, str):
             self.keys = [self.keys]
         for key in self.keys:
-            data[key] = data_dict[key]
+            if key in data_dict.keys():
+                data[key] = data_dict[key]
         for key, value in self.offset_keys.items():
             data[key] = torch.tensor([data_dict[value].shape[0]])
         for name, keys in self.kwargs.items():
@@ -971,6 +972,25 @@ class SphereCrop:
                     "caption": captions,
                     "idx": new_caption_index,
                 }
+            if (
+                "clip_point_indices" in data_dict.keys()
+                and "clip_point_offset" in data_dict.keys()
+            ):
+                clip_point_indices = data_dict["clip_point_indices"]
+                new_index = np.arange(len(idx_crop))
+                to_new_index = np.ones(num_points_before, dtype=int) * -1
+                to_new_index[idx_crop] = new_index
+                new_clip_point_indices = [
+                    to_new_index[clip_point_index]
+                    for clip_point_index in clip_point_indices
+                ]
+                # Remove -1 index
+                new_clip_point_indices = [
+                    new_clip_point_index[new_clip_point_index != -1]
+                    for new_clip_point_index in new_clip_point_indices
+                ]
+                data_dict["new_clip_point_indices"] = new_clip_point_indices
+                data_dict["clip_point_offset"] = len(new_clip_point_indices)
 
         # Filter out captions that have no points
         if "caption_data" in data_dict:

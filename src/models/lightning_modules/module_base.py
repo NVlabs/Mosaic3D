@@ -13,7 +13,7 @@ from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatr
 from src.models.losses.caption_loss import CaptionLoss
 from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
 from src.models.optimization.fastai_lrscheduler import OneCycle
-from src.models.regionplc.text_models import build_text_model
+from src.models.regionplc.clip_models import build_clip_model
 from src.models.regionplc.utils import caption_utils
 from src.utils import RankedLogger
 

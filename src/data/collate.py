@@ -55,6 +55,40 @@ def point_collate_fn(batch, grid_size, mix_prob=0):
             batch["offset"] = torch.cat(
                 [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
             )
+
+    '''
+    Convert
+        per-batch point_indices
+            (
+                e.g.,
+                batch0: [0, 3, 4, ..., 10], num_pts=22
+                batch1: [1, 3, 9, ... 21], num_pts=33
+            )
+        into multibatch point_indices.
+            (
+                e.g.,
+                [0, 3, 4, ..., 10, 1+22, 3+22, 9+22, ... 21+22]
+            )
+    '''
+    if "clip_point_indices" in batch.keys():
+        batch_size = len(batch["clip_point_offset"]) - 1
+        for idx_batch in range(1, batch_size): # exclude idx_batch==0
+            idx_start = batch["clip_point_offset"][idx_batch]
+            idx_end = batch["clip_point_offset"][idx_batch+1]
+            batch["clip_point_indices"][idx_start:idx_end] += batch["offset"][idx_batch]
+
+    if "clip_point_offset" in batch.keys():
+        num_pts = batch["clip_point_offset"][-1]
+        clip_indices_image_to_point = torch.zeros(
+            (num_pts,), dtype=torch.int64,
+        )
+        for idx_batch, (idx_start, idx_end) in enumerate(zip(
+            batch["clip_point_offset"][:-1],
+            batch["clip_point_offset"][1:]
+        )):
+            clip_indices_image_to_point[idx_start:idx_end] += idx_batch
+        batch["clip_indices_image_to_point"] = clip_indices_image_to_point
+
     batch["grid_size"] = grid_size
     return batch
 

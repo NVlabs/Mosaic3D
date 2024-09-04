@@ -76,8 +76,12 @@ loss_cfg:
   sync_dist: true
 
 # compile model for faster training with pytorch 2.0
-text_encoder:
+clip_encoder:
   name: CLIP
   backbone: ViT-B/16
 
 compile: false
+
+eval_cfg:
+  eval_clip_text_alignment: ${data.val_dataset.eval_clip_text_alignment}
+  eval_clip_image_alignment: ${data.val_dataset.eval_clip_image_alignment}

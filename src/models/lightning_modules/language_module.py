@@ -1,8 +1,11 @@
 from typing import Any, Dict, List, Optional
 
+from einops import rearrange, repeat
+from torch_scatter import segment_csr
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
@@ -10,7 +13,7 @@ import src.models.regionplc.utils.caption_utils as caption_utils
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import CaptionLoss
 from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
-from src.models.regionplc.text_models import build_text_model
+from src.models.regionplc.clip_models import build_clip_model
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
@@ -23,9 +26,10 @@ class DenseLanguageLitModule(LitModuleBase):
         optimizer,
         scheduler,
         scheduler_interval: str,
-        text_encoder: Dict,
+        clip_encoder: Dict,
         compile: bool,
         loss_cfg: Dict,
+        eval_cfg: Dict,
     ):
         super().__init__()
 
@@ -44,9 +48,15 @@ class DenseLanguageLitModule(LitModuleBase):
         # for tracking best so far validation accuracy
         self.val_confmat = None
         self.val_miou_best = MaxMetric()
+        self.val_clip_text_score = MeanMetric()
+        self.val_clip_image_score = MeanMetric()
 
         # Sync distributed metrics
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
+
+        # CLIP evaluation
+        self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", True)
+        self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", True)
 
     def configure_model(self) -> None:
         # network
@@ -55,13 +65,13 @@ class DenseLanguageLitModule(LitModuleBase):
 
         self.net = self.hparams.net()
         # Print network on the first GPU
-        if self.local_rank == 0:
-            log.info(self.net)
+        # if self.local_rank == 0:
+        #     log.info(self.net)
 
-        # text encoder
-        self.text_encoder = build_text_model(self.hparams.text_encoder)
-        # freeze text encoder
-        for params in self.text_encoder.parameters():
+        # clip encoder
+        self.clip_encoder = build_clip_model(self.hparams.clip_encoder)
+        # freeze clip encoder
+        for params in self.clip_encoder.parameters():
             params.requires_grad = False
 
     def setup(self, stage: str) -> None:
@@ -94,7 +104,7 @@ class DenseLanguageLitModule(LitModuleBase):
         with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
             batched_captions: List[List[str]] = batch["caption_data"]["caption"]
             caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(
-                batched_captions, self.text_encoder
+                batched_captions, self.clip_encoder
             )
         # copy for backward
         caption_embeds = caption_embeds.clone()
@@ -186,6 +196,59 @@ class DenseLanguageLitModule(LitModuleBase):
         else:
             preds = new_logits.max(1)[1]
 
+        if self.eval_clip_image_alignment:
+            # prepare image data in bf16
+            with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
+                image_feats = caption_utils.forward_image_encoder(
+                    batch["clip_processed_image"], self.clip_encoder,
+                ) # [b c]
+
+            # slice pointcloud visible to images.
+            point_feat = out_dict["clip_feat"]
+            point_feat_slices = point_feat[batch["clip_point_indices"]] # [n_pts c]
+
+            # unpool image_feats to per-point feats.
+            image_feats_unpooled = image_feats[
+                batch["clip_indices_image_to_point"], :] # [n_pts c]
+
+            # compute per-point cossine similarity between point_feat and image_feat
+            clip_scores = F.cosine_similarity(
+                point_feat_slices, image_feats_unpooled
+            )
+            clip_avg_score = clip_scores.mean().cpu().numpy()
+            self.val_clip_image_score.update(clip_avg_score)
+
+        if self.eval_clip_text_alignment:
+            text_feats = self.clip_encoder.encode_text(
+                batch["clip_tokenized_text"]
+            ) # [n_captions c]
+
+            # slice pointcloud per caption
+            point_feat = out_dict["clip_feat"]
+            offset = batch["offset"]
+            point_feat_slices = [
+                point_feat[point_indices_per_caption[offset[idx_batch]:offset[idx_batch+1]], :]
+                for idx_batch, point_indices_per_batch in enumerate(batch["caption_data"]["idx"])
+                    for point_indices_per_caption in point_indices_per_batch
+            ]
+
+            # compute per-point cossine similarity between point_feat and text_feat
+            clip_score_sum = 0.
+            cnt = 0
+            for point_feat_slice, text_feat in zip(point_feat_slices, text_feats):
+                text_feat_unpooled = repeat( # unpool text_feat to per-point feats
+                    text_feat,
+                    "c -> n_pts_per_caption c",
+                    n_pts_per_caption=len(point_feat_slice)
+                )
+                clip_scores_per_caption = F.cosine_similarity(
+                    point_feat_slice, text_feat_unpooled
+                )
+                clip_score_sum += clip_scores_per_caption.sum().cpu().numpy()
+                cnt += len(clip_scores_per_caption)
+            clip_avg_score = clip_score_sum / float(cnt)
+            self.val_clip_text_score.update(clip_avg_score)
+
         # update and log metrics
         self.val_confmat(preds, batch["segment"])
 
@@ -233,16 +296,27 @@ class DenseLanguageLitModule(LitModuleBase):
                 }
             )
 
+        if self.eval_clip_text_alignment:
+            log_metrics.update({
+                "val/clip_text_score": self.val_clip_text_score.compute()
+            })
+        if self.eval_clip_image_alignment:
+            log_metrics.update({
+                "val/clip_image_score": self.val_clip_image_score.compute(),
+            })
+
         self.log_dict(log_metrics, sync_dist=True, logger=True)
 
         self.val_confmat.reset()
+        self.val_clip_text_score.reset()
+        self.val_clip_image_score.reset()
 
     def children(self):
         for name, module in self.named_children():
-            if name != "text_encoder":
+            if name != "clip_encoder":
                 yield module
 
     def parameters(self):
         for name, params in self.named_parameters():
-            if "text_encoder" not in name:
+            if "clip_encoder" not in name:
                 yield params

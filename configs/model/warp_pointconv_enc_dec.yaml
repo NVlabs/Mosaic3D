@@ -74,7 +74,7 @@ loss_cfg:
   sync_dist: true # print synced loss (0.82 it/s vs 84 it/s)
 
 # compile model for faster training with pytorch 2.0
-text_encoder:
+clip_encoder:
   name: CLIP
   backbone: ViT-B/16
 

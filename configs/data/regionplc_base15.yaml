@@ -4,6 +4,8 @@ train_dataset:
   _target_: src.data.scannet.dataset.ScanNetDataset
   _partial_: true
   data_dir: /datasets/scannet_hf
+  image_root_path: /datasets/scannet_frames/tasks/scannet_frames_25k
+  pcd_root_path: /datasets/scannet_frames
   caption_dir: /datasets/regionplc_converted/
   caption_subset: detic-template_and_kosmos_125k_iou0.2
   object_sample_ratio: 0.2
@@ -41,6 +43,9 @@ train_dataset:
           "binary",
           "caption_data",
           "origin_idx",
+          "clip_tokenized_text",
+          "clip_processed_image",
+          "clip_point_indices",
         ]
       offset_keys_dict:
         offset: coord
@@ -50,11 +55,20 @@ train_dataset:
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
   ignore_label: -100
+  eval_clip_text_alignment: false
+  eval_clip_image_alignment: false
+  clip_input_resolution: 224
+
 
 val_dataset:
   _target_: src.data.scannet.dataset.ScanNetDataset
   _partial_: true
   data_dir: ${data.train_dataset.data_dir}
+  image_root_path: ${data.train_dataset.image_root_path}
+  pcd_root_path: ${data.train_dataset.pcd_root_path}
+  caption_dir: ${data.train_dataset.caption_dir}
+  caption_subset: ${data.train_dataset.caption_subset}
+  object_sample_ratio: ${data.train_dataset.object_sample_ratio}
   base_class_idx: ${data.train_dataset.base_class_idx}
   ignore_class_idx: ${data.train_dataset.ignore_class_idx}
   novel_class_idx: ${data.train_dataset.novel_class_idx}
@@ -76,12 +90,21 @@ val_dataset:
           "segment",
           "instance",
           "binary",
+          "caption_data",
           "origin_idx",
+          "clip_tokenized_text",
+          "clip_processed_image",
+          "clip_point_indices",
         ]
       offset_keys_dict:
         offset: coord
+        clip_point_offset: clip_point_indices
         pc_count: origin_coord
       feat_keys: ["color", "coord"]
+  eval_clip_text_alignment: true
+  eval_clip_image_alignment: false
+  clip_input_resolution: ${data.train_dataset.clip_input_resolution}
+
 collate_fn:
   _target_: src.data.collate.point_collate_fn
   _partial_: true
