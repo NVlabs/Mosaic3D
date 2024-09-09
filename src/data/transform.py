@@ -931,6 +931,14 @@ class SphereCrop:
                 raise NotImplementedError
             num_points_before = data_dict["coord"].shape[0]
             idx_crop = np.argsort(np.sum(np.square(data_dict["coord"] - center), 1))[:point_max]
+
+            # If needed, we intentionally include specific point clouds.
+            if "clip_point_indices" in data_dict.keys():
+                clip_point_indices = data_dict["clip_point_indices"]
+                num_replace = len(clip_point_indices)
+                idx_crop[-num_replace:] = clip_point_indices.numpy()
+
+            # Crop point clouds
             if "coord" in data_dict.keys():
                 data_dict["coord"] = data_dict["coord"][idx_crop]
             if "grid_coord" in data_dict.keys():
@@ -972,13 +980,10 @@ class SphereCrop:
                     "caption": captions,
                     "idx": new_caption_index,
                 }
-            if (
-                "clip_point_indices" in data_dict.keys()
-                and "clip_point_offset" in data_dict.keys()
-            ):
+            if "clip_point_indices" in data_dict.keys():
                 clip_point_indices = data_dict["clip_point_indices"]
-                new_index = np.arange(len(idx_crop))
-                to_new_index = np.ones(num_points_before, dtype=int) * -1
+                new_index = torch.arange(len(idx_crop))
+                to_new_index = torch.full((num_points_before,), -1, dtype=torch.long)
                 to_new_index[idx_crop] = new_index
                 new_clip_point_indices = [
                     to_new_index[clip_point_index]
@@ -989,8 +994,8 @@ class SphereCrop:
                     new_clip_point_index[new_clip_point_index != -1]
                     for new_clip_point_index in new_clip_point_indices
                 ]
-                data_dict["new_clip_point_indices"] = new_clip_point_indices
-                data_dict["clip_point_offset"] = len(new_clip_point_indices)
+                new_clip_point_indices = torch.cat(new_clip_point_indices)
+                data_dict["clip_point_indices"] = new_clip_point_indices
 
         # Filter out captions that have no points
         if "caption_data" in data_dict:

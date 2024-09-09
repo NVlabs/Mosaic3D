@@ -49,6 +49,7 @@ train_dataset:
         ]
       offset_keys_dict:
         offset: coord
+        clip_point_offset: clip_point_indices
         pc_count: origin_coord
       feat_keys: ["color", "coord"]
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
@@ -57,6 +58,8 @@ train_dataset:
   ignore_label: -100
   eval_clip_text_alignment: false
   eval_clip_image_alignment: false
+  train_clip_text_alignment: false
+  train_clip_image_alignment: false
   clip_input_resolution: 224
 
 
@@ -103,6 +106,8 @@ val_dataset:
       feat_keys: ["color", "coord"]
   eval_clip_text_alignment: true
   eval_clip_image_alignment: false
+  train_clip_text_alignment: false
+  train_clip_image_alignment: false
   clip_input_resolution: ${data.train_dataset.clip_input_resolution}
 
 collate_fn:

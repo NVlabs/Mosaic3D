@@ -45,6 +45,8 @@ class ScanNetDataset(Dataset):
         repeat: int = 1,
         eval_clip_text_alignment: bool = True,
         eval_clip_image_alignment: bool = False,
+        train_clip_text_alignment: bool = False,
+        train_clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
     ):
         super().__init__()
@@ -57,6 +59,8 @@ class ScanNetDataset(Dataset):
         self.repeat = repeat
         self.eval_clip_text_alignment = eval_clip_text_alignment
         self.eval_clip_image_alignment = eval_clip_image_alignment
+        self.train_clip_text_alignment = train_clip_text_alignment
+        self.train_clip_image_alignment = train_clip_image_alignment
 
         # set caption dir for train dataset
         self.caption_dir = Path(caption_dir) / caption_subset
@@ -154,14 +158,16 @@ class ScanNetDataset(Dataset):
     def load_clip_point_indices(
         self,
         scene_name : str,
+        image_path : str,
         coord : Optional[np.ndarray] = None,
-        idx_image : int = 0,
     ) -> torch.Tensor:
         ''' Load point indices that visible to the image.
         '''
-        image_path = sorted(glob(os.path.join(
-            self.image_root_path, scene_name, f"color/*.jpg"
-        )))[idx_image]
+        # if image_path is None:
+        #     idx_image = 0
+        #     image_path = sorted(glob(os.path.join(
+        #         self.image_root_path, scene_name, f"color/*.jpg"
+        #     )))[idx_image]
         depth_path = image_path.replace("color", "depth").replace(".jpg", ".png")
         pose_path = image_path.replace("color", "pose").replace(".jpg", ".txt")
 
@@ -195,13 +201,17 @@ class ScanNetDataset(Dataset):
     def load_clip_processed_image(
         self, 
         scene_name : str,
-        idx_image: int = 0,
     ) -> torch.Tensor:
-        image_path = sorted(glob(os.path.join(
+        image_paths = sorted(glob(os.path.join(
             self.image_root_path, scene_name, f"color/*.jpg"
-        )))[idx_image]
+        )))
+        if self.split == "train":
+            idx_image = np.random.randint(len(image_paths))
+        else:
+            idx_image = 0
+        image_path = image_paths[idx_image]
         assert os.path.exists(image_path), f"no image at {image_path:s}"
-        return self.preprocess_image(Image.open(image_path)).unsqueeze(0)
+        return self.preprocess_image(Image.open(image_path)).unsqueeze(0), image_path
 
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)
@@ -239,16 +249,19 @@ class ScanNetDataset(Dataset):
         # load captions
         point_indices, captions = self.load_caption(scene_name)
         data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
-        if self.eval_clip_text_alignment:
+        if (
+            self.eval_clip_text_alignment
+            or self.train_clip_text_alignment
+        ):
             # NOTE: huggingface tokenization issue
             # ** is too long for context length.
             captions = [caption[:50] for caption in captions]
             data_dict["clip_tokenized_text"] = self.tokenize_text(captions)
     
         # load CLIP processed single iamge and corresponding point indices
-        if self.split != "train":
-            data_dict["clip_processed_image"] = self.load_clip_processed_image(scene_name)
-            data_dict["clip_point_indices"] = self.load_clip_point_indices(scene_name, coord)
+        data_dict["clip_processed_image"], image_path = self.load_clip_processed_image(scene_name)
+        data_dict["clip_point_indices"] = self.load_clip_point_indices(
+            scene_name, image_path, coord)
 
         data_dict = self.transforms(data_dict)
 

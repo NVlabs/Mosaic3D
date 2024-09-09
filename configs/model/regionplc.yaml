@@ -74,6 +74,10 @@ loss_cfg:
   caption_learnable_logit_scale: true
   clip_learnable_logit_scale: false
   sync_dist: true
+  train_clip_text_alignment: ${data.train_dataset.train_clip_text_alignment}
+  train_clip_image_alignment: ${data.train_dataset.train_clip_image_alignment}
+  clip_text_loss_weight: 1.0
+  clip_image_loss_weight: 1.0
 
 # compile model for faster training with pytorch 2.0
 clip_encoder:

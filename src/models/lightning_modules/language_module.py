@@ -12,7 +12,11 @@ from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatr
 import src.models.regionplc.utils.caption_utils as caption_utils
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import CaptionLoss
-from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
+from src.models.losses.clip_alignment_loss import (
+    CLIPAlignmentLoss,
+    compute_clip_image_alignment,
+    compute_clip_text_cosine_similarity
+)
 from src.models.regionplc.clip_models import build_clip_model
 from src.utils import RankedLogger
 
@@ -54,9 +58,11 @@ class DenseLanguageLitModule(LitModuleBase):
         # Sync distributed metrics
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
 
-        # CLIP evaluation
+        # CLIP score for eval / train
         self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", True)
         self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", True)
+        self.train_clip_text_alignment = loss_cfg.get("train_clip_text_alignment", False)
+        self.train_clip_image_alignment = loss_cfg.get("train_clip_image_alignment", False)
 
     def configure_model(self) -> None:
         # network
@@ -117,6 +123,7 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # loss
         binary_loss, seg_loss, caption_loss = 0, 0, 0
+        clip_image_alignment_loss = 0
 
         if self.binary_loss is not None:
             binary_labels = batch["binary"]
@@ -149,11 +156,24 @@ class DenseLanguageLitModule(LitModuleBase):
             * self.hparams.loss_cfg.caption_loss_weight
         )
 
-        loss = binary_loss + seg_loss + caption_loss
+        # CLIP image loss
+        if self.train_clip_image_alignment:
+            clip_image_alignment_loss = compute_clip_image_alignment(
+                clip_encoder=self.clip_encoder,
+                clip_processed_image=batch["clip_processed_image"],
+                point_feat=out_dict["clip_feat"],
+                clip_point_indices=batch["clip_point_indices"],
+                clip_indices_image_to_point=batch["clip_indices_image_to_point"],
+                is_loss=True,
+            ) * self.hparams.loss_cfg.clip_image_loss_weight
+
+        loss = binary_loss + seg_loss + caption_loss + \
+            clip_image_alignment_loss
 
         log_metrics = dict(
             loss=loss,
             caption_loss=caption_loss,
+            clip_image_alignment_loss=clip_image_alignment_loss,
         )
         if self.binary_loss is not None:
             log_metrics["binary_loss"] = binary_loss
@@ -197,56 +217,26 @@ class DenseLanguageLitModule(LitModuleBase):
             preds = new_logits.max(1)[1]
 
         if self.eval_clip_image_alignment:
-            # prepare image data in bf16
-            with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-                image_feats = caption_utils.forward_image_encoder(
-                    batch["clip_processed_image"], self.clip_encoder,
-                ) # [b c]
-
-            # slice pointcloud visible to images.
-            point_feat = out_dict["clip_feat"]
-            point_feat_slices = point_feat[batch["clip_point_indices"]] # [n_pts c]
-
-            # unpool image_feats to per-point feats.
-            image_feats_unpooled = image_feats[
-                batch["clip_indices_image_to_point"], :] # [n_pts c]
-
-            # compute per-point cossine similarity between point_feat and image_feat
-            clip_scores = F.cosine_similarity(
-                point_feat_slices, image_feats_unpooled
+            clip_scores = compute_clip_image_alignment(
+            
+                clip_encoder=self.clip_encoder,
+                clip_processed_image=batch["clip_processed_image"],
+                point_feat=out_dict["clip_feat"],
+                clip_point_indices=batch["clip_point_indices"],
+                clip_indices_image_to_point=batch["clip_indices_image_to_point"],
+                is_loss=False,
             )
             clip_avg_score = clip_scores.mean().cpu().numpy()
             self.val_clip_image_score.update(clip_avg_score)
 
         if self.eval_clip_text_alignment:
-            text_feats = self.clip_encoder.encode_text(
-                batch["clip_tokenized_text"]
-            ) # [n_captions c]
-
-            # slice pointcloud per caption
-            point_feat = out_dict["clip_feat"]
-            offset = batch["offset"]
-            point_feat_slices = [
-                point_feat[point_indices_per_caption[offset[idx_batch]:offset[idx_batch+1]], :]
-                for idx_batch, point_indices_per_batch in enumerate(batch["caption_data"]["idx"])
-                    for point_indices_per_caption in point_indices_per_batch
-            ]
-
-            # compute per-point cossine similarity between point_feat and text_feat
-            clip_score_sum = 0.
-            cnt = 0
-            for point_feat_slice, text_feat in zip(point_feat_slices, text_feats):
-                text_feat_unpooled = repeat( # unpool text_feat to per-point feats
-                    text_feat,
-                    "c -> n_pts_per_caption c",
-                    n_pts_per_caption=len(point_feat_slice)
-                )
-                clip_scores_per_caption = F.cosine_similarity(
-                    point_feat_slice, text_feat_unpooled
-                )
-                clip_score_sum += clip_scores_per_caption.sum().cpu().numpy()
-                cnt += len(clip_scores_per_caption)
-            clip_avg_score = clip_score_sum / float(cnt)
+            clip_avg_score = compute_clip_text_cosine_similarity(
+                clip_encoder=self.clip_encoder,
+                clip_tokenized_text=batch["clip_tokenized_text"],
+                point_feat=out_dict["clip_feat"],
+                offset=batch["offset"],
+                point_indices_to_caption=batch["caption_data"]["idx"],
+            )
             self.val_clip_text_score.update(clip_avg_score)
 
         # update and log metrics
