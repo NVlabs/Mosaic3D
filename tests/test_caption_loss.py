@@ -8,7 +8,11 @@ from lightning import LightningDataModule
 from omegaconf import OmegaConf
 
 import warp as wp
-from src.models.losses.caption_loss import CaptionAlignmentLoss, CaptionLoss
+from src.models.losses.caption_loss import (
+    CaptionAlignmentLoss,
+    CaptionLoss,
+    DenseCaptionAlignmentLoss,
+)
 from src.models.regionplc.text_models import build_text_model
 from src.models.regionplc.utils.caption_utils import (
     get_caption_batch,
@@ -92,6 +96,38 @@ class TestCaptionLoss(unittest.TestCase):
         """Tests the caption alignment loss."""
 
         caption_head = CaptionAlignmentLoss()
+
+        loader = self.loader
+        device = self.device
+        text_encoder = self.text_encoder
+
+        for i, batch_dict in enumerate(loader):
+            assert isinstance(batch_dict, dict)
+            batch_dict = to_device(batch_dict, device)
+            caption_embed = get_caption_batch(batch_dict["caption_data"]["caption"], text_encoder)
+
+            rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
+            pc = PointCollection(
+                batch_dict["coord"].cpu(),
+                rand_feats,
+                offsets=batch_dict["offset"].cpu(),
+            ).to(device)
+
+            loss = caption_head.loss(
+                pc.feature_tensor,
+                caption_embed,
+                batched_list_of_point_indices=batch_dict["caption_data"]["idx"],
+                input_batch_offsets=batch_dict["offset"],
+                valid_mask=None,
+            )
+            print(loss)
+            if i == 0:
+                break
+
+    def test_dense_caption_alignment_loss(self):
+        """Tests the dense caption alignment loss."""
+
+        caption_head = DenseCaptionAlignmentLoss()
 
         loader = self.loader
         device = self.device

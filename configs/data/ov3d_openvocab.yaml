@@ -1,0 +1,7 @@
+defaults:
+  - ov3d_base15
+
+train_dataset:
+  # class labels
+  base_class_idx: []
+  ignore_class_idx: [0, 1, 19]

@@ -74,8 +74,8 @@ loss_cfg:
   caption_learnable_logit_scale: true
   clip_learnable_logit_scale: false
   sync_dist: true
-  train_clip_text_alignment: ${data.train_dataset.train_clip_text_alignment}
-  train_clip_image_alignment: ${data.train_dataset.train_clip_image_alignment}
+  train_clip_text_alignment: false
+  train_clip_image_alignment: false
   clip_text_loss_weight: 1.0
   clip_image_loss_weight: 1.0
 
@@ -87,5 +87,5 @@ clip_encoder:
 compile: false
 
 eval_cfg:
-  eval_clip_text_alignment: ${data.val_dataset.eval_clip_text_alignment}
-  eval_clip_image_alignment: ${data.val_dataset.eval_clip_image_alignment}
+  eval_clip_text_alignment: false
+  eval_clip_image_alignment: false

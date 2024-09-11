@@ -45,10 +45,8 @@ class ScanNetDataset(Dataset):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
-        eval_clip_text_alignment: bool = True,
-        eval_clip_image_alignment: bool = False,
-        train_clip_text_alignment: bool = False,
-        train_clip_image_alignment: bool = False,
+        clip_text_alignment: bool = False,
+        clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
     ):
         super().__init__()
@@ -59,14 +57,13 @@ class ScanNetDataset(Dataset):
         self.object_sample_ratio = object_sample_ratio
         self.class_names = self.CLASS_LABELS
         self.repeat = repeat
-        self.eval_clip_text_alignment = eval_clip_text_alignment
-        self.eval_clip_image_alignment = eval_clip_image_alignment
-        self.train_clip_text_alignment = train_clip_text_alignment
-        self.train_clip_image_alignment = train_clip_image_alignment
+        self.clip_text_alignment = clip_text_alignment
+        self.clip_image_alignment = clip_image_alignment
 
         # set caption dir for train dataset
-        self.caption_dir = Path(caption_dir) / caption_subset
-        assert self.caption_dir.exists(), f"{self.caption_dir} not exist."
+        if self.split == "train" or self.clip_text_alignment:
+            self.caption_dir = Path(caption_dir) / caption_subset
+            assert self.caption_dir.exists(), f"{self.caption_dir} not exist."
 
         # read scene names for split
         with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:
@@ -89,7 +86,15 @@ class ScanNetDataset(Dataset):
         self.ignore_label = ignore_label
 
         # data transform
-        self.transforms = Compose(OmegaConf.to_container(transforms))
+        transforms_cfg = OmegaConf.to_container(transforms)
+        for transform_cfg in transforms_cfg:
+            if transform_cfg["type"] == "Collect":
+                if self.clip_text_alignment:
+                    transform_cfg["keys"].append("clip_tokenized_text")
+                if self.clip_image_alignment:
+                    transform_cfg["keys"].extend(["clip_processed_image", "clip_point_indices"])
+                    transform_cfg["offset_keys_dict"]["clip_point_offset"] = "clip_point_indices"
+        self.transforms = Compose(transforms_cfg)
 
         log.info(f"Loaded {self.__len__()} samples in {self.split} set.")
 
@@ -164,11 +169,6 @@ class ScanNetDataset(Dataset):
         coord: Optional[np.ndarray] = None,
     ) -> torch.Tensor:
         """Load point indices that visible to the image."""
-        # if image_path is None:
-        #     idx_image = 0
-        #     image_path = sorted(glob(os.path.join(
-        #         self.image_root_path, scene_name, f"color/*.jpg"
-        #     )))[idx_image]
         depth_path = image_path.replace("color", "depth").replace(".jpg", ".png")
         pose_path = image_path.replace("color", "pose").replace(".jpg", ".txt")
 
@@ -246,19 +246,24 @@ class ScanNetDataset(Dataset):
         )
 
         # load captions
-        point_indices, captions = self.load_caption(scene_name)
-        data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
-        if self.eval_clip_text_alignment or self.train_clip_text_alignment:
-            # NOTE: huggingface tokenization issue
-            # ** is too long for context length.
-            captions = [caption[:50] for caption in captions]
-            data_dict["clip_tokenized_text"] = self.tokenize_text(captions)
+        if self.split == "train" or self.clip_text_alignment:
+            point_indices, captions = self.load_caption(scene_name)
+            data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
+
+            if self.clip_text_alignment:
+                # NOTE: huggingface tokenization issue
+                # ** is too long for context length.
+                captions = [caption[:50] for caption in captions]
+                data_dict["clip_tokenized_text"] = self.tokenize_text(captions)
 
         # load CLIP processed single image and corresponding point indices
-        data_dict["clip_processed_image"], image_path = self.load_clip_processed_image(scene_name)
-        data_dict["clip_point_indices"] = self.load_clip_point_indices(
-            scene_name, image_path, coord
-        )
+        if self.clip_image_alignment:
+            data_dict["clip_processed_image"], image_path = self.load_clip_processed_image(
+                scene_name
+            )
+            data_dict["clip_point_indices"] = self.load_clip_point_indices(
+                scene_name, image_path, coord
+            )
 
         data_dict = self.transforms(data_dict)
 

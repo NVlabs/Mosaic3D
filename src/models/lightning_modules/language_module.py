@@ -11,7 +11,11 @@ from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatr
 
 import src.models.regionplc.utils.caption_utils as caption_utils
 from src.models.lightning_modules.module_base import LitModuleBase
-from src.models.losses.caption_loss import CaptionLoss
+from src.models.losses.caption_loss import (
+    CaptionLoss,
+    DenseCaptionAlignmentLoss,
+    CaptionAlignmentLoss,
+)
 from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentLoss,
     compute_clip_image_alignment,
@@ -42,7 +46,17 @@ class DenseLanguageLitModule(LitModuleBase):
         self.net = None
 
         # loss functions
-        self.caption_loss = CaptionLoss(**loss_cfg["caption_loss"])
+        self.is_entity = loss_cfg["caption_loss"].get("is_entity", False)
+        self.caption_loss_type = loss_cfg["caption_loss"].get("type", "contrastive")
+        if self.caption_loss_type == "contrastive":
+            self.caption_loss = CaptionLoss(**loss_cfg["caption_loss"])
+        elif self.caption_loss_type == "alignment":
+            self.caption_loss = DenseCaptionAlignmentLoss(**loss_cfg["caption_loss"])
+        elif self.caption_loss_type == "region_alignment":
+            self.caption_loss = CaptionAlignmentLoss(**loss_cfg["caption_loss"])
+        else:
+            raise ValueError(f"Caption loss type {self.caption_loss_type} not supported")
+
         self.clip_alignment_loss = CLIPAlignmentLoss(**loss_cfg["seg_loss"])
         self.binary_loss = nn.BCEWithLogitsLoss() if loss_cfg.get("binary_loss", None) else None
 
@@ -59,10 +73,10 @@ class DenseLanguageLitModule(LitModuleBase):
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
 
         # CLIP score for eval / train
-        self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", True)
-        self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", True)
         self.train_clip_text_alignment = loss_cfg.get("train_clip_text_alignment", False)
         self.train_clip_image_alignment = loss_cfg.get("train_clip_image_alignment", False)
+        self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", False)
+        self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", False)
 
     def configure_model(self) -> None:
         # network
@@ -71,8 +85,8 @@ class DenseLanguageLitModule(LitModuleBase):
 
         self.net = self.hparams.net()
         # Print network on the first GPU
-        # if self.local_rank == 0:
-        #     log.info(self.net)
+        if self.local_rank == 0:
+            log.info(self.net)
 
         # clip encoder
         self.clip_encoder = build_clip_model(self.hparams.clip_encoder)
@@ -109,11 +123,28 @@ class DenseLanguageLitModule(LitModuleBase):
         # Prepare caption data in bf16
         with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
             batched_captions: List[List[str]] = batch["caption_data"]["caption"]
-            caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(
-                batched_captions, self.clip_encoder
-            )
+
+            caption_fn_kargs = {
+                "batched_captions": batched_captions,
+                "clip_encoder": self.clip_encoder,
+                "is_entity": self.is_entity,
+            }
+            if self.caption_loss_type == "contrastive":
+                caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(
+                    **caption_fn_kargs
+                )
+            elif (
+                self.caption_loss_type == "alignment"
+                or self.caption_loss_type == "region_alignment"
+            ):
+                caption_embeds = caption_utils.get_caption_batch(**caption_fn_kargs)
+            else:
+                raise ValueError(f"Caption loss type {self.caption_loss_type} not supported")
+
         # copy for backward
-        caption_embeds = caption_embeds.clone()
+        caption_embeds = (
+            caption_embeds.clone() if isinstance(caption_embeds, torch.Tensor) else caption_embeds
+        )
 
         # Forward
         out_dict = self(batch)
@@ -144,15 +175,22 @@ class DenseLanguageLitModule(LitModuleBase):
                 * self.hparams.loss_cfg.seg_loss_weight
             )
 
-        caption_loss = (
-            self.caption_loss.loss(
-                clip_feat,
-                unique_caption_embeds=caption_embeds,
-                caption_targets=caption_targets,
-                batched_list_of_point_indices=batch["caption_data"]["idx"],
-                input_batch_offsets=batch["offset"],
-                valid_mask=out_dict.get("mapping_valid_mask", None),
+        caption_loss_kargs = {
+            "batched_list_of_point_indices": batch["caption_data"]["idx"],
+            "input_batch_offsets": batch["offset"],
+            "valid_mask": out_dict.get("mapping_valid_mask", None),
+        }
+        if self.caption_loss_type == "contrastive":
+            caption_loss_kargs.update(
+                {
+                    "unique_caption_embeds": caption_embeds,
+                    "caption_targets": caption_targets,
+                }
             )
+        elif self.caption_loss_type == "alignment" or self.caption_loss_type == "region_alignment":
+            caption_loss_kargs["caption_embeddings"] = caption_embeds
+        caption_loss = (
+            self.caption_loss.loss(clip_feat, **caption_loss_kargs)
             * self.hparams.loss_cfg.caption_loss_weight
         )
 

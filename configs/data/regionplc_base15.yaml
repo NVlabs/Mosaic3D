@@ -43,25 +43,18 @@ train_dataset:
           "binary",
           "caption_data",
           "origin_idx",
-          "clip_tokenized_text",
-          "clip_processed_image",
-          "clip_point_indices",
         ]
       offset_keys_dict:
         offset: coord
-        clip_point_offset: clip_point_indices
         pc_count: origin_coord
       feat_keys: ["color", "coord"]
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
   ignore_label: -100
-  eval_clip_text_alignment: false
-  eval_clip_image_alignment: false
-  train_clip_text_alignment: false
-  train_clip_image_alignment: false
+  clip_text_alignment: ${model.loss_cfg.train_clip_text_alignment}
+  clip_image_alignment: ${model.loss_cfg.train_clip_image_alignment}
   clip_input_resolution: 224
-
 
 val_dataset:
   _target_: src.data.scannet.dataset.ScanNetDataset
@@ -95,19 +88,13 @@ val_dataset:
           "binary",
           "caption_data",
           "origin_idx",
-          "clip_tokenized_text",
-          "clip_processed_image",
-          "clip_point_indices",
         ]
       offset_keys_dict:
         offset: coord
-        clip_point_offset: clip_point_indices
         pc_count: origin_coord
       feat_keys: ["color", "coord"]
-  eval_clip_text_alignment: true
-  eval_clip_image_alignment: false
-  train_clip_text_alignment: false
-  train_clip_image_alignment: false
+  clip_text_alignment: ${model.eval_cfg.eval_clip_text_alignment}
+  clip_image_alignment: ${model.eval_cfg.eval_clip_image_alignment}
   clip_input_resolution: ${data.train_dataset.clip_input_resolution}
 
 collate_fn:

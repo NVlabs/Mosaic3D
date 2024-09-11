@@ -1,0 +1,10 @@
+defaults:
+  - ov3d
+
+net:
+  binary_head_cfg: false # disable binary head
+
+loss_cfg:
+  seg_loss:
+    eval_only: true
+  caption_loss_weight: 1.0
