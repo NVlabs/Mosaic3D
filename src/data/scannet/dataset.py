@@ -316,7 +316,7 @@ def check_scannet_data(
         erroneous_files.append(f"Caption directory {caption_dir} does not exist.")
 
     # Read scene names for all splits
-    splits = ["train", "val", "test"]
+    splits = ["train", "val"]
     scene_names = []
     for split in splits:
         split_file = f"src/data/metadata/split_files/scannetv2_{split}.txt"
@@ -357,6 +357,24 @@ def check_scannet_data(
                             erroneous_files.append(
                                 f"Key '{key}' missing in caption data for scene {split}/{scene_name}."
                             )
+
+                    num_points = caption_data["num_points"]
+                    if any(num_points == 0):
+                        erroneous_files.append(
+                            f"num_points has zero for scene {split}/{scene_name}."
+                        )
+
+                    if len(caption_data["point_indices"]) != num_points.sum():
+                        erroneous_files.append(
+                            f"point_indices has wrong length for scene {split}/{scene_name}."
+                        )
+
+                    # Check the point_indices: list[array] is not empty
+                    if len(caption_data["point_indices"]) == 0:
+                        erroneous_files.append(
+                            f"point_indices is empty for scene {split}/{scene_name}."
+                        )
+
                 except Exception as e:
                     erroneous_files.append(
                         f"Error loading caption data for scene {split}/{scene_name}: {str(e)}"

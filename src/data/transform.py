@@ -976,6 +976,15 @@ class SphereCrop:
                 new_caption_index = [
                     point_indices[point_indices != -1] for point_indices in new_caption_index
                 ]
+                # caption indices of non empty arrays
+                valid_caption_indices = [
+                    i
+                    for i, point_indices in enumerate(new_caption_index)
+                    if len(point_indices) > 0
+                ]
+                # Filter out empty arrays
+                new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
+                captions = [captions[i] for i in valid_caption_indices]
                 data_dict["caption_data"] = {
                     "caption": captions,
                     "idx": new_caption_index,
@@ -986,8 +995,7 @@ class SphereCrop:
                 to_new_index = torch.full((num_points_before,), -1, dtype=torch.long)
                 to_new_index[idx_crop] = new_index
                 new_clip_point_indices = [
-                    to_new_index[clip_point_index]
-                    for clip_point_index in clip_point_indices
+                    to_new_index[clip_point_index] for clip_point_index in clip_point_indices
                 ]
                 # Remove -1 index
                 new_clip_point_indices = [
