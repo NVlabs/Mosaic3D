@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import torch
 import yaml
+import argparse
 from jaxtyping import Int
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
@@ -26,13 +27,13 @@ def print_histogram(num_points, bins=10):
 
 
 @pytest.mark.parametrize(
-    "voxel_size",
+    "config_path, voxel_size",
     [
-        0.025,
+        ("configs/data/regionplc_base15.yaml", 0.025),
     ],
 )
-def test_loading(voxel_size: str) -> None:
-    with open("configs/data/regionplc_base15.yaml") as f:
+def test_loading(config_path: str, voxel_size: str) -> None:
+    with open(config_path) as f:
         omega_config_dict = yaml.safe_load(f.read())
     cfg = OmegaConf.create(omega_config_dict)
     cfg.val_dataset = cfg.train_dataset
@@ -78,5 +79,17 @@ def test_loading(voxel_size: str) -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Test data loading with configurable path.")
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        default="configs/data/ours_video_openvocab.yaml",
+        help="Path to the configuration file",
+    )
+    parser.add_argument(
+        "--voxel_size", type=float, default=0.025, help="Voxel size for downsampling"
+    )
+    args = parser.parse_args()
+
     wp.init()
-    test_loading(voxel_size=0.025)
+    test_loading(config_path=args.config_path, voxel_size=args.voxel_size)

@@ -15,7 +15,7 @@ from src.models.losses.caption_loss import CaptionLoss
 from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentLoss,
     compute_clip_image_alignment,
-    compute_clip_text_cosine_similarity
+    compute_clip_text_cosine_similarity,
 )
 from src.models.regionplc.clip_models import build_clip_model
 from src.utils import RankedLogger
@@ -158,27 +158,30 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # CLIP image loss
         if self.train_clip_image_alignment:
-            clip_image_alignment_loss = compute_clip_image_alignment(
-                clip_encoder=self.clip_encoder,
-                clip_processed_image=batch["clip_processed_image"],
-                point_feat=out_dict["clip_feat"],
-                clip_point_indices=batch["clip_point_indices"],
-                clip_indices_image_to_point=batch["clip_indices_image_to_point"],
-                is_loss=True,
-            ) * self.hparams.loss_cfg.clip_image_loss_weight
+            clip_image_alignment_loss = (
+                compute_clip_image_alignment(
+                    clip_encoder=self.clip_encoder,
+                    clip_processed_image=batch["clip_processed_image"],
+                    point_feat=out_dict["clip_feat"],
+                    clip_point_indices=batch["clip_point_indices"],
+                    clip_indices_image_to_point=batch["clip_indices_image_to_point"],
+                    is_loss=True,
+                )
+                * self.hparams.loss_cfg.clip_image_loss_weight
+            )
 
-        loss = binary_loss + seg_loss + caption_loss + \
-            clip_image_alignment_loss
+        loss = binary_loss + seg_loss + caption_loss + clip_image_alignment_loss
 
         log_metrics = dict(
             loss=loss,
             caption_loss=caption_loss,
-            clip_image_alignment_loss=clip_image_alignment_loss,
         )
         if self.binary_loss is not None:
             log_metrics["binary_loss"] = binary_loss
         if not self.clip_alignment_loss.eval_only:
             log_metrics["seg_loss"] = seg_loss
+        if self.train_clip_image_alignment:
+            log_metrics["clip_image_alignment_loss"] = clip_image_alignment_loss
 
         self.log_dict(
             {f"train/{key}": value for key, value in log_metrics.items()},
@@ -218,7 +221,6 @@ class DenseLanguageLitModule(LitModuleBase):
 
         if self.eval_clip_image_alignment:
             clip_scores = compute_clip_image_alignment(
-            
                 clip_encoder=self.clip_encoder,
                 clip_processed_image=batch["clip_processed_image"],
                 point_feat=out_dict["clip_feat"],
@@ -287,13 +289,13 @@ class DenseLanguageLitModule(LitModuleBase):
             )
 
         if self.eval_clip_text_alignment:
-            log_metrics.update({
-                "val/clip_text_score": self.val_clip_text_score.compute()
-            })
+            log_metrics.update({"val/clip_text_score": self.val_clip_text_score.compute()})
         if self.eval_clip_image_alignment:
-            log_metrics.update({
-                "val/clip_image_score": self.val_clip_image_score.compute(),
-            })
+            log_metrics.update(
+                {
+                    "val/clip_image_score": self.val_clip_image_score.compute(),
+                }
+            )
 
         self.log_dict(log_metrics, sync_dist=True, logger=True)
 
