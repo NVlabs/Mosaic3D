@@ -5,7 +5,6 @@ train_dataset:
   _partial_: true
   data_dir: /datasets/scannet_hf
   image_root_path: /datasets/scannet_frames/tasks/scannet_frames_25k
-  pcd_root_path: /datasets/scannet_frames
   caption_dir: /datasets/regionplc_converted/
   caption_subset: detic-template_and_kosmos_125k_iou0.2
   object_sample_ratio: 0.2
@@ -61,7 +60,6 @@ val_dataset:
   _partial_: true
   data_dir: ${data.train_dataset.data_dir}
   image_root_path: ${data.train_dataset.image_root_path}
-  pcd_root_path: ${data.train_dataset.pcd_root_path}
   caption_dir: ${data.train_dataset.caption_dir}
   caption_subset: ${data.train_dataset.caption_subset}
   object_sample_ratio: ${data.train_dataset.object_sample_ratio}

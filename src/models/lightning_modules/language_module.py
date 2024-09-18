@@ -1,20 +1,20 @@
 from typing import Any, Dict, List, Optional
 
-from einops import rearrange, repeat
-from torch_scatter import segment_csr
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange, repeat
+from torch_scatter import segment_csr
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
 import src.models.regionplc.utils.caption_utils as caption_utils
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import (
+    CaptionAlignmentLoss,
     CaptionLoss,
     DenseCaptionAlignmentLoss,
-    CaptionAlignmentLoss,
 )
 from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentLoss,
@@ -89,7 +89,7 @@ class DenseLanguageLitModule(LitModuleBase):
             log.info(self.net)
 
         # clip encoder
-        self.clip_encoder = build_clip_model(self.hparams.clip_encoder)
+        self.clip_encoder = build_clip_model(self.hparams.clip_encoder, local_rank=self.local_rank)
         # freeze clip encoder
         for params in self.clip_encoder.parameters():
             params.requires_grad = False

@@ -1,17 +1,17 @@
 import os
-import fire
-from tqdm import tqdm
+from glob import glob
 from pathlib import Path
 from typing import Dict, List, Optional
-from glob import glob
 
+import fire
 import numpy as np
-from PIL import Image
+import torch
+from clip import clip
 from natsort import natsorted
 from omegaconf import OmegaConf
-import torch
+from PIL import Image
 from torch.utils.data import Dataset
-from clip import clip
+from tqdm import tqdm
 
 from src.data.metadata.scannet import (
     CLASS_LABELS_20,
@@ -33,8 +33,6 @@ class ScanNetDataset(Dataset):
     def __init__(
         self,
         data_dir: str,
-        image_root_path: str,
-        pcd_root_path: str,
         split: str,
         transforms: None,
         caption_dir: Optional[str] = None,
@@ -45,18 +43,19 @@ class ScanNetDataset(Dataset):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
+        image_root_path: Optional[str] = None,
         clip_text_alignment: bool = False,
         clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
-        self.image_root_path = image_root_path
-        self.pcd_root_path = pcd_root_path
         self.split = split
         self.object_sample_ratio = object_sample_ratio
         self.class_names = self.CLASS_LABELS
         self.repeat = repeat
+
+        self.image_root_path = image_root_path
         self.clip_text_alignment = clip_text_alignment
         self.clip_image_alignment = clip_image_alignment
 
@@ -143,6 +142,14 @@ class ScanNetDataset(Dataset):
         captions = data["captions"]
         point_indices_flatten = data["point_indices"]
         num_points = data["num_points"]
+        num_captions = data.get("num_captions", None)
+
+        if num_captions is not None:
+            idx_select_caption = (
+                np.cumsum(np.insert(num_captions, 0, 0)[0:-1])
+                + np.random.randint(0, num_captions.max(), num_captions.size) % num_captions
+            )
+            captions = np.array(captions)[idx_select_caption]
 
         cumsum = np.cumsum(num_points)[:-1]
         point_indices = np.split(point_indices_flatten, cumsum)

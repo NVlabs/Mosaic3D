@@ -4,3 +4,4 @@ defaults:
 train_dataset:
   caption_dir: /datasets/scannet_captions
   caption_subset: ours_ram++
+  object_sample_ratio: 1.0
