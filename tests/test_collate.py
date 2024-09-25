@@ -5,7 +5,7 @@ import yaml
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
 
-from warp.convnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.point_collection import PointCollection
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

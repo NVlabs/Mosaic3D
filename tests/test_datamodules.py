@@ -12,8 +12,8 @@ from omegaconf import OmegaConf
 from torch import Tensor
 
 import warp as wp
-from warp.convnet.geometry.ops.voxel_ops import voxel_downsample_random_indices
-from warp.convnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.ops.voxel_ops import voxel_downsample_random_indices
+from warpconvnet.geometry.point_collection import PointCollection
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

@@ -10,9 +10,9 @@ from torch import Tensor
 
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
-from warp.convnet.geometry.point_collection import PointCollection
-from warp.convnet.models.point_conv_unet import PointConvEncoderDecoder, PointConvUNet
-from warp.convnet.nn.mlp import MLPBlock
+from warpconvnet.geometry.point_collection import PointCollection
+from warpconvnet.models.backbones.point_conv_unet import PointConvEncoderDecoder, PointConvUNet
+from warpconvnet.nn.mlp import ResidualMLPBlock
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -35,7 +35,7 @@ class ToFeatureAdapter(nn.Module):
 
         # vision adapter
         self.adapter = nn.Sequential(
-            MLPBlock(in_channel, hidden_channels=text_channel, out_channels=channels),
+            ResidualMLPBlock(in_channel, hidden_channels=text_channel, out_channels=channels),
             nn.Linear(channels, channels),
             nn.Identity() if not last_norm else nn.LayerNorm(channels),
         )

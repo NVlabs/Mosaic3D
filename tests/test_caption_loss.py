@@ -18,7 +18,7 @@ from src.models.regionplc.utils.caption_utils import (
     get_caption_batch,
     get_unique_caption_batch,
 )
-from warp.convnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.point_collection import PointCollection
 
 text_encoder_str = """text_encoder:
 name: CLIP

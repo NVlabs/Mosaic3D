@@ -254,7 +254,11 @@ class ScanNetDataset(Dataset):
 
         # load captions
         if self.split == "train" or self.clip_text_alignment:
-            point_indices, captions = self.load_caption(scene_name)
+            try:
+                point_indices, captions = self.load_caption(scene_name)
+            except Exception as e:
+                log.error(f"Error loading caption for scene {scene_name}: {e}", stacklevel=2)
+                point_indices, captions = [], []
             data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
             if self.clip_text_alignment:

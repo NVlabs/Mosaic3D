@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from src.data.regionplc.scannet_dataset import ScanNetDataset
 from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
-from warp.convnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.point_collection import PointCollection
 
 EMBED_PATH = "/datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth"
 

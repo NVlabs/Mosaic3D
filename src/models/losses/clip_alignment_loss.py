@@ -12,7 +12,7 @@ from torch import Tensor
 import src.models.regionplc.utils.caption_utils as caption_utils
 from src.models.losses.loss_base import LossBase
 from src.utils import RankedLogger
-from warp.convnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.point_collection import PointCollection
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -103,7 +103,8 @@ def compute_clip_image_alignment(
     clip_indices_image_to_point: torch.Tensor,
     is_loss: bool = True,
 ) -> torch.Tensor:
-    ''' compute clip_loss using images.
+    """Compute clip_loss using images.
+
     args:
         clip_encoder:
         clip_processed_image: [b c h w]
@@ -116,19 +117,19 @@ def compute_clip_image_alignment(
     returns:
         clip_image_alignment_loss: []
         clip_scores: [n_pts_slice]
-    '''
+    """
     # prepare image data in bf16
     with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
         image_feats = caption_utils.forward_image_encoder(
-            clip_processed_image, clip_encoder,
-        ) # [b c]
+            clip_processed_image,
+            clip_encoder,
+        )  # [b c]
 
     # slice pointcloud visible to images.
-    point_feat_slices = point_feat[clip_point_indices] # [n_pts c]
+    point_feat_slices = point_feat[clip_point_indices]  # [n_pts c]
 
     # unpool image_feats to per-point feats.
-    image_feats_unpooled = image_feats[
-        clip_indices_image_to_point, :] # [n_pts c]
+    image_feats_unpooled = image_feats[clip_indices_image_to_point, :]  # [n_pts c]
 
     # compute per-point cossine similarity between point_feat and image_feat
     # if len(point_feat_slices) != 0:
@@ -143,11 +144,8 @@ def compute_clip_image_alignment(
         )
         return clip_image_alignment_loss
     else:
-        clip_scores = F.cosine_similarity(
-            point_feat_slices, image_feats_unpooled
-        )
+        clip_scores = F.cosine_similarity(point_feat_slices, image_feats_unpooled)
         return clip_scores
-    
 
 
 def compute_clip_text_cosine_similarity(
@@ -157,7 +155,8 @@ def compute_clip_text_cosine_similarity(
     offset: torch.Tensor,
     point_indices_to_caption: torch.Tensor,
 ) -> torch.Tensor:
-    ''' compute cosine similarity between predictions and captions.
+    """Compute cosine similarity between predictions and captions.
+
     args:
         clip_encoder:
         clip_tokenized_text:
@@ -167,31 +166,25 @@ def compute_clip_text_cosine_similarity(
         point_indices_to_caption: List[Tensor]
     returns:
         clip_avg_score: []
-    '''
-    text_feats = clip_encoder.encode_text(
-        clip_tokenized_text
-    ) # [n_captions c]
+    """
+    text_feats = clip_encoder.encode_text(clip_tokenized_text)  # [n_captions c]
 
     # slice pointcloud per caption
-    
+
     point_feat_slices = [
-        point_feat[point_indices_per_caption+offset[idx_batch], :]
+        point_feat[point_indices_per_caption + offset[idx_batch], :]
         for idx_batch, point_indices_per_batch in enumerate(point_indices_to_caption)
-            for point_indices_per_caption in point_indices_per_batch
+        for point_indices_per_caption in point_indices_per_batch
     ]
 
     # compute per-point cossine similarity between point_feat and text_feat
-    clip_score_sum = 0.
+    clip_score_sum = 0.0
     cnt = 0
     for point_feat_slice, text_feat in zip(point_feat_slices, text_feats):
-        text_feat_unpooled = repeat( # unpool text_feat to per-point feats
-            text_feat,
-            "c -> n_pts_per_caption c",
-            n_pts_per_caption=len(point_feat_slice)
+        text_feat_unpooled = repeat(  # unpool text_feat to per-point feats
+            text_feat, "c -> n_pts_per_caption c", n_pts_per_caption=len(point_feat_slice)
         )
-        clip_scores_per_caption = F.cosine_similarity(
-            point_feat_slice, text_feat_unpooled
-        )
+        clip_scores_per_caption = F.cosine_similarity(point_feat_slice, text_feat_unpooled)
         clip_score_sum += clip_scores_per_caption.sum().cpu().numpy()
         cnt += len(clip_scores_per_caption)
     clip_avg_score = clip_score_sum / float(cnt)
