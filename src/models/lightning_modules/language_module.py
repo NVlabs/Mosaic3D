@@ -37,7 +37,7 @@ class DenseLanguageLitModule(LitModuleBase):
         clip_encoder: Dict,
         compile: bool,
         loss_cfg: Dict,
-        eval_cfg: Dict,
+        eval_cfg: Optional[Dict] = None,
     ):
         super().__init__()
 
@@ -77,10 +77,14 @@ class DenseLanguageLitModule(LitModuleBase):
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
 
         # CLIP score for eval / train
-        self.train_clip_text_alignment = loss_cfg.get("train_clip_text_alignment", False)
-        self.train_clip_image_alignment = loss_cfg.get("train_clip_image_alignment", False)
-        self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", False)
-        self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", False)
+        if eval_cfg is not None:
+            self.train_clip_image_alignment = loss_cfg.get("train_clip_image_alignment", False)
+            self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", False)
+            self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", False)
+        else:
+            self.train_clip_image_alignment = False
+            self.eval_clip_text_alignment = False
+            self.eval_clip_image_alignment = False
 
     def configure_model(self) -> None:
         # network

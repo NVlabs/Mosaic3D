@@ -51,8 +51,8 @@ train_dataset:
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
   ignore_label: -100
-  clip_text_alignment: ${model.loss_cfg.train_clip_text_alignment}
-  clip_image_alignment: ${model.loss_cfg.train_clip_image_alignment}
+  clip_text_alignment: ${oc.select:model.loss_cfg.train_clip_text_alignment,false}
+  clip_image_alignment: ${oc.select:model.loss_cfg.train_clip_image_alignment,false}
   clip_input_resolution: 224
 
 val_dataset:
@@ -91,8 +91,8 @@ val_dataset:
         offset: coord
         pc_count: origin_coord
       feat_keys: ["color", "coord"]
-  clip_text_alignment: ${model.eval_cfg.eval_clip_text_alignment}
-  clip_image_alignment: ${model.eval_cfg.eval_clip_image_alignment}
+  clip_text_alignment: ${oc.select:model.eval_cfg.eval_clip_text_alignment,false}
+  clip_image_alignment: ${oc.select:model.eval_cfg.eval_clip_image_alignment,false}
   clip_input_resolution: ${data.train_dataset.clip_input_resolution}
 
 collate_fn:
