@@ -123,10 +123,6 @@ class DenseLanguageLitModule(LitModuleBase):
     def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
         raise NotImplementedError
 
-    def match_labels(self, batch: Dict[str, Any], pred_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Match the output of the network to the labels in the batch."""
-        return batch
-
     def training_step(self, batch, batch_idx):
         # Prepare caption data in bf16
         with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
@@ -157,9 +153,6 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # Forward
         out_dict = self(batch)
-
-        # Match labels
-        batch = self.match_labels(batch=batch, pred_dict=out_dict)
 
         # loss
         binary_loss, seg_loss, caption_loss = 0, 0, 0
@@ -242,7 +235,6 @@ class DenseLanguageLitModule(LitModuleBase):
 
     def validation_step(self, batch, batch_idx):
         out_dict = self(batch)
-        batch = self.match_labels(batch=batch, pred_dict=out_dict)
         logits = out_dict["logits"]
 
         new_logits = torch.full_like(logits, torch.finfo(logits.dtype).min)

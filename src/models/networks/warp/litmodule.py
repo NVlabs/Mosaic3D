@@ -15,43 +15,31 @@ log = RankedLogger(__name__, rank_zero_only=True)
 
 class WarpLitModule(DenseLanguageLitModule):
     @override
-    def match_labels(self, batch: Dict[str, Any], pred_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Match the output of the network to the labels in the batch."""
-        pc = pred_dict["pcs"][0]
-        assert isinstance(pc, PointCollection)
-
-        # segment
-        _, pc_map = pred_dict["mapping_indices"]
-        batch["segment"] = batch["segment"][pc_map]
-
-        return batch
-
-    @override
     def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
         # clear cache memory
         torch.cuda.empty_cache()
 
         # binary, segment, and captions(c2pmap, caption_idx, origin_idx, offset)
         # Find mappings
-        pc = output["pcs"][0]
+        st = output["st"]
+        voxel_size = st.stride[0] * st.voxel_size
 
-        orig_map, pc_map, valid = voxel_downsample_mapping(
-            pc.coordinate_tensor,
-            pc.offsets,
-            batch[
-                "coord"
-            ],  # cchoy: Make sure the data_dict_to_input in network uses the same key (coord, not origin_coord)
+        up_map, down_map, _ = voxel_downsample_mapping(
+            torch.floor(
+                batch["coord"] / voxel_size
+            ),  # cchoy: Make sure the data_dict_to_input in network uses the same key (coord, not origin_coord)
             batch["offset"],
-            voxel_size=pc.voxel_size,
+            st.coordinates,
+            st.offsets,
+            find_nearest_for_invalid=True,
         )
 
         # clip_feat
-        output["clip_feat"] = output["clip_feat"][orig_map]
+        output["clip_feat"] = output["clip_feat"][down_map]
         if not self.training:
             logits = self.clip_alignment_loss.predict(output["clip_feat"], return_logit=True)
             output["logits"] = logits
 
         # Save the mappings
-        output["mapping_indices"] = (orig_map, pc_map)
-        output["mapping_valid_mask"] = valid
+        output["mapping_indices"] = (up_map, down_map)
         return output
