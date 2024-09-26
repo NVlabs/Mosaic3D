@@ -47,6 +47,10 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # loss functions
         self.is_entity = loss_cfg["caption_loss"].get("is_entity", False)
+        self.interpolate = loss_cfg["caption_loss"].get("interpolate", False)
+        if self.interpolate:
+            assert self.is_entity, "Interpolation is only supported for entity caption loss"
+
         self.caption_loss_type = loss_cfg["caption_loss"].get("type", "contrastive")
         if self.caption_loss_type == "contrastive":
             self.caption_loss = CaptionLoss(**loss_cfg["caption_loss"])
@@ -128,6 +132,7 @@ class DenseLanguageLitModule(LitModuleBase):
                 "batched_captions": batched_captions,
                 "clip_encoder": self.clip_encoder,
                 "is_entity": self.is_entity,
+                "interpolate": self.interpolate,
             }
             if self.caption_loss_type == "contrastive":
                 caption_embeds, caption_targets = caption_utils.get_unique_caption_batch(

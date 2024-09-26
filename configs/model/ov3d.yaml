@@ -4,5 +4,6 @@ defaults:
 loss_cfg:
   caption_loss:
     is_entity: true
+    interpolate: false
     type: alignment
   binary_loss: false

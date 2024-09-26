@@ -9,7 +9,10 @@ from torch import Tensor
 
 
 def get_caption_batch(
-    batched_captions: List[List[str]], clip_encoder: nn.Module, is_entity: bool = False
+    batched_captions: List[List[str]],
+    clip_encoder: nn.Module,
+    is_entity: bool = False,
+    interpolate: bool = False,
 ) -> List[Float[Tensor, "N 512"]]:  # noqa: F821, F722
     # Get the size of each batch
     num_captions_per_batch = [len(captions) for captions in batched_captions]
@@ -18,7 +21,7 @@ def get_caption_batch(
     flat_captions = [caption for sublist in batched_captions for caption in sublist]
 
     if is_entity:
-        caption_embed = forward_entity_text_encoder(flat_captions, clip_encoder)
+        caption_embed = forward_entity_text_encoder(flat_captions, clip_encoder, interpolate)
     else:
         caption_embed = forward_text_encoder(flat_captions, clip_encoder)
 
@@ -30,7 +33,10 @@ def get_caption_batch(
 
 
 def get_unique_caption_batch(
-    batched_captions: List[List[str]], clip_encoder: nn.Module, is_entity: bool = False
+    batched_captions: List[List[str]],
+    clip_encoder: nn.Module,
+    is_entity: bool = False,
+    interpolate: bool = False,
 ) -> Tuple[Float[Tensor, "N 512"], Int[Tensor, "M"]]:  # noqa: F821, F722
     # Flatten the caption list
     flat_captions = [caption for sublist in batched_captions for caption in sublist]
@@ -44,7 +50,7 @@ def get_unique_caption_batch(
     unique_captions = [flat_captions[i] for i in to_unique_indices]
 
     if is_entity:
-        caption_embeds = forward_entity_text_encoder(unique_captions, clip_encoder)
+        caption_embeds = forward_entity_text_encoder(unique_captions, clip_encoder, interpolate)
     else:
         caption_embeds = forward_text_encoder(unique_captions, clip_encoder)
 
@@ -68,16 +74,18 @@ def forward_text_encoder(image_captions, clip_encoder):
 
 
 @torch.no_grad()
-def forward_entity_text_encoder(entity_texts, clip_encoder):
+def forward_entity_text_encoder(entity_texts, clip_encoder, interpolate: bool = False):
     """EntityText = f"{entity_name}:{entity_description1},{entity_description2},..."."""
 
     if len(entity_texts) == 0:
         return torch.zeros((0, 512), dtype=torch.float32).cuda()
 
-    def parse(entity_text):
-        entity_name, entity_descriptions = entity_text.split(":")
-        entity_descriptions = entity_descriptions.split(",")
-        return [entity_name] + entity_descriptions
+    def parse(text):
+        name, descriptions = text.split(":")
+        descriptions = descriptions.split(",")
+        if interpolate:
+            descriptions = [f"{name} {desc}" for desc in descriptions]
+        return [name] + descriptions
 
     parsed_entity_texts = []
     offsets = [0]
