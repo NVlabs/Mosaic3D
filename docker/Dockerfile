@@ -1,5 +1,5 @@
 # Define base image.  # Use 12.1.0 for NVIDIA warp
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
+FROM nvcr.io/nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
 # metainformation
 LABEL org.opencontainers.image.version = "0.0.1"
@@ -74,11 +74,10 @@ RUN pip3 install -r /tmp/requirements.txt
 RUN pip3 install warp-lang
 # First copy the warp repository
 # git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
-COPY ./warp /home/user/warp
-WORKDIR /home/user/warp
-RUN python3 build_lib.py
-# Install warp-minknet
-RUN pip3 install -e .[convnet]
+COPY ./warpconvnet /home/user/warpconvnet
+WORKDIR /home/user/warpconvnet
+# Install warpconvnet
+RUN pip3 install -e .[all]
 
 # Debugging tools
 RUN pip3 install ipdb

@@ -45,17 +45,20 @@ done
 
 IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
 
-# Prep warp-convnet
-# Check if warp does not exist
-if [ ! -d warp ]; then
-    echo "Cloning warp..."
-    git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
-# Check if warp exists but is not up to date
-elif [ -d warp ]; then
-    echo "Updating warp..."
-    cd warp || exit
+# Prep warpconvnet
+# Check if warpconvnet does not exist
+if [ ! -d warpconvnet ]; then
+    echo "Cloning warpconvnet..."
+    git clone --recursive-submodules ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git warpconvnet
+# Check if warpconvnet exists but is not up to date
+elif [ -d warpconvnet ]; then
+    echo "Updating warpconvnet..."
+    pushd warpconvnet || exit
     git pull
-    cd ..
+    pushd warpconvnet/models || exit
+    git pull
+    popd || exit
+    popd || exit
 fi
 
 # Build the Docker image
