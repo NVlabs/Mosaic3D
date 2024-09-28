@@ -11,7 +11,7 @@ from torch import Tensor
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
 from warpconvnet.geometry.point_collection import PointCollection
-from warpconvnet.models.backbones.mink_unet import MinkUNetBase
+from warpconvnet.models.backbones.mink_unet import PointMinkUNetBase
 from warpconvnet.geometry.spatially_sparse_tensor import SpatiallySparseTensor
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -59,7 +59,7 @@ class MinkUNetToCLIP(NetworkBaseDict):
         self.setup(backbone_cfg, adapter_cfg, **kwargs)
 
     def setup(self, backbone_cfg: DictConfig, adapter_cfg: DictConfig, **kwargs):
-        self.backbone_3d = MinkUNetBase(**backbone_cfg)
+        self.backbone_3d = PointMinkUNetBase(**backbone_cfg)
         self.adapter = ToFeatureAdapter(**adapter_cfg)
 
     @override
@@ -75,10 +75,7 @@ class MinkUNetToCLIP(NetworkBaseDict):
     @override
     def forward(self, data_dict: Dict) -> Dict[str, Tensor]:
         data_dict = self.data_dict_to_input(data_dict)
-        st: SpatiallySparseTensor = data_dict["pc"].to_sparse(
-            reduction="mean", voxel_size=self.voxel_size
-        )
-        out_st = self.backbone_3d(st)
-        clip_feat = self.adapter(out_st)
-        out_dict = dict(clip_feat=clip_feat, st=out_st)
+        out_feat = self.backbone_3d(data_dict["pc"])
+        clip_feat = self.adapter(out_feat)
+        out_dict = dict(clip_feat=clip_feat, pc=data_dict["pc"])
         return out_dict
