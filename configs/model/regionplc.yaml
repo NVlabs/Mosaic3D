@@ -71,7 +71,6 @@ loss_cfg:
   binary_loss_weight: 1.0
   caption_loss_weight: 0.5
   seg_loss_weight: 1.0
-  caption_learnable_logit_scale: true
   clip_learnable_logit_scale: false
   sync_dist: true
   train_clip_text_alignment: false

@@ -1,0 +1,71 @@
+_target_: src.models.networks.warp.litmodule.WarpLitModule
+
+optimizer:
+  _target_: src.models.optimization.build_optimizer
+  _partial_: true
+  optim_cfg:
+    BATCH_SIZE_PER_GPU: 4
+    NUM_EPOCHS: 128
+    LR: 4e-3
+    SCHEDULER: adam_onecycle
+    OPTIMIZER: adam_onecycle
+    WEIGHT_DECAY: 0.0001
+    MOMENTUM: 0.9
+    STEP_EPOCH: 50
+    MULTIPLIER: 0.1
+    CLIP_GRAD: False
+    PCT_START: 0.39
+    DIV_FACTOR: 1
+    MOMS: [0.95, 0.85]
+
+scheduler:
+  _target_: src.models.optimization.build_scheduler
+  _partial_: true
+  last_epoch: -1
+  optim_cfg: ${model.optimizer.optim_cfg}
+
+scheduler_interval: step
+
+net:
+  _target_: src.models.networks.warp.regionplc.RegionPLCToCLIP
+  _partial_: true
+
+  voxel_size: 0.02
+
+  backbone_cfg:
+    in_channel: 6
+    out_channel: 192
+    in_channels: [16, 32, 48, 64, 96, 128, 160, 192]
+    # out_channels: [16, 32, 48, 64, 96, 128, 160, 192]
+    out_channels: [192, 192, 192, 192, 192, 192, 192, 192]
+    num_blocks: 2
+
+  # last mlp
+  adapter_cfg:
+    in_channel: ${model.net.backbone_cfg.out_channel}
+    text_channel: 512
+    last_norm: true
+    normalize_output: true
+
+loss_cfg:
+  caption_loss:
+    loss_reduction: weighted_sum
+    use_logit_scale: true
+  seg_loss:
+    eval_only: true # no seg loss training if set to true
+    normalize_input: false
+    text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
+    loss_type: cross_entropy
+    ignore_label: ${data.train_dataset.ignore_label}
+    learnable_logit: false
+  binary_loss: false
+  caption_loss_weight: 1.0
+  seg_loss_weight: 1.0
+  sync_dist: true # print synced loss (0.82 it/s vs 84 it/s)
+
+# compile model for faster training with pytorch 2.0
+clip_encoder:
+  name: CLIP
+  backbone: ViT-B/16
+
+compile: false
