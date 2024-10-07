@@ -1,18 +1,18 @@
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from einops import rearrange, repeat
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange, repeat
 from jaxtyping import Float, Int
 from torch import Tensor
+from warpconvnet.geometry.point_collection import PointCollection
 
 import src.models.regionplc.utils.caption_utils as caption_utils
 from src.models.losses.loss_base import LossBase
 from src.utils import RankedLogger
-from warpconvnet.geometry.point_collection import PointCollection
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -23,8 +23,8 @@ class CLIPAlignmentLoss(LossBase):
     def __init__(
         self,
         normalize_input: bool,
-        text_clip_path: str,
         loss_type: Literal["cross_entropy", "contrastive"],
+        text_clip_path: Optional[str] = None,
         ignore_label: int = -100,
         learnable_logit: bool = False,
         eval_only: bool = False,
@@ -34,13 +34,14 @@ class CLIPAlignmentLoss(LossBase):
         self.eval_only = eval_only
 
         # load pre-computed text embeddings (e.g. CLIP text embedding with shape NxC)
-        assert Path(text_clip_path).exists(), f"Text embedding file not found: {text_clip_path}"
-        text_embeddings = torch.load(text_clip_path, map_location="cpu").detach()
-        text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
-        log.info(f"=> loaded text embeddings from {text_clip_path}")
-
-        # create embedding
-        self.emb_target = nn.Parameter(text_embeddings.float(), requires_grad=False)
+        self.emb_target = None
+        if Path(text_clip_path).exists():
+            text_embeddings = torch.load(text_clip_path, map_location="cpu").detach()
+            text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
+            log.info(f"=> loaded text embeddings from {text_clip_path}")
+            self.set_target_embedding(text_embeddings)
+        else:
+            log.warn(f"Text embedding file not found: {text_clip_path}")
 
         # learable logit
         self.logit_scale = 1.0
@@ -55,6 +56,9 @@ class CLIPAlignmentLoss(LossBase):
             self.loss_fn = nn.CosineEmbeddingLoss(margin=1.0)
         else:
             raise ValueError(f"Unknown loss type: {self.loss_type}")
+
+    def set_target_embedding(self, text_embeddings):
+        self.emb_target = nn.Parameter(text_embeddings.float(), requires_grad=False)
 
     def forward(self, x: Tensor | PointCollection) -> Tensor:
         if isinstance(x, PointCollection):
@@ -83,6 +87,8 @@ class CLIPAlignmentLoss(LossBase):
         x: Float[Tensor, "N C"],  # noqa: F821, F722
         return_logit: bool = False,
     ) -> Int[Tensor, "N"]:  # noqa: F821, F722
+        assert self.emb_target is not None, "Text embedding is not loaded"
+
         pred = self.forward(x)
         logit_scale = self.logit_scale
         if isinstance(self.logit_scale, nn.Parameter):

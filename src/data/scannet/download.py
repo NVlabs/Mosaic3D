@@ -1,6 +1,6 @@
 import fire
 
-from src.data.download_utils import download_hf
+from src.data.utils.download_utils import download_hf
 
 
 def download(download_dir: str):

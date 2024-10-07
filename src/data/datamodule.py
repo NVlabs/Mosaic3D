@@ -9,7 +9,7 @@ from src.utils import RankedLogger
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-class ScanNetDataModule(LightningDataModule):
+class DataModule(LightningDataModule):
     def __init__(
         self,
         train_dataset,
@@ -49,13 +49,7 @@ class ScanNetDataModule(LightningDataModule):
                 pin_memory=self.hparams.pin_memory,
                 shuffle=True,
                 drop_last=True,
-                # collate_fn=partial(
-                #     collate_regionplc,
-                #     ignore_label=self.data_train.ignore_label,
-                #     min_spatial_shape=self.data_train.min_spatial_shape,
-                # ),
                 collate_fn=self.hparams.collate_fn,
-                # collate_fn=point_collate_fn,
             )
 
     def val_dataloader(self) -> DataLoader[Any]:
@@ -68,11 +62,5 @@ class ScanNetDataModule(LightningDataModule):
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
             shuffle=False,
-            # collate_fn=partial(
-            #     collate_regionplc,
-            #     ignore_label=self.data_val.ignore_label,
-            #     min_spatial_shape=self.data_val.min_spatial_shape,
-            # ),
             collate_fn=self.hparams.collate_fn,
-            # collate_fn=collate_fn,
         )

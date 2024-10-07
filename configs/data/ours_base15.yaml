@@ -1,7 +1,7 @@
 defaults:
-  - regionplc_base15
+  - ours_openvocab
 
 train_dataset:
-  caption_dir: /datasets/scannet_captions
-  caption_subset: ours_ram++
-  object_sample_ratio: 1.0
+  base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
+  novel_class_idx: [5, 9, 12, 16]
+  ignore_class_idx: [19]

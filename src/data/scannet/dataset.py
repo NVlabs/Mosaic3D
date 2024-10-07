@@ -1,32 +1,30 @@
 import os
 from glob import glob
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import fire
 import numpy as np
 import torch
 from clip import clip
-from natsort import natsorted
-from omegaconf import OmegaConf
 from PIL import Image
-from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from src.data.dataset_base import DatasetBase
 from src.data.metadata.scannet import (
     CLASS_LABELS_20,
     CLASS_LABELS_200,
     VALID_CLASS_IDS_20,
     VALID_CLASS_IDS_200,
 )
-from src.data.transform import Compose
 from src.data.utils.geometry import project_3d_point_to_image
 from src.utils import RankedLogger
+from src.utils.io import unpack_list_of_np_arrays
 
 log = RankedLogger(__name__, rank_zero_only=False)
 
 
-class ScanNetDataset(Dataset):
+class ScanNetDataset(DatasetBase):
     CLASS_LABELS = CLASS_LABELS_20
     CLASS_IDS = VALID_CLASS_IDS_20
 
@@ -37,6 +35,8 @@ class ScanNetDataset(Dataset):
         transforms: None,
         caption_dir: Optional[str] = None,
         caption_subset: Optional[str] = None,
+        segment_dir: Optional[str] = None,
+        segment_subset: Optional[str] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -48,93 +48,57 @@ class ScanNetDataset(Dataset):
         clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
     ):
-        super().__init__()
-        self.data_dir = Path(data_dir)
-        self.split = split
-        self.object_sample_ratio = object_sample_ratio
-        self.class_names = self.CLASS_LABELS
-        self.repeat = repeat
+        super().__init__(
+            dataset_name="scannetv2",
+            data_dir=data_dir,
+            split=split,
+            transforms=transforms,
+            caption_dir=caption_dir,
+            caption_subset=caption_subset,
+            object_sample_ratio=object_sample_ratio,
+            base_class_idx=base_class_idx,
+            novel_class_idx=novel_class_idx,
+            ignore_class_idx=ignore_class_idx,
+            ignore_label=ignore_label,
+            repeat=repeat,
+        )
+
+        # Determine the caption loading method based on directory structure
+        if self.split == "train" and segment_dir and segment_subset:
+            self.segment_dir = Path(segment_dir) / segment_subset
+            assert self.segment_dir.exists(), f"{self.segment_dir} not exist."
 
         self.image_root_path = image_root_path
         self.clip_text_alignment = clip_text_alignment
         self.clip_image_alignment = clip_image_alignment
 
-        # set caption dir for train dataset
-        if self.split == "train" or self.clip_text_alignment:
-            self.caption_dir = Path(caption_dir) / caption_subset
-            assert self.caption_dir.exists(), f"{self.caption_dir} not exist."
-
-        # read scene names for split
-        with open(f"src/data/metadata/split_files/scannetv2_{self.split}.txt") as f:
-            self.scene_names = natsorted([line.strip() for line in f.readlines()])
-
-        # class label mappers
-        self.base_class_idx = base_class_idx
-        self.novel_class_idx = novel_class_idx
-        self.ignore_class_idx = ignore_class_idx
-        self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
-        if base_class_idx is not None and len(base_class_idx):
-            self.base_class_mapper = self.build_class_mapper(base_class_idx, ignore_label)
-            self.binary_class_mapper = self.build_binary_class_mapper(
-                base_class_idx, novel_class_idx, ignore_class_idx, ignore_label
-            )
-        if ignore_class_idx is not None:
-            for c in ignore_class_idx:
-                self.valid_class_idx.remove(c)
-        self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, ignore_label)
-        self.ignore_label = ignore_label
-
-        # data transform
-        transforms_cfg = OmegaConf.to_container(transforms)
-        for transform_cfg in transforms_cfg:
-            if transform_cfg["type"] == "Collect":
-                if self.clip_text_alignment:
-                    transform_cfg["keys"].append("clip_tokenized_text")
-                if self.clip_image_alignment:
-                    transform_cfg["keys"].extend(["clip_processed_image", "clip_point_indices"])
-                    transform_cfg["offset_keys_dict"]["clip_point_offset"] = "clip_point_indices"
-        self.transforms = Compose(transforms_cfg)
-
-        log.info(f"Loaded {self.__len__()} samples in {self.split} set.")
-
-        # backward compatibility for regionplc
-        self.caption_cfg = dict(GATHER_CAPTION=False)
-
         # load clip preprocessing/tokenizer
         self.tokenize_text = clip.tokenize
         self.preprocess_image = clip._transform(clip_input_resolution)
 
-    @property
-    def use_base_class_mapper(self):
-        return self.split == "train" and hasattr(self, "base_class_mapper")
-
-    @staticmethod
-    def build_class_mapper(class_idx, ignore_label, squeeze_label=False):
-        remapper = np.ones(256, dtype=np.int64) * ignore_label
-        for i, x in enumerate(class_idx):
-            if squeeze_label:
-                remapper[x] = i
-            else:
-                remapper[x] = x
-        return remapper
-
-    @staticmethod
-    def build_binary_class_mapper(base_class_idx, novel_class_idx, ignore_class_idx, ignore_label):
-        remapper = np.ones(256, dtype=np.int64) * ignore_label  # base: 1, novel: 0
-        for _, x in enumerate(base_class_idx):
-            remapper[x] = 1
-        for _, x in enumerate(novel_class_idx):
-            remapper[x] = 0
-        # ignored categories are mapped to novel
-        for _, x in enumerate(ignore_class_idx):
-            remapper[x] = 0
-        return remapper
-
-    def __len__(self):
-        length = len(self.scene_names) * (self.repeat if self.split == "train" else 1)
-        return length
+    def load_point_cloud(self, scene_name: str):
+        scene_dir = self.data_dir / self.split / scene_name
+        coord = np.load(scene_dir / "coord.npy")
+        color = np.load(scene_dir / "color.npy")
+        segment = np.load(scene_dir / "segment20.npy")
+        instance = np.load(scene_dir / "instance.npy")
+        return coord, color, segment, instance
 
     def load_caption(self, scene_name):
+        # legacy version
+        if (self.caption_dir / f"{scene_name}.npz").exists():
+            return self._load_caption_legacy(scene_name)
+        elif (
+            (self.caption_dir / scene_name).is_dir()
+            and (self.caption_dir / scene_name / "captions.npz").exists()
+            and hasattr(self, "segment_dir")
+            and (self.segment_dir / scene_name / "point_indices.npz").exists()
+        ):
+            return self._load_caption(scene_name)
+        else:
+            raise FileNotFoundError(f"No caption data found for scene {scene_name}.")
+
+    def _load_caption_legacy(self, scene_name):
         filepath = os.path.join(self.caption_dir, f"{scene_name}.npz")
         data = np.load(filepath)
 
@@ -169,6 +133,29 @@ class ScanNetDataset(Dataset):
         captions = list(captions)
         return point_indices, captions
 
+    def _load_caption(self, scene_name):
+        indices_path = self.segment_dir / scene_name / "point_indices.npz"
+        point_indices = unpack_list_of_np_arrays(indices_path)
+
+        caption_path = self.caption_dir / scene_name / "captions.npz"
+        captions = unpack_list_of_np_arrays(caption_path)
+
+        # flatten the list of list
+        point_indices = [item for sublist in point_indices for item in sublist]
+        captions = [item for sublist in captions for item in sublist]
+
+        if self.object_sample_ratio < 1.0:
+            sel = np.random.choice(
+                np.arange(len(captions)),
+                max(1, int(len(captions) * self.object_sample_ratio)),
+                replace=False,
+            )
+            captions = [captions[i] for i in sel]
+            point_indices = [point_indices[i] for i in sel]
+
+        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
+        return point_indices, captions
+
     def load_clip_point_indices(
         self,
         scene_name: str,
@@ -200,10 +187,6 @@ class ScanNetDataset(Dataset):
             coord, pose, depth, depth_hw, depth_intrinsic
         )
 
-        # scale_hw = np.array(image_hw) / np.array(depth_hw)
-        # scale_wh = scale_hw[::-1]
-        # pixel_coords = (pixel_coords * scale_wh).astype("int64")
-        # return torch.LongTensor(pixel_coords)
         return torch.LongTensor(point_indices)
 
     def load_clip_processed_image(
@@ -222,14 +205,9 @@ class ScanNetDataset(Dataset):
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)
         scene_name = self.scene_names[idx]
-        scene_dir = self.data_dir / self.split / scene_name
 
         # load pcd data
-        coord = np.load(scene_dir / "coord.npy")
-        color = np.load(scene_dir / "color.npy")
-        segment = np.load(scene_dir / "segment20.npy")
-        instance = np.load(scene_dir / "instance.npy")
-
+        coord, color, segment, instance = self.load_point_cloud(scene_name)
         # class mapping
         # base / novel label
         if hasattr(self, "base_class_mapper"):
@@ -288,24 +266,42 @@ class ScanNet200Dataset(ScanNetDataset):
     def __init__(
         self,
         data_dir: str,
-        caption_dir: str,
         split: str,
         transforms: None,
-        base_class_idx: Optional[List[int]],
-        novel_class_idx: Optional[List[int]],
-        ignore_class_idx: Optional[List[int]],
+        caption_dir: Optional[str] = None,
+        caption_subset: Optional[str] = None,
+        segment_dir: Optional[str] = None,
+        segment_subset: Optional[str] = None,
+        object_sample_ratio: Optional[float] = None,
+        base_class_idx: Optional[List[int]] = None,
+        novel_class_idx: Optional[List[int]] = None,
+        ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
+        repeat: int = 1,
     ):
         super().__init__(
-            data_dir,
-            caption_dir,
-            split,
-            transforms,
-            base_class_idx,
-            novel_class_idx,
-            ignore_class_idx,
-            ignore_label,
+            data_dir=data_dir,
+            split=split,
+            transforms=transforms,
+            caption_dir=caption_dir,
+            caption_subset=caption_subset,
+            segment_dir=segment_dir,
+            segment_subset=segment_subset,
+            object_sample_ratio=object_sample_ratio,
+            base_class_idx=base_class_idx,
+            novel_class_idx=novel_class_idx,
+            ignore_class_idx=ignore_class_idx,
+            ignore_label=ignore_label,
+            repeat=repeat,
         )
+
+    def load_point_cloud(self, scene_name: str):
+        scene_dir = self.data_dir / self.split / scene_name
+        coord = np.load(scene_dir / "coord.npy")
+        color = np.load(scene_dir / "color.npy")
+        segment = np.load(scene_dir / "segment200.npy")
+        instance = np.load(scene_dir / "instance.npy")
+        return coord, color, segment, instance
 
 
 def check_scannet_data(

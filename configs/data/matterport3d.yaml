@@ -1,18 +1,18 @@
 _target_: src.data.datamodule.DataModule
 
 train_dataset:
-  _target_: src.data.scannet.dataset.ScanNetDataset
+  _target_: src.data.matterport3d.dataset.Matterport3DDataset
   _partial_: true
-  data_dir: /datasets/scannet_hf
   split: train
-  caption_dir: /datasets/openvocab-3d-captions
-  caption_subset: caption.osprey.scannet
+  data_dir: /datasets/matterport3d/matterport_3d
+  caption_dir: /lustre/fsw/portfolios/nvr/users/junhal/projects/datagen/openvocab-3d-captions
+  caption_subset: caption.osprey.matterport3d
   segment_dir: /datasets/openvocab-3d-captions
-  segment_subset: segment.sam2.scannet
-  object_sample_ratio: 1.0
+  segment_subset: segment.sam2.matterport3d
+  object_sample_ratio: 0.2
   base_class_idx: []
   novel_class_idx: []
-  ignore_class_idx: [0, 1, 19]
+  ignore_class_idx: [0, 1, 19, 20]
   ignore_label: -100
   repeat: 4
   transforms:
@@ -54,12 +54,12 @@ train_dataset:
       feat_keys: ["color", "coord"]
 
 val_dataset:
-  _target_: src.data.scannet.dataset.ScanNetDataset
+  _target_: src.data.matterport3d.dataset.Matterport3DDataset
   _partial_: true
   data_dir: ${data.train_dataset.data_dir}
   base_class_idx: ${data.train_dataset.base_class_idx}
-  novel_class_idx: ${data.train_dataset.novel_class_idx}
   ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+  novel_class_idx: ${data.train_dataset.novel_class_idx}
   ignore_label: ${data.train_dataset.ignore_label}
   split: val
   transforms:

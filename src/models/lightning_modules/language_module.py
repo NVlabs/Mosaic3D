@@ -98,13 +98,21 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # clip encoder
         self.clip_encoder = build_clip_model(self.hparams.clip_encoder, local_rank=self.local_rank)
+
+        if self.clip_alignment_loss.emb_target is None:
+            text_embedding = caption_utils.forward_text_encoder(
+                self.class_names, self.clip_encoder
+            )
+            text_embedding /= text_embedding.norm(dim=-1, keepdim=True)
+            self.clip_alignment_loss.set_target_embedding(text_embedding)
+
         # freeze clip encoder
         for params in self.clip_encoder.parameters():
             params.requires_grad = False
 
     def setup(self, stage: str) -> None:
         val_dataloader = self.trainer.datamodule.val_dataloader()
-        self.class_names = val_dataloader.dataset.class_names
+        self.class_names = val_dataloader.dataset.CLASS_LABELS
 
         self.val_confmat = MulticlassConfusionMatrix(
             num_classes=len(self.class_names),

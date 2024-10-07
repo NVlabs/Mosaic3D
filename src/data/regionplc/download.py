@@ -4,7 +4,7 @@ import os
 import fire
 import requests
 
-from src.data.download_utils import download_parallel
+from src.data.utils.download_utils import download_parallel
 
 ids_and_filenames = [
     (

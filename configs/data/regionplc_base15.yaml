@@ -1,4 +1,4 @@
-_target_: src.data.scannet.datamodule.ScanNetDataModule
+_target_: src.data.datamodule.DataModule
 
 train_dataset:
   _target_: src.data.scannet.dataset.ScanNetDataset

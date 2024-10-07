@@ -1,0 +1,8 @@
+defaults:
+  - ours_openvocab
+
+train_dataset:
+  caption_dir: /datasets/scannet_captions
+  caption_subset: ours_osprey
+  segment_dir: !!null
+  segment_subset: !!null
