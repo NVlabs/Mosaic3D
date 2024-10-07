@@ -8,14 +8,23 @@ from omegaconf import DictConfig
 from overrides import override
 from torch import Tensor
 
+
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
-from warpconvnet.geometry.point_collection import PointCollection
-from warpconvnet.models.backbones.mink_unet import MinkUNetBase
-from warpconvnet.geometry.spatially_sparse_tensor import SpatiallySparseTensor
-from warpconvnet.nn.pools import PointToSparseWrapper
 
 log = RankedLogger(__name__, rank_zero_only=True)
+
+try:
+    from warpconvnet.geometry.point_collection import PointCollection
+    from warpconvnet.models.backbones.point_transformer_v3 import PointTransformerV3
+    from warpconvnet.geometry.spatially_sparse_tensor import SpatiallySparseTensor
+    from warpconvnet.nn.pools import PointToSparseWrapper
+except ImportError:
+    log.error("latest warpconvnet not installed, please install it to use PointTransformerV3")
+    PointTransformerV3 = None
+    PointCollection = None
+    SpatiallySparseTensor = None
+    PointToSparseWrapper = None
 
 
 class ToFeatureAdapter(nn.Module):
@@ -43,8 +52,8 @@ class ToFeatureAdapter(nn.Module):
         return feats
 
 
-class MinkUNetToCLIP(NetworkBaseDict):
-    """Convert a point cloud to a language aligned feature vector using MinkUNet18."""
+class PointTransformerV3ToCLIP(NetworkBaseDict):
+    """Convert a point cloud to a language aligned feature vector using PointTransformerV3."""
 
     def __init__(
         self,
@@ -61,7 +70,7 @@ class MinkUNetToCLIP(NetworkBaseDict):
 
     def setup(self, backbone_cfg: DictConfig, adapter_cfg: DictConfig, **kwargs):
         self.backbone_3d = PointToSparseWrapper(
-            MinkUNetBase(**backbone_cfg),
+            PointTransformerV3(**backbone_cfg),
             voxel_size=self.voxel_size,
             concat_unpooled_pc=False,
         )

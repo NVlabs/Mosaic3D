@@ -25,7 +25,7 @@ scheduler:
 scheduler_interval: step
 
 net:
-  _target_: src.models.networks.warp.mink_unet.MinkUNetToCLIP
+  _target_: src.models.networks.warp.point_transformer_v3.PointTransformerV3ToCLIP
   _partial_: true
 
   voxel_size: 0.02
@@ -33,11 +33,17 @@ net:
   backbone_cfg:
     in_channels: 6
     out_channels: 192
-    # MinkUNet18
-    planes: [32, 64, 128, 256, 256, 192, 192, 192]
-    layers: [2, 2, 2, 2, 2, 2, 2, 2]
-    init_dim: 32
-    voxel_size: ${model.net.voxel_size}
+    enc_depths: [2, 2, 2, 6, 2]
+    enc_channels: [32, 64, 128, 256, 512]
+    enc_num_head: [2, 4, 8, 16, 32]
+    enc_patch_size: [1024, 1024, 1024, 1024, 1024]
+    dec_depths: [2, 2, 2, 2]
+    dec_channels: [64, 64, 128, 256]
+    dec_num_head: [4, 4, 8, 16]
+    dec_patch_size: [1024, 1024, 1024, 1024]
+    mlp_ratio: 4
+    drop_path: 0.2
+    out_code_backend: "morton"
 
   # last mlp
   adapter_cfg:

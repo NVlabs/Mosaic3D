@@ -4,8 +4,6 @@ optimizer:
   _target_: src.models.optimization.build_optimizer
   _partial_: true
   optim_cfg:
-    BATCH_SIZE_PER_GPU: 4
-    NUM_EPOCHS: 128
     LR: 4e-3
     SCHEDULER: adam_onecycle
     OPTIMIZER: adam_onecycle

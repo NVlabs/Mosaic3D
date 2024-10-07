@@ -1,3 +1,5 @@
+from typing import Literal
+
 import numpy as np
 import spconv.pytorch as spconv
 import torch
@@ -5,6 +7,7 @@ from addict import Dict
 from torch_scatter import scatter
 
 from src.models.components.misc import batch2offset, offset2batch
+from warpconvnet.utils.ravel import ravel_multi_index_auto_shape
 
 # from pointcept.models.utils import batch2offset, offset2batch
 # from pointcept.models.utils.serialization import decode, encode
@@ -27,10 +30,22 @@ def fnv_hash_vec(arr):
     return hashed_arr
 
 
-def mean_pooling(coordinates, features, return_inverse: bool = True):
+def mean_pooling(
+    coordinates,
+    features,
+    return_inverse: bool = True,
+    hash_method: Literal["fnv", "ravel"] = "fnv",
+):
     device = features.device
 
-    key = fnv_hash_vec(coordinates.cpu().numpy())
+    if hash_method == "fnv":
+        key = fnv_hash_vec(coordinates.cpu().numpy())
+    elif hash_method == "ravel":
+        key = ravel_multi_index_auto_shape(coordinates)
+        key = key.cpu().numpy()
+    else:
+        raise ValueError(f"Unknown hash method: {hash_method}")
+
     idx_sort = np.argsort(key)
     key_sort = key[idx_sort]
     _, index, inverse, count = np.unique(
@@ -134,7 +149,7 @@ class Point(Dict):
         self["serialized_order"] = order
         self["serialized_inverse"] = inverse
 
-    def sparsify(self, pad=96):
+    def sparsify(self, pad=96, hash_method: Literal["fnv", "ravel"] = "fnv"):
         """Point Cloud Serialization.
 
         Point cloud is sparse, here we use "sparsify" to specifically refer to
@@ -163,7 +178,7 @@ class Point(Dict):
         ).contiguous()
 
         voxel_coords, voxel_feats, v2p_map = mean_pooling(
-            batched_coords, self.feat, return_inverse=True
+            batched_coords, self.feat, return_inverse=True, hash_method=hash_method
         )
         self.v2p_map = v2p_map
 
