@@ -1,5 +1,6 @@
 from typing import Dict, List, Literal, Optional, Tuple
 
+import hashlib
 import numpy as np
 import torch
 import torch.nn as nn
@@ -32,6 +33,11 @@ def get_caption_batch(
     return caption_embeds
 
 
+# Use a deterministic hash function for strings
+def string_hash(s: str) -> int:
+    return int(hashlib.md5(s.encode()).hexdigest(), 16)
+
+
 def get_unique_caption_batch(
     batched_captions: List[List[str]],
     clip_encoder: nn.Module,
@@ -40,7 +46,7 @@ def get_unique_caption_batch(
 ) -> Tuple[Float[Tensor, "N 512"], Int[Tensor, "M"]]:  # noqa: F821, F722
     # Flatten the caption list
     flat_captions = [caption for sublist in batched_captions for caption in sublist]
-    flat_caption_hash = [hash(caption) for caption in flat_captions]
+    flat_caption_hash = [string_hash(caption) for caption in flat_captions]
 
     # Get unique captions and their indices
     _, to_unique_indices, from_unique_indices = np.unique(
