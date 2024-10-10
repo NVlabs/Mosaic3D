@@ -1,4 +1,4 @@
-_target_: src.models.regionplc.litmodule.RegionPLCLitModule
+_target_: src.models.networks.regionplc.litmodule.RegionPLCLitModule
 
 optimizer:
   _target_: torch.optim.AdamW
@@ -18,7 +18,7 @@ scheduler:
 scheduler_interval: step
 
 net:
-  _target_: src.models.regionplc.sparse_convnet.SparseConvUNetTextSeg
+  _target_: src.models.networks.regionplc.sparse_convnet.SparseConvUNetTextSeg
   _partial_: true
 
   backbone_cfg:

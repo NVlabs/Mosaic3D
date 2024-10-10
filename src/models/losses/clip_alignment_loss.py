@@ -10,7 +10,7 @@ from jaxtyping import Float, Int
 from torch import Tensor
 from warpconvnet.geometry.point_collection import PointCollection
 
-import src.models.regionplc.utils.caption_utils as caption_utils
+import src.utils.caption_utils as caption_utils
 from src.models.losses.loss_base import LossBase
 from src.utils import RankedLogger
 

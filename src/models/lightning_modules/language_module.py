@@ -3,13 +3,11 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from einops import rearrange, repeat
-from torch_scatter import segment_csr
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-import src.models.regionplc.utils.caption_utils as caption_utils
+import src.utils.caption_utils as caption_utils
+from src.models.components.clip_models import build_clip_model
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import (
     CaptionAlignmentLoss,
@@ -21,7 +19,6 @@ from src.models.losses.clip_alignment_loss import (
     compute_clip_image_alignment,
     compute_clip_text_cosine_similarity,
 )
-from src.models.regionplc.clip_models import build_clip_model
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)

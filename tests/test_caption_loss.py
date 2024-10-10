@@ -3,22 +3,19 @@ import unittest
 
 import hydra
 import torch
+import warp as wp
 import yaml
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
+from warpconvnet.geometry.point_collection import PointCollection
 
-import warp as wp
+from src.models.components.clip_models import build_clip_model
 from src.models.losses.caption_loss import (
     CaptionAlignmentLoss,
     CaptionLoss,
     DenseCaptionAlignmentLoss,
 )
-from src.models.regionplc.text_models import build_text_model
-from src.models.regionplc.utils.caption_utils import (
-    get_caption_batch,
-    get_unique_caption_batch,
-)
-from warpconvnet.geometry.point_collection import PointCollection
+from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 
 text_encoder_str = """text_encoder:
 name: CLIP
@@ -53,7 +50,7 @@ class TestCaptionLoss(unittest.TestCase):
         datamodule: LightningDataModule = hydra.utils.instantiate(cfg)
         self.device = torch.device("cuda:0")
         text_encoder_cfg = OmegaConf.create(text_encoder_str)
-        text_encoder = build_text_model(text_encoder_cfg).to(self.device)
+        text_encoder = build_clip_model(text_encoder_cfg).to(self.device)
 
         datamodule.setup("fit")
         loader = datamodule.train_dataloader()

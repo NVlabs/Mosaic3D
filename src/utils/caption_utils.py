@@ -1,12 +1,12 @@
+import hashlib
 from typing import Dict, List, Literal, Optional, Tuple
 
-import hashlib
 import numpy as np
 import torch
 import torch.nn as nn
-from torch_scatter import segment_csr
 from jaxtyping import Float, Int
 from torch import Tensor
+from torch_scatter import segment_csr
 
 
 def get_caption_batch(

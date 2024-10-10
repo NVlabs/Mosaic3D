@@ -1,20 +1,11 @@
 import abc
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
-import hydra
-import numpy as np
 import torch
 import torch.nn as nn
 from lightning import LightningModule
-from omegaconf import DictConfig
-from torchmetrics import MaxMetric, MeanMetric
-from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-from src.models.losses.caption_loss import CaptionLoss
-from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
 from src.models.optimization.fastai_lrscheduler import OneCycle
-from src.models.regionplc.clip_models import build_clip_model
-from src.models.regionplc.utils import caption_utils
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
