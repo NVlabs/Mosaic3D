@@ -35,7 +35,7 @@ class CLIPAlignmentLoss(LossBase):
 
         # load pre-computed text embeddings (e.g. CLIP text embedding with shape NxC)
         self.emb_target = None
-        if Path(text_clip_path).exists():
+        if text_clip_path is not None and Path(text_clip_path).exists():
             text_embeddings = torch.load(text_clip_path, map_location="cpu").detach()
             text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
             log.info(f"=> loaded text embeddings from {text_clip_path}")

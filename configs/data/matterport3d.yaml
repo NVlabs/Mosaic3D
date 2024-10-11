@@ -12,7 +12,7 @@ train_dataset:
   object_sample_ratio: 0.2
   base_class_idx: []
   novel_class_idx: []
-  ignore_class_idx: [0, 1, 19, 20]
+  ignore_class_idx: [19]
   ignore_label: -100
   repeat: 4
   transforms:

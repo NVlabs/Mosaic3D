@@ -11,8 +11,4 @@ loss_cfg:
   caption_loss_weight: 1.0
 
 # compile model for faster training with pytorch 2.0
-clip_encoder:
-  name: CLIP
-  backbone: ViT-B/16
-
 compile: false

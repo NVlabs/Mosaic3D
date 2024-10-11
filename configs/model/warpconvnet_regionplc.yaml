@@ -63,7 +63,7 @@ loss_cfg:
 
 # compile model for faster training with pytorch 2.0
 clip_encoder:
-  name: CLIP
-  backbone: ViT-B/16
+  model_id: ViT-B/16
+  text_dim: 512
 
 compile: false

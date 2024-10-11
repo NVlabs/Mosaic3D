@@ -70,12 +70,16 @@ def get_unique_caption_batch(
 
 
 @torch.no_grad()
-def forward_text_encoder(image_captions, clip_encoder):
+def forward_text_encoder(image_captions, clip_encoder, normalize: bool = False):
     if len(image_captions) == 0:
-        return torch.zeros((0, 512), dtype=torch.float32).cuda()
+        # Get the channel size from the clip_encoder
+        channel_size = clip_encoder.text_projection.shape[1]
+        return torch.zeros((0, channel_size), dtype=torch.float32).cuda()
 
-    text_tokens = clip_encoder.text_tokenizer(image_captions, truncate=True).cuda()
+    text_tokens = clip_encoder.text_tokenizer(image_captions).cuda()
     text_embed = clip_encoder.encode_text(text_tokens).float()
+    if normalize:
+        text_embed = torch.nn.functional.normalize(text_embed, dim=-1)
     return text_embed
 
 

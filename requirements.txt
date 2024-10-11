@@ -48,3 +48,4 @@ einops
 open3d==0.18.0
 natsort
 scikit-image
+open_clip_torch

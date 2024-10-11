@@ -68,6 +68,13 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
             for c in ignore_class_idx:
                 self.valid_class_idx.remove(c)
         self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, ignore_label)
+        # foreground & background class indices
+        self.fg_class_idx = [
+            i
+            for i in self.valid_class_idx
+            if self.CLASS_LABELS[i] not in ("wall", "floor", "ceiling", "other", "otherfurniture")
+        ]
+        self.bg_class_idx = list(set(range(len(self.CLASS_LABELS))) - set(self.fg_class_idx))
 
         # data transform
         transforms_cfg = OmegaConf.to_container(transforms)

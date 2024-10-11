@@ -18,8 +18,7 @@ from src.models.losses.caption_loss import (
 from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 
 text_encoder_str = """text_encoder:
-name: CLIP
-backbone: ViT-B/16
+model_id: ViT-B/16
 """
 
 

@@ -17,7 +17,8 @@ tags: ["regionplc"]
 seed: 12345
 
 trainer:
-  max_epochs: 150
+  max_epochs: 128
+  precision: 16-mixed
 
 data:
   batch_size: 4

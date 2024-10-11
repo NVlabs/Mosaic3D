@@ -1,0 +1,9 @@
+defaults:
+  - ours_openvocab
+
+train_dataset:
+  caption_dir: /lustre/fsw/portfolios/nvr/users/junhal/projects/datagen/openvocab-3d-captions
+  caption_subset: caption.osprey.scannet-125k
+  segment_dir: /lustre/fsw/portfolios/nvr/users/junhal/projects/datagen/openvocab-3d-captions
+  segment_subset: segment.sam2.scannet-125k
+  object_sample_ratio: 0.2

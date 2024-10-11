@@ -7,7 +7,7 @@ from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
 import src.utils.caption_utils as caption_utils
-from src.models.components.clip_models import build_clip_model
+from src.models.components.clip_models import build_clip_model, download_clip_model
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import (
     CaptionAlignmentLoss,
@@ -35,6 +35,7 @@ class DenseLanguageLitModule(LitModuleBase):
         compile: bool,
         loss_cfg: Dict,
         eval_cfg: Optional[Dict] = None,
+        use_prompt: bool = False,
     ):
         super().__init__()
 
@@ -66,6 +67,7 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # for tracking best so far validation accuracy
         self.val_confmat = None
+        self.val_confmat_all = None
         self.val_miou_best = MaxMetric()
         self.val_clip_text_score = MeanMetric()
         self.val_clip_image_score = MeanMetric()
@@ -83,6 +85,11 @@ class DenseLanguageLitModule(LitModuleBase):
             self.eval_clip_text_alignment = False
             self.eval_clip_image_alignment = False
 
+    def prepare_data(self) -> None:
+        # download clip model on rank 0
+        ckpt_path = download_clip_model(self.hparams.clip_encoder)
+        log.info(f"Downloaded CLIP model to {ckpt_path}")
+
     def configure_model(self) -> None:
         # network
         if self.net is not None:
@@ -94,18 +101,21 @@ class DenseLanguageLitModule(LitModuleBase):
             log.info(self.net)
 
         # clip encoder
-        self.clip_encoder = build_clip_model(self.hparams.clip_encoder, local_rank=self.local_rank)
-
-        if self.clip_alignment_loss.emb_target is None:
-            text_embedding = caption_utils.forward_text_encoder(
-                self.class_names, self.clip_encoder
-            )
-            text_embedding /= text_embedding.norm(dim=-1, keepdim=True)
-            self.clip_alignment_loss.set_target_embedding(text_embedding)
+        self.clip_encoder = build_clip_model(self.hparams.clip_encoder, device=self.device)
 
         # freeze clip encoder
         for params in self.clip_encoder.parameters():
             params.requires_grad = False
+
+        # set target clip embeddings
+        if self.clip_alignment_loss.emb_target is None:
+            class_names = self.class_names
+            if self.hparams.use_prompt:
+                class_names = [f"a {c} in a scene" for c in self.class_names]
+            text_embedding = caption_utils.forward_text_encoder(
+                class_names, self.clip_encoder, normalize=True
+            )
+            self.clip_alignment_loss.set_target_embedding(text_embedding)
 
     def setup(self, stage: str) -> None:
         val_dataloader = self.trainer.datamodule.val_dataloader()
@@ -115,10 +125,17 @@ class DenseLanguageLitModule(LitModuleBase):
             num_classes=len(self.class_names),
             ignore_index=val_dataloader.dataset.ignore_label,
         )
+        self.val_confmat_all = MulticlassConfusionMatrix(
+            num_classes=len(self.class_names),
+            ignore_index=val_dataloader.dataset.ignore_label,
+        )
 
         self.base_class_idx = val_dataloader.dataset.base_class_idx
         self.novel_class_idx = val_dataloader.dataset.novel_class_idx
         self.valid_class_idx = val_dataloader.dataset.valid_class_idx
+        self.fg_class_idx = val_dataloader.dataset.fg_class_idx
+        self.bg_class_idx = val_dataloader.dataset.bg_class_idx
+        self.ignore_label = val_dataloader.dataset.ignore_label
 
     def forward(self, batch: Any) -> Dict[str, Any]:
         point = self.net(batch)
@@ -217,10 +234,7 @@ class DenseLanguageLitModule(LitModuleBase):
 
         loss = binary_loss + seg_loss + caption_loss + clip_image_alignment_loss
 
-        log_metrics = dict(
-            loss=loss,
-            caption_loss=caption_loss,
-        )
+        log_metrics = dict(loss=loss, caption_loss=caption_loss)
         if self.binary_loss is not None:
             log_metrics["binary_loss"] = binary_loss
         if not self.clip_alignment_loss.eval_only:
@@ -238,17 +252,29 @@ class DenseLanguageLitModule(LitModuleBase):
         )
         return loss
 
+    def on_test_epoch_start(self):
+        class_names = self.class_names
+        if self.hparams.use_prompt:
+            class_names = [f"a {c} in a scene" for c in self.class_names]
+        text_embedding = caption_utils.forward_text_encoder(
+            class_names, self.clip_encoder, normalize=True
+        )
+        self.clip_alignment_loss.set_target_embedding(text_embedding)
+
     def validation_step(self, batch, batch_idx):
         out_dict = self(batch)
         logits = out_dict["logits"]
 
-        new_logits = torch.full_like(logits, torch.finfo(logits.dtype).min)
-        new_logits[..., self.valid_class_idx] = logits[..., self.valid_class_idx]
+        preds_all = logits.max(1)[1]
+        self.val_confmat_all(preds_all, batch["segment"])
+
+        logits_fg = torch.full_like(logits, torch.finfo(logits.dtype).min)
+        logits_fg[..., self.fg_class_idx] = logits[..., self.fg_class_idx]
 
         if self.binary_loss is not None:
-            base_scores = new_logits[..., self.base_class_idx].softmax(dim=-1)
-            novel_scores = new_logits[..., self.novel_class_idx].softmax(dim=-1)
-            scores = new_logits.clone().float()
+            base_scores = logits_fg[..., self.base_class_idx].softmax(dim=-1)
+            novel_scores = logits_fg[..., self.novel_class_idx].softmax(dim=-1)
+            scores = logits_fg.clone().float()
             scores[:] = 0.0
             scores[..., self.base_class_idx] = base_scores
             scores[..., self.novel_class_idx] = novel_scores
@@ -261,7 +287,14 @@ class DenseLanguageLitModule(LitModuleBase):
             scores /= scores.sum(-1, keepdim=True)
             preds = scores.max(1)[1]
         else:
-            preds = new_logits.max(1)[1]
+            preds = logits_fg.max(1)[1]
+
+        segment_fg = batch["segment"].clone()
+        for i in self.bg_class_idx:
+            segment_fg[segment_fg == i] = self.ignore_label  # Set background classes to 0
+
+        # update and log metrics
+        self.val_confmat(preds, segment_fg)
 
         if self.eval_clip_image_alignment:
             clip_scores = compute_clip_image_alignment(
@@ -285,32 +318,38 @@ class DenseLanguageLitModule(LitModuleBase):
             )
             self.val_clip_text_score.update(clip_avg_score)
 
-        # update and log metrics
-        self.val_confmat(preds, batch["segment"])
-
     def on_validation_epoch_end(self) -> None:
-        confmat = self.val_confmat.compute().cpu().numpy()
-        class_ious = {}
-        class_accs = {}
-        for i, class_name in enumerate(self.class_names):
-            tp = confmat[i, i]
-            fp = confmat[:, i].sum() - tp
-            fn = confmat[i, :].sum() - tp
+        def compute_classwise_metrics(confmat):
+            computed_confmat = confmat.compute().cpu().numpy()
+            class_ious = {}
+            class_accs = {}
+            for i, class_name in enumerate(self.class_names):
+                tp = computed_confmat[i, i]
+                fp = computed_confmat[:, i].sum() - tp
+                fn = computed_confmat[i, :].sum() - tp
 
-            class_ious[class_name] = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0
-            class_accs[class_name] = tp / (tp + fn) if (tp + fn) > 0 else 0
+                class_ious[class_name] = tp / (tp + fp + fn) if (tp + fp + fn) > 0 else 0
+                class_accs[class_name] = tp / (tp + fn) if (tp + fn) > 0 else 0
 
-        valid_class_idx = self.valid_class_idx
-        miou = np.nanmean([class_ious[self.class_names[i]] for i in valid_class_idx])
-        macc = np.nanmean([class_accs[self.class_names[i]] for i in valid_class_idx])
+            return class_ious, class_accs
+
+        class_ious, class_accs = compute_classwise_metrics(self.val_confmat)
+        class_ious_all, class_accs_all = compute_classwise_metrics(self.val_confmat_all)
+
+        miou = np.nanmean([class_ious[self.class_names[i]] for i in self.fg_class_idx])
+        macc = np.nanmean([class_accs[self.class_names[i]] for i in self.fg_class_idx])
+        miou_all = np.nanmean([class_ious_all[c] for c in self.class_names])
+        macc_all = np.nanmean([class_accs_all[c] for c in self.class_names])
         self.val_miou_best.update(miou)
 
-        log_metrics = {f"val/iou_{k}": v for k, v in class_ious.items()}
+        log_metrics = {f"val/iou_{k}": v for k, v in class_ious_all.items()}
         log_metrics.update(
             {
                 "val/best_miou": self.val_miou_best.compute(),
                 "val/miou": miou,
                 "val/macc": macc,
+                "val/miou_all": miou_all,
+                "val/macc_all": macc_all,
             }
         )
 
@@ -344,6 +383,7 @@ class DenseLanguageLitModule(LitModuleBase):
         self.log_dict(log_metrics, sync_dist=True, logger=True)
 
         self.val_confmat.reset()
+        self.val_confmat_all.reset()
         self.val_clip_text_score.reset()
         self.val_clip_image_score.reset()
 

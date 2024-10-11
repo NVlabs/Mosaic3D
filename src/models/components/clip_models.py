@@ -1,52 +1,46 @@
 import os
 
+import open_clip
 import torch
 from clip import clip
+from open_clip.factory import download_pretrained_from_hf
 
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
 
-def build_clip_model(model_cfg, local_rank=0):
-    backbone_name = model_cfg.backbone
+def download_clip_model(model_cfg):
+    model_id = model_cfg.get("model_id", None)
+    if model_id is None:
+        model_id = model_cfg.backbone
 
-    url = clip._MODELS[backbone_name]
-    if local_rank == 0:  # only download once at master node
-        model_path = clip._download(url, os.path.expanduser("~/.cache/clip"))
+    cache_dir = os.environ.get("HF_HUB_CACHE", os.path.expanduser("~/.cache/"))
+
+    if model_id.startswith("hf-hub:"):
+        ckpt_path = download_pretrained_from_hf(model_id[len("hf-hub:") :], cache_dir=cache_dir)
     else:
-        model_path = _return_clip_path(url, os.path.expanduser("~/.cache/clip"))
+        url = clip._MODELS[model_id]
+        ckpt_path = clip._download(url, root=cache_dir)
 
-    try:
-        # loading JIT archive
-        model = torch.jit.load(model_path, map_location="cpu").eval()
-        state_dict = model.state_dict()
-    except RuntimeError:
-        state_dict = torch.load(model_path, map_location="cpu")
+    return ckpt_path
 
-    model = clip.build_model(state_dict)
-    model.image_tokenizer = clip._transform(model.visual.input_resolution)
-    model.text_tokenizer = clip.tokenize
+
+def build_clip_model(model_cfg, device=None):
+    model_id = model_cfg.get("model_id", None)
+    # backward compatibility
+    if model_id is None:
+        model_id = model_cfg.backbone
+
+    cache_dir = os.environ.get("HF_HUB_CACHE", os.path.expanduser("~/.cache/"))
+
+    if model_id.startswith("hf-hub:"):
+        model, preprocess = open_clip.create_model_from_pretrained(model_id, device=device)
+        tokenizer = open_clip.get_tokenizer(model_id)
+    else:
+        model, preprocess = clip.load(model_id, device=device, jit=True, download_root=cache_dir)
+        tokenizer = lambda x: clip.tokenize(x, truncate=True)  # noqa: E731
+
+    model.image_tokenizer = preprocess
+    model.text_tokenizer = tokenizer
     return model
-
-
-def _return_clip_path(url: str, root: str):
-    filename = os.path.basename(url)
-    download_target = os.path.join(root, filename)
-    return download_target
-
-
-def load_text_embedding_from_path(text_emb_path):
-    text_embedding = torch.load(text_emb_path, map_location=torch.device("cpu")).detach()
-    text_embedding /= text_embedding.norm(dim=-1, keepdim=True)
-    log.info(f"=> loaded text embedding from path '{text_emb_path}'")
-    return text_embedding
-
-
-def is_bg_class(c):
-    return (
-        (c.lower() == "wall")
-        or (c.lower() == "floor")
-        or (c.lower() == "ceiling")
-        or (c.lower() == "otherfurniture")
-    )

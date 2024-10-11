@@ -94,7 +94,7 @@ class Matterport3DDataset(DatasetBase):
 
         if self.use_base_class_mapper:
             segment = self.base_class_mapper[segment.astype(np.int64)]
-        elif not self.use_base_class_mapper and hasattr(self, "ignore_class_idx"):
+        else:
             segment = self.valid_class_mapper[segment.astype(np.int64)]
 
         data_dict = dict(
