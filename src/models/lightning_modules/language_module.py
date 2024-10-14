@@ -380,7 +380,9 @@ class DenseLanguageLitModule(LitModuleBase):
                 }
             )
 
-        self.log_dict(log_metrics, sync_dist=True, logger=True)
+        # log metrics only if not sanity checking
+        if not self.trainer.sanity_checking:
+            self.log_dict(log_metrics, sync_dist=True, logger=True)
 
         self.val_confmat.reset()
         self.val_confmat_all.reset()
