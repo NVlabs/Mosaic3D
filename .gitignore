@@ -160,3 +160,9 @@ results/
 outputs/
 slurm_outputs/
 experiments/
+
+# Misc
+ckpts/
+samples/
+saved/
+visuals/

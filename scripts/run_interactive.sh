@@ -20,7 +20,8 @@ PORT=${2:-22000}
 # HF_HUB_CACHE for caching repositories from the Hub.
 # HF_ASSETS_CACHE for caching other assets.
 # Setting environment variables
-HF_HUB_CACHE="${PROJECT_ROOT}/huggingface_cache"
+# Use user's directory due to limited space in project directory
+HF_HUB_CACHE="${LUSTRE_HOME}/huggingface/cache"
 
 # Print tunneling instructions
 echo -e "

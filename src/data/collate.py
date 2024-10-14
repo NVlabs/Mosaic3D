@@ -56,7 +56,7 @@ def point_collate_fn(batch, grid_size, mix_prob=0):
                 [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
             )
 
-    '''
+    """
     Convert
         per-batch point_indices
             (
@@ -69,27 +69,42 @@ def point_collate_fn(batch, grid_size, mix_prob=0):
                 e.g.,
                 [0, 3, 4, ..., 10, 1+22, 3+22, 9+22, ... 21+22]
             )
-    '''
+    """
     if "clip_point_indices" in batch.keys():
         batch_size = len(batch["clip_point_offset"]) - 1
-        for idx_batch in range(1, batch_size): # exclude idx_batch==0
+        for idx_batch in range(1, batch_size):  # exclude idx_batch==0
             idx_start = batch["clip_point_offset"][idx_batch]
-            idx_end = batch["clip_point_offset"][idx_batch+1]
+            idx_end = batch["clip_point_offset"][idx_batch + 1]
             batch["clip_point_indices"][idx_start:idx_end] += batch["offset"][idx_batch]
 
     if "clip_point_offset" in batch.keys():
         num_pts = batch["clip_point_offset"][-1]
         clip_indices_image_to_point = torch.zeros(
-            (num_pts,), dtype=torch.int64,
+            (num_pts,),
+            dtype=torch.int64,
         )
-        for idx_batch, (idx_start, idx_end) in enumerate(zip(
-            batch["clip_point_offset"][:-1],
-            batch["clip_point_offset"][1:]
-        )):
+        for idx_batch, (idx_start, idx_end) in enumerate(
+            zip(batch["clip_point_offset"][:-1], batch["clip_point_offset"][1:])
+        ):
             clip_indices_image_to_point[idx_start:idx_end] += idx_batch
         batch["clip_indices_image_to_point"] = clip_indices_image_to_point
 
     batch["grid_size"] = grid_size
+    return batch
+
+
+def point_collate_fn_with_masks(batch, grid_size, mix_prob=0):
+    assert isinstance(batch[0], Mapping)
+    assert "masks_binary" in batch[0].keys()
+
+    batch_masks_binary = [sample["masks_binary"] for sample in batch]
+
+    # remove masks_binary from batch
+    for sample in batch:
+        sample.pop("masks_binary")
+
+    batch = point_collate_fn(batch, grid_size, mix_prob)
+    batch["masks_binary"] = batch_masks_binary
     return batch
 
 

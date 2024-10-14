@@ -1,0 +1,32 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: ours_openvocab_instance
+  - override /model: regionplc_openvocab_instance
+  - override /callbacks: cluster_nolr
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["regionplc"]
+
+seed: 12345
+
+trainer:
+  max_epochs: 150
+
+data:
+  batch_size: 4
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "regionplc"
+
+callbacks:
+  model_checkpoint:
+    monitor: "val/miou"

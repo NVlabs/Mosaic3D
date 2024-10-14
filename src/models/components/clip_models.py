@@ -38,7 +38,7 @@ def build_clip_model(model_cfg, device=None):
         model, preprocess = open_clip.create_model_from_pretrained(model_id, device=device)
         tokenizer = open_clip.get_tokenizer(model_id)
     else:
-        model, preprocess = clip.load(model_id, device=device, jit=True, download_root=cache_dir)
+        model, preprocess = clip.load(model_id, device=device, download_root=cache_dir)
         tokenizer = lambda x: clip.tokenize(x, truncate=True)  # noqa: E731
 
     model.image_tokenizer = preprocess

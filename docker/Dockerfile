@@ -79,6 +79,29 @@ WORKDIR /home/user/warpconvnet
 # Install warpconvnet
 RUN pip3 install -e .[all]
 
+# Install MinkowskiEngine manually for Segment3D
+# this is a patch for MinkowskiEngine to work with CUDA 12.1 (https://github.com/NVIDIA/MinkowskiEngine/issues/543)
+RUN git clone https://github.com/NVIDIA/MinkowskiEngine.git /tmp/MinkowskiEngine \
+    && cd /tmp/MinkowskiEngine \
+    && sed -i '31i #include <thrust/execution_policy.h>' ./src/convolution_kernel.cuh \
+    && sed -i '39i #include <thrust/unique.h>\n#include <thrust/remove.h>' ./src/coordinate_map_gpu.cu \
+    && sed -i '38i #include <thrust/execution_policy.h>\n#include <thrust/reduce.h>\n#include <thrust/sort.h>' ./src/spmm.cu \
+    && sed -i '38i #include <thrust/execution_policy.h>' ./src/3rdparty/concurrent_unordered_map.cuh \
+    && python3 setup.py install --force_cuda --blas=openblas \
+    && cd - \
+    && rm -rf /tmp/MinkowskiEngine
+
+# Install Segmentator and pointnet2 manually for Segment3D
+WORKDIR /tmp/Segment3D
+RUN git clone https://github.com/LeapLabTHU/Segment3D.git \
+    && cd Segment3D/third_party/Segmentator \
+    && make \
+    && cp segmentator /usr/local/bin/segmentator \
+    && cd ../pointnet2 \
+    && python3 setup.py install \
+    && cd /tmp \
+    && rm -rf /tmp/Segment3D
+
 # Debugging tools
 RUN pip3 install ipdb
 

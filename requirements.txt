@@ -24,6 +24,7 @@ pytest          # tests
 black
 fire
 overrides
+gdown
 # sh            # for running bash commands in some tests (linux/macos only)
 
 # --------- Warp ConvNet -------- #
@@ -49,3 +50,10 @@ open3d==0.18.0
 natsort
 scikit-image
 open_clip_torch
+
+# --------- Segment3D --------- #
+--extra-index-url https://pypi.nvidia.com
+cuml-cu12   # for DBSCAN
+loguru
+albumentations
+pyviz3d

@@ -68,6 +68,7 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
             for c in ignore_class_idx:
                 self.valid_class_idx.remove(c)
         self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, ignore_label)
+        self.subset_mapper = self.build_subset_mapper()
         # foreground & background class indices
         self.fg_class_idx = [
             i
@@ -107,6 +108,9 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         for _, x in enumerate(ignore_class_idx):
             remapper[x] = 0
         return remapper
+
+    def build_subset_mapper(self):
+        return None
 
     def __len__(self):
         length = len(self.scene_names) * (self.repeat if self.split == "train" else 1)

@@ -1,0 +1,6 @@
+defaults:
+  - regionplc_openvocab_fastai
+
+loss_cfg:
+  seg_loss:
+    text_clip_path: /datasets/regionplc/text_embed/scannet200_clip-ViT-B16_id.pth

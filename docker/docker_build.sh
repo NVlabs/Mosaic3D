@@ -49,7 +49,7 @@ IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
 # Check if warpconvnet does not exist
 if [ ! -d warpconvnet ]; then
     echo "Cloning warpconvnet..."
-    git clone --recursive-submodules ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git warpconvnet
+    git clone --recurse-submodules ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git warpconvnet
 # Check if warpconvnet exists but is not up to date
 elif [ -d warpconvnet ]; then
     echo "Updating warpconvnet..."
@@ -60,6 +60,7 @@ elif [ -d warpconvnet ]; then
     popd || exit
     popd || exit
 fi
+
 
 # Build the Docker image
 # Add --no-cache to force a rebuild

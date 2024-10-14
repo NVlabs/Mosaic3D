@@ -14,6 +14,9 @@ from src.data.dataset_base import DatasetBase
 from src.data.metadata.scannet import (
     CLASS_LABELS_20,
     CLASS_LABELS_200,
+    HEAD_CLASSES_200,
+    COMMON_CLASSES_200,
+    TAIL_CLASSES_200,
     VALID_CLASS_IDS_20,
     VALID_CLASS_IDS_200,
 )
@@ -47,6 +50,7 @@ class ScanNetDataset(DatasetBase):
         clip_text_alignment: bool = False,
         clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
+        mask_dir: Optional[str] = None,
     ):
         super().__init__(
             dataset_name="scannetv2",
@@ -71,6 +75,7 @@ class ScanNetDataset(DatasetBase):
         self.image_root_path = image_root_path
         self.clip_text_alignment = clip_text_alignment
         self.clip_image_alignment = clip_image_alignment
+        self.mask_dir = mask_dir
 
         # load clip preprocessing/tokenizer
         self.tokenize_text = clip.tokenize
@@ -208,6 +213,7 @@ class ScanNetDataset(DatasetBase):
 
         # load pcd data
         coord, color, segment, instance = self.load_point_cloud(scene_name)
+
         # class mapping
         # base / novel label
         if hasattr(self, "base_class_mapper"):
@@ -229,6 +235,13 @@ class ScanNetDataset(DatasetBase):
             binary=binary_label,
             origin_idx=np.arange(coord.shape[0]).astype(np.int64),
         )
+
+        # load mask data
+        if self.mask_dir is not None:
+            mask_path = os.path.join(self.mask_dir, f"{scene_name}.npz")
+            mask_data = np.load(mask_path)
+            masks_binary = mask_data["masks_binary"]
+            data_dict["masks_binary"] = masks_binary
 
         # load captions
         if self.split == "train" or self.clip_text_alignment:
@@ -278,6 +291,7 @@ class ScanNet200Dataset(ScanNetDataset):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
+        mask_dir: Optional[str] = None,
     ):
         super().__init__(
             data_dir=data_dir,
@@ -293,7 +307,23 @@ class ScanNet200Dataset(ScanNetDataset):
             ignore_class_idx=ignore_class_idx,
             ignore_label=ignore_label,
             repeat=repeat,
+            mask_dir=mask_dir,
         )
+
+    def build_subset_mapper(self):
+        mapper = {}
+        mapper["subset_names"] = ["head", "common", "tail"]
+        for name in self.CLASS_LABELS:
+            if name in HEAD_CLASSES_200:
+                mapper[name] = "head"
+            elif name in COMMON_CLASSES_200:
+                mapper[name] = "common"
+            elif name in TAIL_CLASSES_200:
+                mapper[name] = "tail"
+            else:
+                raise ValueError(f"Unknown class name: {name}")
+
+        return mapper
 
     def load_point_cloud(self, scene_name: str):
         scene_dir = self.data_dir / self.split / scene_name
@@ -424,5 +454,38 @@ def check_scannet_data(
     return erroneous_files
 
 
+def generate_oracle_masks(
+    data_dir: str = "/datasets/scannet_hf",
+    output_dir: str = "/datasets/scannet_masks/oracle",
+):
+    data_dir = Path(data_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Read scene names for all splits
+    splits = ["train", "val"]
+    scene_names = []
+    for split in splits:
+        split_file = f"src/data/metadata/split_files/scannetv2_{split}.txt"
+        with open(split_file) as f:
+            scene_names.extend([(split, line.strip()) for line in f.readlines()])
+
+    for split, scene_name in tqdm(scene_names):
+        scene_dir = data_dir / split / scene_name
+        instance = np.load(scene_dir / "instance.npy")
+        num_points = len(instance)
+        num_instances = instance.max() + 1
+
+        # convert instance to binary mask
+        masks_binary = np.zeros((num_instances, num_points), dtype=bool)
+        for i in range(num_instances):
+            masks_binary[i, instance == i] = True
+
+        scores = np.ones(num_instances)
+
+        np.savez(output_dir / f"{scene_name}.npz", scores=scores, masks_binary=masks_binary)
+
+
 if __name__ == "__main__":
     fire.Fire(check_scannet_data)
+    # generate_oracle_masks()

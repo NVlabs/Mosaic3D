@@ -27,7 +27,7 @@ def test_collate_fns(fn_name: str) -> None:
 
         print(batch_dict.keys())
         pc = PointCollection(
-            batch_dict["coord"], batch_dict["feats"], offsets=batch_dict["offsets"]
+            batch_dict["coord"], batch_dict["feat"], offsets=batch_dict["offset"]
         ).to(DEVICE)
         if i == 0:
             break
