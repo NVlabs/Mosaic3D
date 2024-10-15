@@ -11,6 +11,7 @@ from torch import Tensor
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
 from warpconvnet.nn.sequential import Sequential
+from warpconvnet.geometry.base_geometry import SpatialFeatures
 from warpconvnet.geometry.point_collection import PointCollection
 from warpconvnet.models.internal.backbones.regionplc import SparseConvUNet
 from warpconvnet.nn.pools import PointToSparseWrapper
@@ -47,8 +48,8 @@ class ToFeatureAdapter(nn.Module):
             Normalize(p=2, dim=-1) if normalize_output else nn.Identity(),
         )
 
-    def forward(self, pts: List[PointCollection]) -> Float[Tensor, "N C"]:  # noqa: F722, F821
-        return self.adapter(pts[0])
+    def forward(self, sf: SpatialFeatures) -> SpatialFeatures:
+        return self.adapter(sf)
 
 
 class RegionPLCToCLIP(NetworkBaseDict):
