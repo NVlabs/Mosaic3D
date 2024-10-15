@@ -39,16 +39,11 @@ def build_optimizer(model, optim_cfg, **kwargs):
         def get_layer_groups(m):
             return [nn.Sequential(*flatten_model(m))]
 
-        # flatten_model = lambda m: (
-        #     sum(map(flatten_model, m.children()), []) if num_children(m) else [m]
-        # )
-        # get_layer_groups = lambda m: [nn.Sequential(*flatten_model(m))]
-
         optimizer_func = partial(optim.Adam, betas=(0.9, 0.99))
         optimizer = OptimWrapper.create(
             optimizer_func,
-            3e-3,
-            get_layer_groups(model),
+            lr=optim_cfg.LR,
+            layer_groups=get_layer_groups(model),
             wd=optim_cfg.WEIGHT_DECAY,
             true_wd=True,
             bn_wd=True,

@@ -234,7 +234,8 @@ class DenseLanguageLitModule(LitModuleBase):
 
         loss = binary_loss + seg_loss + caption_loss + clip_image_alignment_loss
 
-        log_metrics = dict(loss=loss, caption_loss=caption_loss)
+        lr = self.optimizers().param_groups[0]["lr"]
+        log_metrics = dict(loss=loss, caption_loss=caption_loss, lr=lr)
         if self.binary_loss is not None:
             log_metrics["binary_loss"] = binary_loss
         if not self.clip_alignment_loss.eval_only:
