@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import fire
 import numpy as np
@@ -37,9 +37,9 @@ class ScanNetDataset(DatasetBase):
         split: str,
         transforms: None,
         caption_dir: Optional[str] = None,
-        caption_subset: Optional[str] = None,
+        caption_subset: Optional[Union[str, List[str]]] = None,
         segment_dir: Optional[str] = None,
-        segment_subset: Optional[str] = None,
+        segment_subset: Optional[Union[str, List[str]]] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -69,8 +69,15 @@ class ScanNetDataset(DatasetBase):
 
         # Determine the caption loading method based on directory structure
         if self.split == "train" and segment_dir and segment_subset:
-            self.segment_dir = Path(segment_dir) / segment_subset
-            assert self.segment_dir.exists(), f"{self.segment_dir} not exist."
+            segment_subset = (
+                [segment_subset] if isinstance(segment_subset, str) else segment_subset
+            )
+            self.segment_dir = [Path(segment_dir) / subset for subset in segment_subset]
+            assert len(self.segment_dir) == len(
+                self.caption_dir
+            ), "segment_dir and caption_dir must have the same length"
+            for subset_dir in self.segment_dir:
+                assert subset_dir.exists(), f"{subset_dir} not exist."
 
         self.image_root_path = image_root_path
         self.clip_text_alignment = clip_text_alignment
@@ -90,21 +97,35 @@ class ScanNetDataset(DatasetBase):
         return coord, color, segment, instance
 
     def load_caption(self, scene_name):
-        # legacy version
-        if (self.caption_dir / f"{scene_name}.npz").exists():
-            return self._load_caption_legacy(scene_name)
-        elif (
-            (self.caption_dir / scene_name).is_dir()
-            and (self.caption_dir / scene_name / "captions.npz").exists()
-            and hasattr(self, "segment_dir")
-            and (self.segment_dir / scene_name / "point_indices.npz").exists()
-        ):
-            return self._load_caption(scene_name)
-        else:
-            raise FileNotFoundError(f"No caption data found for scene {scene_name}.")
+        all_point_indices = []
+        all_captions = []
 
-    def _load_caption_legacy(self, scene_name):
-        filepath = os.path.join(self.caption_dir, f"{scene_name}.npz")
+        # Check all caption directories
+        for i, caption_dir in enumerate(self.caption_dir):
+            # legacy version
+            if (caption_dir / f"{scene_name}.npz").exists():
+                point_indices, captions = self._load_caption_legacy(scene_name, caption_dir)
+            elif (
+                (caption_dir / scene_name).is_dir()
+                and (caption_dir / scene_name / "captions.npz").exists()
+                and hasattr(self, "segment_dir")
+                and (self.segment_dir[i] / scene_name / "point_indices.npz").exists()
+            ):
+                point_indices, captions = self._load_caption(
+                    scene_name, caption_dir, self.segment_dir[i]
+                )
+            else:
+                raise FileNotFoundError(
+                    f"No caption data found for scene {scene_name} in any of the provided directories."
+                )
+
+            all_point_indices.extend(point_indices)
+            all_captions.extend(captions)
+
+        return all_point_indices, all_captions
+
+    def _load_caption_legacy(self, scene_name, caption_dir):
+        filepath = os.path.join(caption_dir, f"{scene_name}.npz")
         data = np.load(filepath)
 
         object_ids = data["object_ids"]
@@ -138,11 +159,11 @@ class ScanNetDataset(DatasetBase):
         captions = list(captions)
         return point_indices, captions
 
-    def _load_caption(self, scene_name):
-        indices_path = self.segment_dir / scene_name / "point_indices.npz"
+    def _load_caption(self, scene_name, caption_dir, segment_dir):
+        indices_path = segment_dir / scene_name / "point_indices.npz"
         point_indices = unpack_list_of_np_arrays(indices_path)
 
-        caption_path = self.caption_dir / scene_name / "captions.npz"
+        caption_path = caption_dir / scene_name / "captions.npz"
         captions = unpack_list_of_np_arrays(caption_path)
 
         # flatten the list of list
@@ -282,9 +303,9 @@ class ScanNet200Dataset(ScanNetDataset):
         split: str,
         transforms: None,
         caption_dir: Optional[str] = None,
-        caption_subset: Optional[str] = None,
+        caption_subset: Optional[Union[str, List[str]]] = None,
         segment_dir: Optional[str] = None,
-        segment_subset: Optional[str] = None,
+        segment_subset: Optional[Union[str, List[str]]] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,

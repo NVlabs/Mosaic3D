@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
@@ -21,9 +21,9 @@ class Matterport3DDataset(DatasetBase):
         split: str,
         transforms: None,
         segment_dir: Optional[str] = None,
-        segment_subset: Optional[str] = None,
+        segment_subset: Optional[Union[str, List[str]]] = None,
         caption_dir: Optional[str] = None,
-        caption_subset: Optional[str] = None,
+        caption_subset: Optional[Union[str, List[str]]] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -46,8 +46,15 @@ class Matterport3DDataset(DatasetBase):
             repeat=repeat,
         )
         if self.split == "train":
-            self.segment_dir = Path(segment_dir) / segment_subset
-            assert self.segment_dir.exists(), f"{self.segment_dir} not exist."
+            segment_subset = (
+                [segment_subset] if isinstance(segment_subset, str) else segment_subset
+            )
+            self.segment_dir = [Path(segment_dir) / subset for subset in segment_subset]
+            assert len(self.segment_dir) == len(
+                self.caption_dir
+            ), "segment_dir and caption_dir must have the same length"
+            for subset_dir in self.segment_dir:
+                assert subset_dir.exists(), f"{subset_dir} not exist."
 
     def load_point_cloud(self, scene_name: str):
         filepath = self.data_dir / self.split / f"{scene_name}.pth"
@@ -56,27 +63,35 @@ class Matterport3DDataset(DatasetBase):
         return coord, color, segment
 
     def load_caption(self, scene_name):
-        indices_path = self.segment_dir / scene_name / "point_indices.npz"
-        point_indices = unpack_list_of_np_arrays(indices_path)
+        all_point_indices = []
+        all_captions = []
 
-        caption_path = self.caption_dir / scene_name / "captions.npz"
-        captions = unpack_list_of_np_arrays(caption_path)
+        for caption_dir, segment_dir in zip(self.caption_dir, self.segment_dir):
+            indices_path = segment_dir / scene_name / "point_indices.npz"
+            point_indices = unpack_list_of_np_arrays(indices_path)
 
-        # flatten the list of list
-        point_indices = [item for sublist in point_indices for item in sublist]
-        captions = [item for sublist in captions for item in sublist]
+            caption_path = caption_dir / scene_name / "captions.npz"
+            captions = unpack_list_of_np_arrays(caption_path)
 
-        if self.object_sample_ratio < 1.0:
-            sel = np.random.choice(
-                np.arange(len(captions)),
-                max(1, int(len(captions) * self.object_sample_ratio)),
-                replace=False,
-            )
-            captions = [captions[i] for i in sel]
-            point_indices = [point_indices[i] for i in sel]
+            # flatten the list of list
+            point_indices = [item for sublist in point_indices for item in sublist]
+            captions = [item for sublist in captions for item in sublist]
 
-        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
-        return point_indices, captions
+            if self.object_sample_ratio < 1.0:
+                sel = np.random.choice(
+                    np.arange(len(captions)),
+                    max(1, int(len(captions) * self.object_sample_ratio)),
+                    replace=False,
+                )
+                captions = [captions[i] for i in sel]
+                point_indices = [point_indices[i] for i in sel]
+
+            point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
+
+            all_point_indices.extend(point_indices)
+            all_captions.extend(captions)
+
+        return all_point_indices, all_captions
 
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)

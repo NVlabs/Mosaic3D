@@ -1,6 +1,6 @@
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import numpy as np
 from natsort import natsorted
@@ -21,7 +21,7 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         split: str,
         transforms: None,
         caption_dir: Optional[str] = None,
-        caption_subset: Optional[str] = None,
+        caption_subset: Optional[Union[str, List[str]]] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -54,8 +54,12 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
 
         # set caption dir for train dataset
         if self.split == "train":
-            self.caption_dir = Path(caption_dir) / caption_subset
-            assert self.caption_dir.exists(), f"{self.caption_dir} not exist."
+            caption_subset = (
+                [caption_subset] if isinstance(caption_subset, str) else caption_subset
+            )
+            self.caption_dir = [Path(caption_dir) / subset for subset in caption_subset]
+            for subset_dir in self.caption_dir:
+                assert subset_dir.exists(), f"{subset_dir} not exist."
 
         # class label mappers
         self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
