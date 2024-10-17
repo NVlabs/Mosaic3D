@@ -1,10 +1,7 @@
 defaults:
-  - ov3d
-
-net:
-  binary_head_cfg: false # disable binary head
+  - openscene-lseg_openvocab
 
 loss_cfg:
-  seg_loss:
-    eval_only: true
-  caption_loss_weight: 1.0
+  caption_loss:
+    is_entity: true
+    interpolate: false

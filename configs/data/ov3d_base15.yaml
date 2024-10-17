@@ -3,4 +3,4 @@ defaults:
 
 train_dataset:
   caption_dir: /datasets/scannet_captions
-  caption_subset: ov3d
+  caption_subset: ov3d_v2

@@ -46,8 +46,6 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     :param cfg: DictConfig configuration composed by Hydra.
     :return: Tuple[dict, dict] with metrics and dict with all instantiated objects.
     """
-    assert cfg.ckpt_path
-
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 
@@ -73,21 +71,26 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         log_hyperparameters(object_dict)
 
     log.info("Starting testing!")
-    ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
-    ckpt_strict = cfg.get("ckpt_strict", True)
-    if "pytorch-lightning_version" not in ckpt or not ckpt_strict:
+
+    if cfg.ckpt_path is None:
         model.configure_model()
-
-        # for compatibility between ScanNet20 and ScanNet200
-        state_dict = ckpt["state_dict"]
-        for key in list(state_dict.keys()):
-            if "emb_target" in key:
-                del state_dict[key]
-
-        model.load_state_dict(state_dict, strict=False)
         trainer.test(model=model, datamodule=datamodule)
     else:
-        trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
+        ckpt = torch.load(cfg.ckpt_path, map_location="cpu")
+        ckpt_strict = cfg.get("ckpt_strict", True)
+        if "pytorch-lightning_version" not in ckpt or not ckpt_strict:
+            model.configure_model()
+
+            # for compatibility between ScanNet20 and ScanNet200
+            state_dict = ckpt["state_dict"]
+            for key in list(state_dict.keys()):
+                if "emb_target" in key:
+                    del state_dict[key]
+
+            model.load_state_dict(state_dict, strict=False)
+            trainer.test(model=model, datamodule=datamodule)
+        else:
+            trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
 
     # for predictions use trainer.predict(...)
     # predictions = trainer.predict(model=model, dataloaders=dataloaders, ckpt_path=cfg.ckpt_path)

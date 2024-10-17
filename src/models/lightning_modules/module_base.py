@@ -75,6 +75,9 @@ class LitModuleBase(LightningModule, metaclass=abc.ABCMeta):
         # reset val_results
         # self.val_results = []
 
+    def on_test_epoch_start(self) -> None:
+        self.on_validation_epoch_start()
+
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         self.validation_step(batch, batch_idx)
 
@@ -91,6 +94,11 @@ class LitModuleBase(LightningModule, metaclass=abc.ABCMeta):
                 scheduler = self.hparams.scheduler(
                     optimizer=optimizer,
                     total_steps=self.trainer.estimated_stepping_batches,
+                )
+            elif self.hparams.scheduler.func.__name__ == "PolynomialLR":
+                scheduler = self.hparams.scheduler(
+                    optimizer=optimizer,
+                    total_iters=self.trainer.estimated_stepping_batches,
                 )
             elif self.hparams.scheduler.func.__name__.startswith("build_"):
                 scheduler = self.hparams.scheduler(

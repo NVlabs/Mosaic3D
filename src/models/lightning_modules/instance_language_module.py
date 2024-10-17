@@ -117,9 +117,9 @@ class InstanceLanguageLitModule(LitModuleBase):
         raise NotImplementedError
 
     def on_test_epoch_start(self):
-        class_names = self.class_names
+        class_names = [c if c != "otherfurniture" else "other" for c in self.class_names]
         if self.hparams.use_prompt:
-            class_names = [f"a {c} in a scene" for c in self.class_names]
+            class_names = [f"a {c} in a scene" if c != "other" else c for c in class_names]
         text_embedding = caption_utils.forward_text_encoder(
             class_names, self.clip_encoder.to(self.device), normalize=True
         )

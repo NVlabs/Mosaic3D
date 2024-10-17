@@ -31,7 +31,7 @@ net:
   voxel_size: 0.02
 
   backbone_cfg:
-    in_channel: 6
+    in_channel: ${data.in_channel}
     out_channel: 192
     in_channels: [16, 32, 48, 64, 96, 128, 160, 192]
     # out_channels: [16, 32, 48, 64, 96, 128, 160, 192]

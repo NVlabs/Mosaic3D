@@ -22,7 +22,7 @@ net:
   _partial_: true
 
   backbone_cfg:
-    in_channel: 6
+    in_channel: ${data.in_channel}
     mid_channel: 16
     block_reps: 2
     block_residual: true

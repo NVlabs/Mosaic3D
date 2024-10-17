@@ -70,13 +70,18 @@ def get_unique_caption_batch(
 
 
 @torch.no_grad()
-def forward_text_encoder(image_captions, clip_encoder, normalize: bool = False):
+def forward_text_encoder(
+    image_captions,
+    clip_encoder,
+    normalize: bool = False,
+    device: torch.device = torch.device("cuda"),
+):
     if len(image_captions) == 0:
         # Get the channel size from the clip_encoder
         channel_size = clip_encoder.text_projection.shape[1]
-        return torch.zeros((0, channel_size), dtype=torch.float32).cuda()
+        return torch.zeros((0, channel_size), dtype=torch.float32).to(device)
 
-    text_tokens = clip_encoder.text_tokenizer(image_captions).cuda()
+    text_tokens = clip_encoder.text_tokenizer(image_captions).to(device)
     text_embed = clip_encoder.encode_text(text_tokens).float()
     if normalize:
         text_embed = torch.nn.functional.normalize(text_embed, dim=-1)
@@ -84,11 +89,16 @@ def forward_text_encoder(image_captions, clip_encoder, normalize: bool = False):
 
 
 @torch.no_grad()
-def forward_entity_text_encoder(entity_texts, clip_encoder, interpolate: bool = False):
+def forward_entity_text_encoder(
+    entity_texts,
+    clip_encoder,
+    interpolate: bool = False,
+    device: torch.device = torch.device("cuda"),
+):
     """EntityText = f"{entity_name}:{entity_description1},{entity_description2},..."."""
 
     if len(entity_texts) == 0:
-        return torch.zeros((0, 512), dtype=torch.float32).cuda()
+        return torch.zeros((0, 512), dtype=torch.float32).to(device)
 
     def parse(text):
         name, descriptions = text.split(":")
@@ -104,7 +114,7 @@ def forward_entity_text_encoder(entity_texts, clip_encoder, interpolate: bool = 
         parsed_entity_texts.extend(parsed_entity_text)
         offsets.append(offsets[-1] + len(parsed_entity_text))
 
-    text_embed = forward_text_encoder(parsed_entity_texts, clip_encoder)
+    text_embed = forward_text_encoder(parsed_entity_texts, clip_encoder, device=device)
     text_embed = segment_csr(
         text_embed, torch.tensor(offsets, device=text_embed.device), reduce="mean"
     )

@@ -44,7 +44,7 @@ def collate_fn(batch):
         return default_collate(batch)
 
 
-def point_collate_fn(batch, grid_size, mix_prob=0):
+def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
     assert isinstance(
         batch[0], Mapping
     )  # currently, only support input_dict, rather than input_list
@@ -89,11 +89,14 @@ def point_collate_fn(batch, grid_size, mix_prob=0):
             clip_indices_image_to_point[idx_start:idx_end] += idx_batch
         batch["clip_indices_image_to_point"] = clip_indices_image_to_point
 
+    if drop_feat:
+        batch["feat"] = torch.ones_like(batch["feat"])
+
     batch["grid_size"] = grid_size
     return batch
 
 
-def point_collate_fn_with_masks(batch, grid_size, mix_prob=0):
+def point_collate_fn_with_masks(batch, grid_size, mix_prob=0, drop_feat: bool = False):
     assert isinstance(batch[0], Mapping)
     assert "masks_binary" in batch[0].keys()
 
@@ -103,7 +106,7 @@ def point_collate_fn_with_masks(batch, grid_size, mix_prob=0):
     for sample in batch:
         sample.pop("masks_binary")
 
-    batch = point_collate_fn(batch, grid_size, mix_prob)
+    batch = point_collate_fn(batch, grid_size, mix_prob, drop_feat)
     batch["masks_binary"] = batch_masks_binary
     return batch
 

@@ -92,3 +92,4 @@ collate_fn:
   grid_size: 0.02
 batch_size: 4
 num_workers: 2
+in_channel: 6

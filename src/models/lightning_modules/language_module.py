@@ -107,16 +107,6 @@ class DenseLanguageLitModule(LitModuleBase):
         for params in self.clip_encoder.parameters():
             params.requires_grad = False
 
-        # set target clip embeddings
-        if self.clip_alignment_loss.emb_target is None:
-            class_names = self.class_names
-            if self.hparams.use_prompt:
-                class_names = [f"a {c} in a scene" for c in self.class_names]
-            text_embedding = caption_utils.forward_text_encoder(
-                class_names, self.clip_encoder, normalize=True
-            )
-            self.clip_alignment_loss.set_target_embedding(text_embedding)
-
     def setup(self, stage: str) -> None:
         val_dataloader = self.trainer.datamodule.val_dataloader()
         self.class_names = val_dataloader.dataset.CLASS_LABELS
@@ -253,14 +243,18 @@ class DenseLanguageLitModule(LitModuleBase):
         )
         return loss
 
-    def on_test_epoch_start(self):
-        class_names = self.class_names
-        if self.hparams.use_prompt:
-            class_names = [f"a {c} in a scene" for c in self.class_names]
-        text_embedding = caption_utils.forward_text_encoder(
-            class_names, self.clip_encoder, normalize=True
-        )
-        self.clip_alignment_loss.set_target_embedding(text_embedding)
+    def on_validation_epoch_start(self):
+        if self.clip_alignment_loss.emb_target is None:
+            class_names = [c if c != "otherfurniture" else "other" for c in self.class_names]
+            if self.hparams.use_prompt:
+                class_names = [f"a {c} in a scene" if c != "other" else c for c in class_names]
+            text_embedding = caption_utils.forward_text_encoder(
+                class_names,
+                self.clip_encoder,
+                normalize=True,
+                device=self.clip_encoder.text_projection.device,
+            )
+            self.clip_alignment_loss.set_target_embedding(text_embedding.to(self.device))
 
     def validation_step(self, batch, batch_idx):
         out_dict = self(batch)

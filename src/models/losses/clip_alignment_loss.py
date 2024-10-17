@@ -1,11 +1,11 @@
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import repeat
 from jaxtyping import Float, Int
 from torch import Tensor
 from warpconvnet.geometry.point_collection import PointCollection
@@ -57,8 +57,8 @@ class CLIPAlignmentLoss(LossBase):
         else:
             raise ValueError(f"Unknown loss type: {self.loss_type}")
 
-    def set_target_embedding(self, text_embeddings):
-        self.emb_target = nn.Parameter(text_embeddings.float(), requires_grad=False)
+    def set_target_embedding(self, text_embeddings: torch.Tensor):
+        self.emb_target = text_embeddings.float()
 
     def forward(self, x: Tensor | PointCollection) -> Tensor:
         if isinstance(x, PointCollection):

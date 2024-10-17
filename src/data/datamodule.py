@@ -18,6 +18,7 @@ class DataModule(LightningDataModule):
         num_workers: int,
         collate_fn: Callable,
         pin_memory: bool = False,
+        **kwargs,
     ):
         super().__init__()
 
