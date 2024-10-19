@@ -45,6 +45,7 @@ def collate_fn(batch):
 
 
 def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
+    batch = [b for b in batch if b is not None]  # filter out None
     assert isinstance(
         batch[0], Mapping
     )  # currently, only support input_dict, rather than input_list

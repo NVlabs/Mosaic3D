@@ -14,8 +14,8 @@ from src.data.dataset_base import DatasetBase
 from src.data.metadata.scannet import (
     CLASS_LABELS_20,
     CLASS_LABELS_200,
-    HEAD_CLASSES_200,
     COMMON_CLASSES_200,
+    HEAD_CLASSES_200,
     TAIL_CLASSES_200,
     VALID_CLASS_IDS_20,
     VALID_CLASS_IDS_200,
@@ -59,6 +59,8 @@ class ScanNetDataset(DatasetBase):
             transforms=transforms,
             caption_dir=caption_dir,
             caption_subset=caption_subset,
+            segment_dir=segment_dir,
+            segment_subset=segment_subset,
             object_sample_ratio=object_sample_ratio,
             base_class_idx=base_class_idx,
             novel_class_idx=novel_class_idx,
@@ -66,18 +68,6 @@ class ScanNetDataset(DatasetBase):
             ignore_label=ignore_label,
             repeat=repeat,
         )
-
-        # Determine the caption loading method based on directory structure
-        if self.split == "train" and segment_dir and segment_subset:
-            segment_subset = (
-                [segment_subset] if isinstance(segment_subset, str) else segment_subset
-            )
-            self.segment_dir = [Path(segment_dir) / subset for subset in segment_subset]
-            assert len(self.segment_dir) == len(
-                self.caption_dir
-            ), "segment_dir and caption_dir must have the same length"
-            for subset_dir in self.segment_dir:
-                assert subset_dir.exists(), f"{subset_dir} not exist."
 
         self.image_root_path = image_root_path
         self.clip_text_alignment = clip_text_alignment

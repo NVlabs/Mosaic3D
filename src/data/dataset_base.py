@@ -22,6 +22,8 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         transforms: None,
         caption_dir: Optional[str] = None,
         caption_subset: Optional[Union[str, List[str]]] = None,
+        segment_dir: Optional[str] = None,
+        segment_subset: Optional[Union[str, List[str]]] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -61,6 +63,18 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
             for subset_dir in self.caption_dir:
                 assert subset_dir.exists(), f"{subset_dir} not exist."
 
+        # set segment dir for train dataset
+        if self.split == "train" and segment_dir and segment_subset:
+            segment_subset = (
+                [segment_subset] if isinstance(segment_subset, str) else segment_subset
+            )
+            self.segment_dir = [Path(segment_dir) / subset for subset in segment_subset]
+            assert len(self.segment_dir) == len(
+                self.caption_dir
+            ), "segment_dir and caption_dir must have the same length"
+            for subset_dir in self.segment_dir:
+                assert subset_dir.exists(), f"{subset_dir} not exist."
+
         # class label mappers
         self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
         if base_class_idx is not None and len(base_class_idx):
@@ -76,8 +90,8 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         # foreground & background class indices
         self.fg_class_idx = [
             i
-            for i in self.valid_class_idx
-            if self.CLASS_LABELS[i] not in ("wall", "floor", "ceiling", "other", "otherfurniture")
+            for i, c in enumerate(self.CLASS_LABELS)
+            if c not in ("wall", "floor", "ceiling") and "other" not in c
         ]
         self.bg_class_idx = list(set(range(len(self.CLASS_LABELS))) - set(self.fg_class_idx))
 

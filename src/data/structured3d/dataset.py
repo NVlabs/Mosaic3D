@@ -1,29 +1,28 @@
-from pathlib import Path
 from typing import List, Optional, Union
 
 import numpy as np
 import torch
 
 from src.data.dataset_base import DatasetBase
-from src.data.metadata.matterport3d import CLASS_LABELS_21
+from src.data.metadata.structured3d import CLASS_LABELS_25
 from src.utils import RankedLogger
 from src.utils.io import unpack_list_of_np_arrays
 
 log = RankedLogger(__name__, rank_zero_only=False)
 
 
-class Matterport3DDataset(DatasetBase):
-    CLASS_LABELS = CLASS_LABELS_21
+class Structured3DDataset(DatasetBase):
+    CLASS_LABELS = CLASS_LABELS_25
 
     def __init__(
         self,
         data_dir: str,
         split: str,
         transforms: None,
-        segment_dir: Optional[str] = None,
-        segment_subset: Optional[Union[str, List[str]]] = None,
         caption_dir: Optional[str] = None,
         caption_subset: Optional[Union[str, List[str]]] = None,
+        segment_dir: Optional[str] = None,
+        segment_subset: Optional[Union[str, List[str]]] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -32,7 +31,7 @@ class Matterport3DDataset(DatasetBase):
         repeat: int = 1,
     ):
         super().__init__(
-            dataset_name="matterport3d",
+            dataset_name="structured3d",
             data_dir=data_dir,
             split=split,
             transforms=transforms,
@@ -49,12 +48,16 @@ class Matterport3DDataset(DatasetBase):
         )
 
     def load_point_cloud(self, scene_name: str):
-        filepath = self.data_dir / self.split / f"{scene_name}.pth"
-        coord, color, segment = torch.load(filepath)
-        color = np.clip((color + 1.0) * 127.5, 0, 255).astype(int)
+        scene_id, room_id = scene_name.split("@")
+        scene_dir = self.data_dir / self.split / scene_id / room_id
+        coord = np.load(scene_dir / "coord.npy")
+        color = np.load(scene_dir / "color.npy")
+        segment = np.load(scene_dir / "segment.npy").reshape(-1)
         return coord, color, segment
 
     def load_caption(self, scene_name):
+        scene_name = scene_name.replace("/", "@")  # patch scene name
+
         all_point_indices = []
         all_captions = []
 
@@ -122,4 +125,6 @@ class Matterport3DDataset(DatasetBase):
             data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
         data_dict = self.transforms(data_dict)
+        if "caption_data" in data_dict and len(data_dict["caption_data"]["idx"]) == 0:
+            return None
         return data_dict
