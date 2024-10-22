@@ -30,4 +30,4 @@ logger:
 
 callbacks:
   model_checkpoint:
-    monitor: "val/miou"
+    monitor: ${data.checkpoint_monitor}

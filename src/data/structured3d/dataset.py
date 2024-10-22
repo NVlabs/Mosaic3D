@@ -29,6 +29,8 @@ class Structured3DDataset(DatasetBase):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
+        mask_dir: Optional[str] = None,
+        log_postfix: Optional[str] = None,
     ):
         super().__init__(
             dataset_name="structured3d",
@@ -45,6 +47,8 @@ class Structured3DDataset(DatasetBase):
             ignore_class_idx=ignore_class_idx,
             ignore_label=ignore_label,
             repeat=repeat,
+            log_postfix=log_postfix,
+            mask_dir=mask_dir,
         )
 
     def load_point_cloud(self, scene_name: str):

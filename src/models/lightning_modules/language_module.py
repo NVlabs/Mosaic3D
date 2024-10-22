@@ -8,6 +8,7 @@ from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatr
 
 import src.utils.caption_utils as caption_utils
 from src.models.components.clip_models import build_clip_model, download_clip_model
+from src.models.components.evaluator import InstanceSegmentationEvaluator
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import (
     CaptionAlignmentLoss,
@@ -16,6 +17,7 @@ from src.models.losses.caption_loss import (
 )
 from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentLoss,
+    CLIPAlignmentEval,
     compute_clip_image_alignment,
     compute_clip_text_cosine_similarity,
 )
@@ -59,18 +61,19 @@ class DenseLanguageLitModule(LitModuleBase):
         else:
             raise ValueError(f"Caption loss type {self.caption_loss_type} not supported")
 
-        self.clip_alignment_loss = CLIPAlignmentLoss(**loss_cfg["seg_loss"])
+        self.clip_alignment_loss = (
+            CLIPAlignmentLoss(**loss_cfg["seg_loss"])
+            if not loss_cfg["seg_loss"]["eval_only"]
+            else None
+        )
         self.binary_loss = nn.BCEWithLogitsLoss() if loss_cfg.get("binary_loss", None) else None
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
 
         # for tracking best so far validation accuracy
-        self.val_confmat = None
-        self.val_confmat_all = None
-        self.val_miou_best = MaxMetric()
-        self.val_clip_text_score = MeanMetric()
-        self.val_clip_image_score = MeanMetric()
+        self.val_metrics = nn.ModuleList()
+        self.val_class_info = []
 
         # Sync distributed metrics
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
@@ -108,24 +111,60 @@ class DenseLanguageLitModule(LitModuleBase):
             params.requires_grad = False
 
     def setup(self, stage: str) -> None:
-        val_dataloader = self.trainer.datamodule.val_dataloader()
-        self.class_names = val_dataloader.dataset.CLASS_LABELS
+        val_dataloaders = self.trainer.datamodule.val_dataloader()
+        if not isinstance(val_dataloaders, list):
+            val_dataloaders = [val_dataloaders]
 
-        self.val_confmat = MulticlassConfusionMatrix(
-            num_classes=len(self.class_names),
-            ignore_index=val_dataloader.dataset.ignore_label,
-        )
-        self.val_confmat_all = MulticlassConfusionMatrix(
-            num_classes=len(self.class_names),
-            ignore_index=val_dataloader.dataset.ignore_label,
-        )
+        for val_dataloader in val_dataloaders:
+            dataset = val_dataloader.dataset
+            class_names = dataset.CLASS_LABELS
+            postfix = dataset.log_postfix
+            assert postfix is not None, "log_postfix is required for clarity"
 
-        self.base_class_idx = val_dataloader.dataset.base_class_idx
-        self.novel_class_idx = val_dataloader.dataset.novel_class_idx
-        self.valid_class_idx = val_dataloader.dataset.valid_class_idx
-        self.fg_class_idx = val_dataloader.dataset.fg_class_idx
-        self.bg_class_idx = val_dataloader.dataset.bg_class_idx
-        self.ignore_label = val_dataloader.dataset.ignore_label
+            # semantic segmentation metrics (default)
+            val_metric = nn.ModuleDict(
+                {
+                    "confmat": MulticlassConfusionMatrix(
+                        num_classes=len(class_names),
+                        ignore_index=dataset.ignore_label,
+                    ),
+                    "confmat_all": MulticlassConfusionMatrix(
+                        num_classes=len(class_names),
+                        ignore_index=dataset.ignore_label,
+                    ),
+                    "miou_all_best": MaxMetric(),
+                    "clip_text_score": MeanMetric(),
+                    "clip_image_score": MeanMetric(),
+                }
+            )
+            # instance segmentation metrics (optional)
+            if dataset.mask_dir is not None:
+                val_metric["mAP_evaluator"] = InstanceSegmentationEvaluator(
+                    class_names=class_names,
+                    segment_ignore_index=dataset.instance_ignore_class_idx
+                    + [dataset.ignore_label],
+                    instance_ignore_index=dataset.ignore_label,
+                    subset_mapper=dataset.subset_mapper,
+                )
+            # dataset class info
+            val_class_info = dict(
+                postfix=postfix,
+                class_names=class_names,
+                base_class_idx=dataset.base_class_idx,
+                novel_class_idx=dataset.novel_class_idx,
+                fg_class_idx=dataset.fg_class_idx,
+                bg_class_idx=dataset.bg_class_idx,
+                ignore_label=dataset.ignore_label,
+            )
+            self.val_metrics.append(val_metric)
+            self.val_class_info.append(val_class_info)
+
+        self.clip_alignment_eval = nn.ModuleList(
+            [
+                CLIPAlignmentEval(**self.hparams.eval_cfg.seg_eval)
+                for _ in range(len(self.val_metrics))
+            ]
+        )
 
     def forward(self, batch: Any) -> Dict[str, Any]:
         point = self.net(batch)
@@ -183,7 +222,7 @@ class DenseLanguageLitModule(LitModuleBase):
             )
 
         clip_feat = out_dict["clip_feat"]
-        if not self.clip_alignment_loss.eval_only:
+        if self.clip_alignment_loss is not None:
             seg_loss = (
                 self.clip_alignment_loss.loss(clip_feat, batch["segment"])
                 * self.hparams.loss_cfg.seg_loss_weight
@@ -228,7 +267,7 @@ class DenseLanguageLitModule(LitModuleBase):
         log_metrics = dict(loss=loss, caption_loss=caption_loss, lr=lr)
         if self.binary_loss is not None:
             log_metrics["binary_loss"] = binary_loss
-        if not self.clip_alignment_loss.eval_only:
+        if self.clip_alignment_loss is not None:
             log_metrics["seg_loss"] = seg_loss
         if self.train_clip_image_alignment:
             log_metrics["clip_image_alignment_loss"] = clip_image_alignment_loss
@@ -244,27 +283,40 @@ class DenseLanguageLitModule(LitModuleBase):
         return loss
 
     def on_validation_epoch_start(self):
-        if self.clip_alignment_loss.emb_target is None:
-            class_names = [c if c != "otherfurniture" else "other" for c in self.class_names]
-            if self.hparams.use_prompt:
-                class_names = [f"a {c} in a scene" if c != "other" else c for c in class_names]
-            text_embedding = caption_utils.forward_text_encoder(
-                class_names,
-                self.clip_encoder,
-                normalize=True,
-                device=self.clip_encoder.text_projection.device,
-            )
-            self.clip_alignment_loss.set_target_embedding(text_embedding.to(self.device))
+        for class_info, eval_module in zip(self.val_class_info, self.clip_alignment_eval):
+            class_names = class_info["class_names"]
 
-    def validation_step(self, batch, batch_idx):
+            if eval_module.emb_target is None:
+                if self.hparams.use_prompt:
+                    class_names = [
+                        f"a {c} in a scene" if "other" not in c else "other" for c in class_names
+                    ]  # OpenScene setting
+                text_embedding = caption_utils.forward_text_encoder(
+                    class_names,
+                    self.clip_encoder,
+                    normalize=True,
+                    device=self.clip_encoder.text_projection.device,
+                )
+                eval_module.set_target_embedding(text_embedding.to(self.device))
+            else:
+                if eval_module.emb_target.device != self.device:
+                    eval_module.emb_target = eval_module.emb_target.to(self.device)
+
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        metrics = self.val_metrics[dataloader_idx]
+        class_info = self.val_class_info[dataloader_idx]
+
         out_dict = self(batch)
-        logits = out_dict["logits"]
+        logits = self.clip_alignment_eval[dataloader_idx].predict(
+            out_dict["clip_feat"], return_logit=True
+        )
 
+        # 1. semantic segmentation
         preds_all = logits.max(1)[1]
-        self.val_confmat_all(preds_all, batch["segment"])
+        metrics["confmat_all"](preds_all, batch["segment"])
 
         logits_fg = torch.full_like(logits, torch.finfo(logits.dtype).min)
-        logits_fg[..., self.fg_class_idx] = logits[..., self.fg_class_idx]
+        logits_fg[..., class_info["fg_class_idx"]] = logits[..., class_info["fg_class_idx"]]
 
         if self.binary_loss is not None:
             base_scores = logits_fg[..., self.base_class_idx].softmax(dim=-1)
@@ -285,12 +337,17 @@ class DenseLanguageLitModule(LitModuleBase):
             preds = logits_fg.max(1)[1]
 
         segment_fg = batch["segment"].clone()
-        for i in self.bg_class_idx:
-            segment_fg[segment_fg == i] = self.ignore_label  # Set background classes to 0
+        for i in class_info["bg_class_idx"]:
+            segment_fg[segment_fg == i] = class_info["ignore_label"]  # Set background classes to 0
 
         # update and log metrics
-        self.val_confmat(preds, segment_fg)
+        metrics["confmat"](preds, segment_fg)
 
+        # 2. instance segmentation (optional)
+        if "mAP_evaluator" in metrics:
+            self._update_instance_segmentation_metrics(batch, logits, metrics)
+
+        # 3. CLIP image alignment (optional)
         if self.eval_clip_image_alignment:
             clip_scores = compute_clip_image_alignment(
                 clip_encoder=self.clip_encoder,
@@ -301,7 +358,7 @@ class DenseLanguageLitModule(LitModuleBase):
                 is_loss=False,
             )
             clip_avg_score = clip_scores.mean().cpu().numpy()
-            self.val_clip_image_score.update(clip_avg_score)
+            metrics["clip_image_score"].update(clip_avg_score)
 
         if self.eval_clip_text_alignment:
             clip_avg_score = compute_clip_text_cosine_similarity(
@@ -311,14 +368,36 @@ class DenseLanguageLitModule(LitModuleBase):
                 offset=batch["offset"],
                 point_indices_to_caption=batch["caption_data"]["idx"],
             )
-            self.val_clip_text_score.update(clip_avg_score)
+            metrics["clip_text_score"].update(clip_avg_score)
+
+    def _update_instance_segmentation_metrics(self, batch, logits, metrics):
+        offset = batch["offset"]
+        batch_size = len(offset) - 1
+        for i in range(batch_size):
+            gt_classes = batch["segment"][offset[i] : offset[i + 1]]
+            gt_instances = batch["instance"][offset[i] : offset[i + 1]]
+            pred_logits = logits[offset[i] : offset[i + 1]]
+            pred_masks = batch["masks_binary"][i]
+
+            # mask logits (voting)
+            pred_logits = torch.nn.functional.softmax(pred_logits, dim=-1)
+            pred_logits = torch.stack([pred_logits[mask].mean(dim=0) for mask in pred_masks])
+            pred_scores, pred_classes = torch.max(pred_logits, dim=1)
+
+            metrics["mAP_evaluator"].update(
+                pred_classes=pred_classes,
+                pred_scores=pred_scores,
+                pred_masks=pred_masks,
+                gt_segment=gt_classes,
+                gt_instance=gt_instances,
+            )
 
     def on_validation_epoch_end(self) -> None:
-        def compute_classwise_metrics(confmat):
+        def compute_classwise_metrics(confmat, class_names):
             computed_confmat = confmat.compute().cpu().numpy()
             class_ious = {}
             class_accs = {}
-            for i, class_name in enumerate(self.class_names):
+            for i, class_name in enumerate(class_names):
                 tp = computed_confmat[i, i]
                 fp = computed_confmat[:, i].sum() - tp
                 fn = computed_confmat[i, :].sum() - tp
@@ -328,61 +407,89 @@ class DenseLanguageLitModule(LitModuleBase):
 
             return class_ious, class_accs
 
-        class_ious, class_accs = compute_classwise_metrics(self.val_confmat)
-        class_ious_all, class_accs_all = compute_classwise_metrics(self.val_confmat_all)
+        for idx, metrics in enumerate(self.val_metrics):
+            class_info = self.val_class_info[idx]
+            class_names = class_info["class_names"]
+            postfix = class_info["postfix"]
 
-        miou = np.nanmean([class_ious[self.class_names[i]] for i in self.fg_class_idx])
-        macc = np.nanmean([class_accs[self.class_names[i]] for i in self.fg_class_idx])
-        miou_all = np.nanmean([class_ious_all[c] for c in self.class_names])
-        macc_all = np.nanmean([class_accs_all[c] for c in self.class_names])
-        self.val_miou_best.update(miou)
+            # 1. semantic segmentation
+            class_ious, class_accs = compute_classwise_metrics(metrics["confmat"], class_names)
+            class_ious_all, class_accs_all = compute_classwise_metrics(
+                metrics["confmat_all"], class_names
+            )
 
-        log_metrics = {f"val/iou_{k}": v for k, v in class_ious_all.items()}
-        log_metrics.update(
-            {
-                "val/best_miou": self.val_miou_best.compute(),
-                "val/miou": miou,
-                "val/macc": macc,
-                "val/miou_all": miou_all,
-                "val/macc_all": macc_all,
-            }
-        )
+            miou = np.nanmean([class_ious[class_names[i]] for i in class_info["fg_class_idx"]])
+            macc = np.nanmean([class_accs[class_names[i]] for i in class_info["fg_class_idx"]])
+            miou_all = np.nanmean([class_ious_all[c] for c in class_names])
+            macc_all = np.nanmean([class_accs_all[c] for c in class_names])
+            metrics["miou_all_best"].update(miou_all)
 
-        if (
-            hasattr(self, "base_class_idx")
-            and self.base_class_idx is not None
-            and len(self.base_class_idx) > 0
-        ):
-            base_class_idx = self.base_class_idx
-            novel_class_idx = self.novel_class_idx
-            miou_base = np.nanmean([class_ious[self.class_names[i]] for i in base_class_idx])
-            miou_novel = np.nanmean([class_ious[self.class_names[i]] for i in novel_class_idx])
-            hiou = 2 * miou_base * miou_novel / (miou_base + miou_novel + 1e-8)
+            val_section = f"val_{postfix}"
+            log_metrics = {f"{val_section}/iou_{k}": v for k, v in class_ious_all.items()}
             log_metrics.update(
                 {
-                    "val/miou_base": miou_base,
-                    "val/miou_novel": miou_novel,
-                    "val/hiou": hiou,
+                    f"{val_section}/best_miou_all": metrics["miou_all_best"].compute(),
+                    f"{val_section}/miou": miou,
+                    f"{val_section}/macc": macc,
+                    f"{val_section}/miou_all": miou_all,
+                    f"{val_section}/macc_all": macc_all,
                 }
             )
 
-        if self.eval_clip_text_alignment:
-            log_metrics.update({"val/clip_text_score": self.val_clip_text_score.compute()})
-        if self.eval_clip_image_alignment:
-            log_metrics.update(
-                {
-                    "val/clip_image_score": self.val_clip_image_score.compute(),
-                }
-            )
+            if (
+                hasattr(class_info, "base_class_idx")
+                and class_info["base_class_idx"] is not None
+                and len(class_info["base_class_idx"]) > 0
+            ):
+                base_class_idx = class_info["base_class_idx"]
+                novel_class_idx = class_info["novel_class_idx"]
+                miou_base = np.nanmean([class_ious[class_names[i]] for i in base_class_idx])
+                miou_novel = np.nanmean([class_ious[class_names[i]] for i in novel_class_idx])
+                hiou = 2 * miou_base * miou_novel / (miou_base + miou_novel + 1e-8)
+                log_metrics.update(
+                    {
+                        f"{val_section}/miou_base": miou_base,
+                        f"{val_section}/miou_novel": miou_novel,
+                        f"{val_section}/hiou": hiou,
+                    }
+                )
 
-        # log metrics only if not sanity checking
-        if not self.trainer.sanity_checking:
-            self.log_dict(log_metrics, sync_dist=True, logger=True)
+            # 2. instance segmentation (optional)
+            if "mAP_evaluator" in metrics:
+                instance_metrics = metrics["mAP_evaluator"].compute()
+                classwise_aps = {}
+                for class_name, classwise_metrics in instance_metrics["classes"].items():
+                    for metric_name, metric_value in classwise_metrics.items():
+                        classwise_aps[f"{val_section}/{metric_name}_{class_name}"] = metric_value
+                log_metrics.update(classwise_aps)
+                instance_metrics.pop("classes")
+                log_metrics.update({f"{val_section}/{k}": v for k, v in instance_metrics.items()})
 
-        self.val_confmat.reset()
-        self.val_confmat_all.reset()
-        self.val_clip_text_score.reset()
-        self.val_clip_image_score.reset()
+            # 3. CLIP alignment (optional)
+            if self.eval_clip_text_alignment:
+                log_metrics.update(
+                    {f"{val_section}/clip_text_score": metrics["clip_text_score"].compute()}
+                )
+            if self.eval_clip_image_alignment:
+                log_metrics.update(
+                    {
+                        f"{val_section}/clip_image_score": metrics["clip_image_score"].compute(),
+                    }
+                )
+
+            # log metrics only if not sanity checking
+            if not self.trainer.sanity_checking:
+                self.log_dict(log_metrics, sync_dist=True, logger=True)
+
+            metrics["confmat"].reset()
+            metrics["confmat_all"].reset()
+            metrics["clip_text_score"].reset()
+            metrics["clip_image_score"].reset()
+            if "mAP_evaluator" in metrics:
+                metrics["mAP_evaluator"].reset()
+
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        self.validation_step(batch, batch_idx, dataloader_idx)
 
     def children(self):
         for name, module in self.named_children():

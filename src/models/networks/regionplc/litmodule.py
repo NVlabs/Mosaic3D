@@ -17,8 +17,4 @@ class RegionPLCLitModule(DenseLanguageLitModule):
         # Check if binary scores are present
         if hasattr(output, "binary_scores"):
             out_dict["binary_scores"] = output.binary_scores
-
-        if not self.training:
-            logits = self.clip_alignment_loss.predict(clip_feat, return_logit=True)
-            out_dict["logits"] = logits
         return out_dict

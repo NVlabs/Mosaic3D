@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Literal
 
 import fire
 import numpy as np
@@ -51,6 +51,7 @@ class ScanNetDataset(DatasetBase):
         clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
         mask_dir: Optional[str] = None,
+        log_postfix: Optional[str] = None,
     ):
         super().__init__(
             dataset_name="scannetv2",
@@ -67,12 +68,13 @@ class ScanNetDataset(DatasetBase):
             ignore_class_idx=ignore_class_idx,
             ignore_label=ignore_label,
             repeat=repeat,
+            log_postfix=log_postfix,
+            mask_dir=mask_dir,
         )
 
         self.image_root_path = image_root_path
         self.clip_text_alignment = clip_text_alignment
         self.clip_image_alignment = clip_image_alignment
-        self.mask_dir = mask_dir
 
         # load clip preprocessing/tokenizer
         self.tokenize_text = clip.tokenize
@@ -303,6 +305,7 @@ class ScanNet200Dataset(ScanNetDataset):
         ignore_label: int = -100,
         repeat: int = 1,
         mask_dir: Optional[str] = None,
+        log_postfix: Optional[str] = None,
     ):
         super().__init__(
             data_dir=data_dir,
@@ -319,6 +322,7 @@ class ScanNet200Dataset(ScanNetDataset):
             ignore_label=ignore_label,
             repeat=repeat,
             mask_dir=mask_dir,
+            log_postfix=log_postfix,
         )
 
     def build_subset_mapper(self):
@@ -467,11 +471,16 @@ def check_scannet_data(
 
 def generate_oracle_masks(
     data_dir: str = "/datasets/scannet_hf",
-    output_dir: str = "/datasets/scannet_masks/oracle",
+    output_dir: str = "/datasets/scannet_masks",
+    type: Literal["scannet20", "scannet200"] = "scannet200",
 ):
     data_dir = Path(data_dir)
-    output_dir = Path(output_dir)
+    output_dir = Path(output_dir) / f"oracle_{type}"
     output_dir.mkdir(parents=True, exist_ok=True)
+    if type == "scannet200":
+        ignore_idx = [0, 2]  # wall, floor
+    else:
+        ignore_idx = [0, 1, 19]  # wall, floor, otherfurniture
 
     # Read scene names for all splits
     splits = ["train", "val"]
@@ -484,13 +493,33 @@ def generate_oracle_masks(
     for split, scene_name in tqdm(scene_names):
         scene_dir = data_dir / split / scene_name
         instance = np.load(scene_dir / "instance.npy")
+        segment = (
+            np.load(scene_dir / "segment200.npy")
+            if type == "scannet200"
+            else np.load(scene_dir / "segment20.npy")
+        )
         num_points = len(instance)
-        num_instances = instance.max() + 1
 
-        # convert instance to binary mask
+        # Filter out invalid instance ids
+        valid_mask = instance != -1
+        valid_instance = instance[valid_mask]
+        valid_segment = segment[valid_mask]
+
+        # Get unique instances
+        unique_instances, unique_idx = np.unique(valid_instance, return_index=True)
+        unique_segment = valid_segment[unique_idx]
+
+        # Filter out ignored classes
+        valid_mask = ~np.isin(unique_segment, ignore_idx)
+        valid_unique_segment = unique_segment[valid_mask]
+        valid_unique_instances = unique_instances[valid_mask]
+
+        num_instances = len(valid_unique_segment)
+        # Convert instance to binary mask
         masks_binary = np.zeros((num_instances, num_points), dtype=bool)
-        for i in range(num_instances):
-            masks_binary[i, instance == i] = True
+        for i, inst_id in enumerate(valid_unique_instances):
+            mask = instance == inst_id
+            masks_binary[i, mask] = True
 
         scores = np.ones(num_instances)
 
@@ -499,4 +528,4 @@ def generate_oracle_masks(
 
 if __name__ == "__main__":
     fire.Fire(check_scannet_data)
-    # generate_oracle_masks()
+    # fire.Fire(generate_oracle_masks)

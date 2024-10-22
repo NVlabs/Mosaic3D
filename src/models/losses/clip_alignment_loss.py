@@ -101,6 +101,48 @@ class CLIPAlignmentLoss(LossBase):
         return logit.argmax(dim=1)
 
 
+class CLIPAlignmentEval(nn.Module):
+    def __init__(self, normalize_input: bool, text_clip_path: Optional[str] = None):
+        super().__init__()
+        self.normalize_input = normalize_input
+
+        # load pre-computed text embeddings (e.g. CLIP text embedding with shape NxC)
+        self.emb_target = None
+        if text_clip_path is not None and Path(text_clip_path).exists():
+            text_embeddings = torch.load(text_clip_path, map_location="cpu").detach()
+            text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
+            log.info(f"=> loaded text embeddings from {text_clip_path}")
+            self.set_target_embedding(text_embeddings)
+        else:
+            log.warn(f"Text embedding file not found: {text_clip_path}")
+
+    def set_target_embedding(self, text_embeddings: torch.Tensor):
+        self.emb_target = text_embeddings.float()
+
+    def forward(self, x: Tensor | PointCollection) -> Tensor:
+        if isinstance(x, PointCollection):
+            x = x.feature_tensor
+        if self.normalize_input:
+            return F.normalize(x, p=2, dim=1)
+        return x
+
+    def loss(self, *args, **kwargs):
+        raise NotImplementedError(
+            "CLIPAlignmentEval is for evaluation only, not for computing loss."
+        )
+
+    def predict(self, x: Float[Tensor, "N C"], return_logit: bool = False):  # noqa: F821, F722
+        assert self.emb_target is not None, "Text embedding is not loaded"
+
+        pred = self.forward(x)
+        logit = torch.matmul(pred, self.emb_target.t())
+
+        if return_logit:
+            return logit
+
+        return logit.argmax(dim=1)
+
+
 def compute_clip_image_alignment(
     clip_encoder,
     clip_processed_image: torch.Tensor,

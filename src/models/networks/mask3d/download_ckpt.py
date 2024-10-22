@@ -1,8 +1,8 @@
 import os
-import gdown
 
 ID_CKPTS = {
-    "mask3d.ckpt": "1emtZ9xCiCuXtkcGO3iIzIRzcmZAFfI_B",  # mask3d trained on ScanNet200 train set (scannet200_val.ckpt)
+    "mask3d-scannet200_val.ckpt": "https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet200/scannet200_val.ckpt",
+    "mask3d-scannet20_val.ckpt": "https://omnomnom.vision.rwth-aachen.de/data/mask3d/checkpoints/scannet/scannet_val.ckpt",
 }
 
 
@@ -14,11 +14,8 @@ def download_ckpt():
         if os.path.exists(f"ckpts/{name}"):
             print(f"ckpt {name} already exists")
             continue
-        gdown.download(
-            f"https://drive.google.com/uc?id={id_ckpt}",
-            f"ckpts/{name}",
-            quiet=False,
-        )
+
+        os.system(f"wget {id_ckpt} -O ckpts/{name}")
 
 
 if __name__ == "__main__":

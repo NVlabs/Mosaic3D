@@ -12,8 +12,4 @@ class OpenSceneLitModule(DenseLanguageLitModule):
         output: dict = output
         clip_feat = output["clip_feat"]
         out_dict = dict(clip_feat=clip_feat)
-
-        if not self.training:
-            logits = self.clip_alignment_loss.predict(clip_feat, return_logit=True)
-            out_dict["logits"] = logits
         return out_dict

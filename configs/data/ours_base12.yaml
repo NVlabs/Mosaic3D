@@ -1,5 +1,5 @@
 defaults:
-  - ours_openvocab
+  - ours_base15
 
 train_dataset:
   # class labels

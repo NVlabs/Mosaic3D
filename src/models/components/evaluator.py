@@ -5,7 +5,13 @@ from typing import Dict, List
 from uuid import uuid4
 
 import numpy as np
+import torch
+import torch.distributed as dist
 from torchmetrics import Metric
+
+from src.utils import RankedLogger
+
+log = RankedLogger(__file__, rank_zero_only=True)
 
 
 class InstanceSegmentationEvaluator(Metric):
@@ -34,27 +40,48 @@ class InstanceSegmentationEvaluator(Metric):
         self.distance_conf = distance_conf
         self.subset_mapper = subset_mapper
 
-        self.add_state("scenes", default=[], dist_reduce_fx="cat")
+        self.add_state("pred_classes", default=[])
+        self.add_state("pred_scores", default=[])
+        self.add_state("pred_masks", default=[])
+        self.add_state("gt_segment", default=[])
+        self.add_state("gt_instance", default=[])
 
-    def update(self, preds: Dict, targets: Dict):
-        pred_classes = preds["pred_classes"]
-        pred_scores = preds["pred_scores"]
-        pred_masks = preds["pred_masks"]
-        segment = targets["segment"]
-        instance = targets["instance"]
-
-        gt_instances, pred_instances = self.associate_instances(
-            {"pred_classes": pred_classes, "pred_scores": pred_scores, "pred_masks": pred_masks},
-            segment,
-            instance,
-        )
-        self.scenes.append({"gt": gt_instances, "pred": pred_instances})
+    def update(
+        self,
+        pred_classes: torch.Tensor,
+        pred_scores: torch.Tensor,
+        pred_masks: torch.Tensor,
+        gt_segment: torch.Tensor,
+        gt_instance: torch.Tensor,
+    ):
+        self.pred_classes.append(pred_classes)
+        self.pred_scores.append(pred_scores)
+        self.pred_masks.append(pred_masks)
+        self.gt_segment.append(gt_segment)
+        self.gt_instance.append(gt_instance)
 
     def compute(self):
-        return self.evaluate_matches(self.scenes)
+        log.info(
+            f"Computing instance segmentation evaluation with {len(self.pred_classes)} predictions"
+        )
+        scenes = []
+        for i in range(len(self.pred_classes)):
+            gt_instances, pred_instances = self.associate_instances(
+                {
+                    "pred_classes": self.pred_classes[i].cpu().numpy(),
+                    "pred_scores": self.pred_scores[i].cpu().numpy(),
+                    "pred_masks": self.pred_masks[i].cpu().numpy(),
+                },
+                self.gt_segment[i].cpu().numpy(),
+                self.gt_instance[i].cpu().numpy(),
+            )
+            scenes.append({"gt": gt_instances, "pred": pred_instances})
+        return self.evaluate_matches(scenes)
 
-    def associate_instances(self, pred: Dict, segment: np.ndarray, instance: np.ndarray):
-        void_mask = np.in1d(segment, self.segment_ignore_index)
+    def associate_instances(
+        self, pred: Dict[str, np.ndarray], segment: np.ndarray, instance: np.ndarray
+    ):
+        void_mask = np.isin(segment, self.segment_ignore_index)
 
         assert (
             pred["pred_classes"].shape[0]
@@ -92,10 +119,10 @@ class InstanceSegmentationEvaluator(Metric):
                 "instance_id": i,
                 "segment_id": pred["pred_classes"][i],
                 "confidence": pred["pred_scores"][i],
-                "mask": np.not_equal(pred["pred_masks"][i], 0),
-                "vert_count": np.count_nonzero(np.not_equal(pred["pred_masks"][i], 0)),
+                "mask": pred["pred_masks"][i] != 0,
+                "vert_count": np.count_nonzero(pred["pred_masks"][i] != 0),
                 "void_intersection": np.count_nonzero(
-                    np.logical_and(void_mask, np.not_equal(pred["pred_masks"][i], 0))
+                    np.logical_and(void_mask, pred["pred_masks"][i] != 0)
                 ),
             }
             if pred_inst["vert_count"] < self.min_region_size:

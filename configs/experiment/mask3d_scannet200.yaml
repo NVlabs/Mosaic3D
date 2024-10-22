@@ -4,7 +4,7 @@ defaults:
 
 # override some parameters
 general:
-  checkpoint: "ckpts/mask3d.ckpt"
+  checkpoint: "ckpts/mask3d-scannet200_val.ckpt"
   project_name: mask3d_scannet200
   experiment_name: mask3d_scannet200
   num_targets: 201

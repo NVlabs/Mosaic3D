@@ -1,3 +1,6 @@
+defaults:
+  - regionplc_transforms
+
 _target_: src.data.datamodule.DataModule
 
 train_dataset:
@@ -10,43 +13,7 @@ train_dataset:
   object_sample_ratio: 0.2
   split: train
   repeat: 4
-  transforms:
-    - type: Copy
-      keys_dict:
-        coord: origin_coord
-    - type: MeanShift
-    - type: RandomFlip
-      p: 0.5
-    - type: RandomRotate
-      p: 1.0
-      angle: [-1, 1]
-      center: [0, 0, 0]
-      axis: z
-    - type: ChromaticJitter
-      p: 1.0
-      std: 0.007
-    - type: ElasticDistortion
-    - type: SphereCrop
-      point_max: 250000
-      mode: random
-    - type: NormalizeColor
-    - type: ToTensor
-    - type: Collect
-      keys:
-        [
-          "origin_coord",
-          "coord",
-          "color",
-          "segment",
-          "instance",
-          "binary",
-          "caption_data",
-          "origin_idx",
-        ]
-      offset_keys_dict:
-        offset: coord
-        pc_count: origin_coord
-      feat_keys: ["color", "coord"]
+  transforms: ${data.train_transforms}
   base_class_idx: [0, 1, 2, 3, 4, 6, 7, 8, 10, 11, 13, 14, 15, 17, 18]
   ignore_class_idx: [19]
   novel_class_idx: [5, 9, 12, 16]
@@ -55,50 +22,31 @@ train_dataset:
   clip_image_alignment: ${oc.select:model.loss_cfg.train_clip_image_alignment,false}
   clip_input_resolution: 224
 
-val_dataset:
-  _target_: src.data.scannet.dataset.ScanNetDataset
-  _partial_: true
-  data_dir: ${data.train_dataset.data_dir}
-  image_root_path: ${data.train_dataset.image_root_path}
-  caption_dir: ${data.train_dataset.caption_dir}
-  caption_subset: ${data.train_dataset.caption_subset}
-  object_sample_ratio: ${data.train_dataset.object_sample_ratio}
-  base_class_idx: ${data.train_dataset.base_class_idx}
-  ignore_class_idx: ${data.train_dataset.ignore_class_idx}
-  novel_class_idx: ${data.train_dataset.novel_class_idx}
-  ignore_label: ${data.train_dataset.ignore_label}
-  split: val
-  transforms:
-    - type: Copy
-      keys_dict:
-        coord: origin_coord
-    - type: MeanShift
-    - type: NormalizeColor
-    - type: ToTensor
-    - type: Collect
-      keys:
-        [
-          "origin_coord",
-          "coord",
-          "color",
-          "segment",
-          "instance",
-          "binary",
-          "caption_data",
-          "origin_idx",
-        ]
-      offset_keys_dict:
-        offset: coord
-        pc_count: origin_coord
-      feat_keys: ["color", "coord"]
-  clip_text_alignment: ${oc.select:model.eval_cfg.eval_clip_text_alignment,false}
-  clip_image_alignment: ${oc.select:model.eval_cfg.eval_clip_image_alignment,false}
-  clip_input_resolution: ${data.train_dataset.clip_input_resolution}
+val_datasets:
+  - _target_: src.data.scannet.dataset.ScanNetDataset
+    _partial_: true
+    data_dir: ${data.train_dataset.data_dir}
+    image_root_path: ${data.train_dataset.image_root_path}
+    caption_dir: ${data.train_dataset.caption_dir}
+    caption_subset: ${data.train_dataset.caption_subset}
+    object_sample_ratio: ${data.train_dataset.object_sample_ratio}
+    base_class_idx: ${data.train_dataset.base_class_idx}
+    ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+    novel_class_idx: ${data.train_dataset.novel_class_idx}
+    ignore_label: ${data.train_dataset.ignore_label}
+    split: val
+    log_postfix: scannet20
+    transforms: ${data.val_transforms}
+    clip_text_alignment: ${oc.select:model.eval_cfg.eval_clip_text_alignment,false}
+    clip_image_alignment: ${oc.select:model.eval_cfg.eval_clip_image_alignment,false}
+    clip_input_resolution: ${data.train_dataset.clip_input_resolution}
 
 collate_fn:
-  _target_: src.data.collate.point_collate_fn
+  _target_: src.data.collate.point_collate_fn_with_masks
   _partial_: true
   grid_size: 0.02
+
 batch_size: 4
 num_workers: 2
-in_channel: 6
+
+checkpoint_monitor: "val_scannet20/hiou"

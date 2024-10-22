@@ -16,9 +16,4 @@ log = RankedLogger(__name__, rank_zero_only=True)
 class WarpLitModule(DenseLanguageLitModule):
     @override
     def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
-        # clip_feat
-        if not self.training:
-            logits = self.clip_alignment_loss.predict(output["clip_feat"], return_logit=True)
-            output["logits"] = logits
-
         return output

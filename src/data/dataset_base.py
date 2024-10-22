@@ -30,6 +30,8 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
+        log_postfix: Optional[str] = None,
+        mask_dir: Optional[str] = None,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -42,6 +44,8 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         self.ignore_class_idx = ignore_class_idx
         self.ignore_label = ignore_label
         self.repeat = repeat
+        self.log_postfix = log_postfix
+        self.mask_dir = mask_dir
 
         # read scene names for split
         self.dataset_name = dataset_name
@@ -94,9 +98,16 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
             if c not in ("wall", "floor", "ceiling") and "other" not in c
         ]
         self.bg_class_idx = list(set(range(len(self.CLASS_LABELS))) - set(self.fg_class_idx))
+        self.instance_ignore_class_idx = [
+            i for i, c in enumerate(self.CLASS_LABELS) if c in ("wall", "floor") or "other" in c
+        ]
 
         # data transform
         transforms_cfg = OmegaConf.to_container(transforms)
+        if mask_dir is not None:
+            for transform_cfg in transforms_cfg:
+                if transform_cfg["type"] == "Collect":
+                    transform_cfg["keys"].append("masks_binary")
         self.transforms = Compose(transforms_cfg)
 
         log.info(f"Loaded {self.__len__()} samples in {self.split} set.")

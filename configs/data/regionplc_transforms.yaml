@@ -1,0 +1,63 @@
+train_transforms:
+  - type: Copy
+    keys_dict:
+      coord: origin_coord
+  - type: MeanShift
+  - type: RandomFlip
+    p: 0.5
+  - type: RandomRotate
+    p: 1.0
+    angle: [-1, 1]
+    center: [0, 0, 0]
+    axis: z
+  - type: ChromaticJitter
+    p: 1.0
+    std: 0.007
+  - type: ElasticDistortion
+  - type: SphereCrop
+    point_max: 250000
+    mode: random
+  - type: NormalizeColor
+  - type: ToTensor
+  - type: Collect
+    keys:
+      [
+        "origin_coord",
+        "coord",
+        "color",
+        "segment",
+        "instance",
+        "binary",
+        "caption_data",
+        "origin_idx",
+      ]
+    offset_keys_dict:
+      offset: coord
+      pc_count: origin_coord
+    feat_keys: ["color", "coord"]
+
+val_transforms:
+  - type: Copy
+    keys_dict:
+      coord: origin_coord
+  - type: MeanShift
+  - type: NormalizeColor
+  - type: ToTensor
+  - type: Collect
+    keys:
+      [
+        "origin_coord",
+        "coord",
+        "color",
+        "segment",
+        "instance",
+        "binary",
+        "caption_data",
+        "origin_idx",
+      ]
+    offset_keys_dict:
+      offset: coord
+      pc_count: origin_coord
+    feat_keys: ["color", "coord"]
+
+in_channel: 6

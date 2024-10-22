@@ -99,16 +99,16 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
 
 def point_collate_fn_with_masks(batch, grid_size, mix_prob=0, drop_feat: bool = False):
     assert isinstance(batch[0], Mapping)
-    assert "masks_binary" in batch[0].keys()
 
-    batch_masks_binary = [sample["masks_binary"] for sample in batch]
-
-    # remove masks_binary from batch
-    for sample in batch:
-        sample.pop("masks_binary")
+    batch_masks_binary = [
+        sample.pop("masks_binary") for sample in batch if "masks_binary" in sample
+    ]
 
     batch = point_collate_fn(batch, grid_size, mix_prob, drop_feat)
-    batch["masks_binary"] = batch_masks_binary
+
+    if batch_masks_binary:
+        batch["masks_binary"] = batch_masks_binary
+
     return batch
 
 
