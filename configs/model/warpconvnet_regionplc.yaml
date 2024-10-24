@@ -47,7 +47,7 @@ net:
 
 loss_cfg:
   caption_loss:
-    loss_reduction: weighted_sum
+    reduction: weighted_sum
     use_logit_scale: true
   seg_loss:
     eval_only: true # no seg loss training if set to true

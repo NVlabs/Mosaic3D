@@ -58,7 +58,7 @@ net:
 
 loss_cfg:
   caption_loss:
-    loss_reduction: weighted_sum
+    reduction: weighted_sum
   seg_loss:
     eval_only: true # no seg loss training if set to true
     normalize_input: false

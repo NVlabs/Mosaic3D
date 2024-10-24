@@ -1,13 +1,74 @@
 import random
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+from jaxtyping import Bool, Float, Int
+from torch import Tensor
 from torch.utils.data.dataloader import default_collate
 
 from src.models.components.misc import offset2batch
+
+
+def convert_list_list_tensor_to_tensor(
+    batched_list_of_point_indices: List[List[Int[Tensor, "N"]]],  # noqa: F722, F821
+    batch_offsets: Optional[Int[Tensor, "B + 1"]] = None,  # noqa: F722, F821
+    valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F722, F821
+) -> Tuple[Int[Tensor, "L"], Int[Tensor, "M + 1"], Int[Tensor, "M"]]:  # noqa: F722, F821
+    """Convert List[List[Tensor]] to concatenated indices, offsets, and counts."""
+    # Get the counts of inner lists
+    num_points_per_cap = [
+        len(tensor) for sublist in batched_list_of_point_indices for tensor in sublist
+    ]
+
+    # Concatenate inner lists first and generate offsets for the inner lists
+    batched_flat_point_indices = [
+        torch.cat(sublist, dim=0) for sublist in batched_list_of_point_indices
+    ]
+
+    # Add batch offset if provided
+    if batch_offsets is not None:
+        if isinstance(batch_offsets, torch.Tensor):
+            batch_offsets = batch_offsets.tolist()
+        batched_flat_point_indices = [
+            l + batch_offsets[i] for i, l in enumerate(batched_flat_point_indices)
+        ]
+    else:
+        assert (
+            len(batched_flat_point_indices) == 1
+        ), "batch_offset must be provided if len(list_tensor) > 1"
+
+    # Concatenate all lists and generate offsets for the outer lists
+    point_indices = torch.cat(batched_flat_point_indices, 0)
+    offsets = np.cumsum(num_points_per_cap)
+    offsets = torch.tensor([0] + offsets.tolist())
+    counts = torch.tensor(num_points_per_cap).to(point_indices.device)
+
+    # Apply valid mask
+    if valid_mask is not None:
+        valid_point_indices = valid_mask[point_indices]
+        point_indices = point_indices[valid_point_indices]
+
+        # Use cumsum to efficiently compute valid counts
+        cumulative_valid = torch.cumsum(valid_point_indices, dim=0)
+
+        # Compute new offsets directly from cumulative_valid
+        new_offsets = torch.zeros_like(offsets)
+        new_offsets[1:] = cumulative_valid[offsets[1:] - 1]
+
+        # Compute valid counts
+        valid_counts = new_offsets[1:] - new_offsets[:-1]
+
+        offsets = new_offsets
+        counts = valid_counts
+
+        # Convert point_indices to compacted indices
+        compacted_indices = torch.cumsum(valid_mask, dim=0)
+        point_indices = compacted_indices[point_indices] - 1
+
+    return point_indices, offsets, counts
 
 
 def collate_fn(batch):
@@ -57,20 +118,19 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
                 [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
             )
 
-    """
-    Convert
-        per-batch point_indices
-            (
-                e.g.,
-                batch0: [0, 3, 4, ..., 10], num_pts=22
-                batch1: [1, 3, 9, ... 21], num_pts=33
-            )
-        into multibatch point_indices.
-            (
-                e.g.,
-                [0, 3, 4, ..., 10, 1+22, 3+22, 9+22, ... 21+22]
-            )
-    """
+    if "caption_data" in batch.keys():
+        (
+            point_indices,
+            caption_offsets,
+            num_points_per_caption,
+        ) = convert_list_list_tensor_to_tensor(
+            batched_list_of_point_indices=batch["caption_data"]["idx"],
+            batch_offsets=batch["offset"],
+        )
+        batch["caption_data"]["point_indices"] = point_indices
+        batch["caption_data"]["caption_offsets"] = caption_offsets
+        batch["caption_data"]["num_points_per_caption"] = num_points_per_caption
+
     if "clip_point_indices" in batch.keys():
         batch_size = len(batch["clip_point_offset"]) - 1
         for idx_batch in range(1, batch_size):  # exclude idx_batch==0

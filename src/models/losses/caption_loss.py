@@ -2,223 +2,142 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from torch.nn import functional as F
-from torch_scatter import segment_csr, scatter
+from torch_scatter import scatter, segment_csr
 
+import src.utils.dist_utils as dist_utils
 from src.models.losses.loss_base import LossBase
+from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 
 
-# TODO(cchoy): move this to data preprocessing
-# Convert List[List[Tensor]] to concatenated Tensor, and offsets
-def convert_list_list_tensor_to_tensor(
-    batched_list_of_point_indices: List[List[Int[Tensor, "N"]]],  # noqa: F722, F821
-    batch_offsets: Optional[Int[Tensor, "B + 1"]] = None,  # noqa: F722, F821
-    valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F722, F821
-) -> Tuple[Int[Tensor, "L"], Int[Tensor, "M + 1"], Int[Tensor, "M"]]:  # noqa: F722, F821
-    """Convert List[List[Tensor]] to concatenated indices, offsets, and counts."""
-    # Get the counts of inner lists
-    num_points_per_cap = [
-        len(tensor) for sublist in batched_list_of_point_indices for tensor in sublist
-    ]
-
-    # Concatenate inner lists first and generate offsets for the inner lists
-    batched_flat_point_indices = [
-        torch.cat(sublist, dim=0) for sublist in batched_list_of_point_indices
-    ]
-
-    # Add batch offset if provided
-    if batch_offsets is not None:
-        if isinstance(batch_offsets, torch.Tensor):
-            batch_offsets = batch_offsets.tolist()
-        batched_flat_point_indices = [
-            l + batch_offsets[i] for i, l in enumerate(batched_flat_point_indices)
-        ]
-    else:
-        assert (
-            len(batched_flat_point_indices) == 1
-        ), "batch_offset must be provided if len(list_tensor) > 1"
-
-    # Concatenate all lists and generate offsets for the outer lists
-    point_indices = torch.cat(batched_flat_point_indices, 0)
-    offsets = np.cumsum(num_points_per_cap)
-    offsets = torch.tensor([0] + offsets.tolist())
-    counts = torch.tensor(num_points_per_cap)
-
-    # Apply valid mask
-    if valid_mask is not None:
-        valid_point_indices = valid_mask[point_indices]
-        point_indices = point_indices[valid_point_indices]
-
-        # Use cumsum to efficiently compute valid counts
-        cumulative_valid = torch.cumsum(valid_point_indices, dim=0)
-
-        # Compute new offsets directly from cumulative_valid
-        new_offsets = torch.zeros_like(offsets)
-        new_offsets[1:] = cumulative_valid[offsets[1:] - 1]
-
-        # Compute valid counts
-        valid_counts = new_offsets[1:] - new_offsets[:-1]
-
-        offsets = new_offsets
-        counts = valid_counts
-
-        # Convert point_indices to compacted indices
-        compacted_indices = torch.cumsum(valid_mask, dim=0)
-        point_indices = compacted_indices[point_indices] - 1
-
-    return point_indices, offsets, counts
-
-
-class CaptionAlignmentLoss(LossBase):
-    def __init__(
-        self,
-        loss_reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
-        normalize_input: bool = True,
-        **kwargs,
-    ):
+class CaptionLossBase(LossBase):
+    def __init__(self, **kwargs):
         super().__init__()
-        self.loss_reduction = loss_reduction
-        self.normalize_input = normalize_input
+        self.kwargs = kwargs
 
     def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
         return pred_feats, batch_dict
 
+    def extract_text_features(self, captions: List[str], clip_encoder: nn.Module):
+        # extract text features
+        with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
+            text_features, labels_per_segment, labels_per_caption = get_unique_caption_batch(
+                captions, clip_encoder
+            )
+        text_features = (
+            text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
+        )
+        return text_features, labels_per_segment, labels_per_caption
+
+
+class CaptionAlignmentLoss(CaptionLossBase):
+    def __init__(
+        self,
+        normalize: bool = True,
+        reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
+        **kwargs,
+    ):
+        super().__init__()
+        self.normalize = normalize
+        self.reduction = reduction
+
     def loss(
         self,
-        pred_feats: Float[Tensor, "M 512"],  # noqa: F821, F722
-        caption_embeddings: List[Float[Tensor, "N 512"]],  # noqa: F821, F722
-        batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821, F722
-        input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821, F722
-        valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F821
+        point_features: Float[Tensor, "M D"],  # noqa: F722
+        captions: List[List[str]],
+        point_indices: Int[Tensor, "L"],  # noqa: F821
+        caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
+        num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
+        clip_encoder: nn.Module,
     ) -> Tensor:
-        """Compute the caption loss.
+        # extract text features
+        text_features, *_ = self.extract_text_features(captions, clip_encoder)
 
-        Args:
-            x: The input tensor
-            caption_embeddings: Batched caption embeddings. e.g. [all_caption_embeddings_for_batch0, all_caption_embeddings_for_batch1, ...]
-            batched_list_of_point_indices: The list of point indices. e.g. [[point_indices_for_batch0_obj0, point_indices_for_batch0_obj1, ...], [point_indices_for_batch1_obj0, point_indices_for_batch1_obj1, ...], ...]
-            input_batch_offsets: The batch offsets for the input tensor. e.g. [0, num_points_in_batch0, num_points_in_batch0 + num_points_in_batch1, ...]
-            valid_mask: The valid mask for the input tensor, generated by voxel_downsample_mapping.
-        """
-
-        # assert the number of captions is the same as the number of caption indices
-        assert all(
-            [
-                len(caption) == len(idx)
-                for caption, idx in zip(caption_embeddings, batched_list_of_point_indices)
-            ]
-        )
-        batch_size = len(batched_list_of_point_indices)
-        assert len(caption_embeddings) == batch_size
-        assert len(input_batch_offsets) == batch_size + 1
-
-        # Convert data to CSR format
-        corr_idx, offsets, counts = convert_list_list_tensor_to_tensor(
-            batched_list_of_point_indices,
-            batch_offsets=input_batch_offsets,
-            valid_mask=valid_mask,
-        )
-
-        # Reduce features
-        if self.normalize_input:
-            pred_feats = nn.functional.normalize(pred_feats, dim=-1)
-        rep_pred_feats = pred_feats[corr_idx]
-        reduced_pred_feats = segment_csr(
-            rep_pred_feats,
-            offsets.to(rep_pred_feats.device),
+        if self.normalize:
+            point_features = nn.functional.normalize(point_features, dim=-1)
+        rep_point_features = point_features[point_indices]
+        segment_features = segment_csr(
+            rep_point_features,
+            caption_offsets.to(rep_point_features.device),
             reduce="sum",
         )
 
-        reduced_pred_feats = nn.functional.normalize(reduced_pred_feats, dim=-1)
-        flat_caption_embeddings = torch.cat(caption_embeddings, 0)
+        segment_features = nn.functional.normalize(segment_features, dim=-1)
+        text_features = torch.cat(text_features, 0)
 
         # Compute the cosine similarity
-        loss = 1 - torch.einsum("ij,ij->i", reduced_pred_feats, flat_caption_embeddings)
-        counts = counts.to(loss.device)
-        if self.loss_reduction == "mean":
+        loss = 1 - torch.einsum("ij,ij->i", segment_features, text_features)
+        num_points_per_caption = num_points_per_caption.to(loss.device)
+        if self.reduction == "mean":
             loss = loss.mean()
-        elif self.loss_reduction == "weighted_sum":
-            loss = (loss * counts).sum() / counts.sum()
+        elif self.reduction == "weighted_sum":
+            loss = (loss * num_points_per_caption).sum() / num_points_per_caption.sum()
         return loss
 
 
-class DenseCaptionAlignmentLoss(LossBase):
+class DenseCaptionAlignmentLoss(CaptionLossBase):
     def __init__(
         self,
-        normalize_input: bool = True,
+        normalize: bool = True,
+        is_entity: bool = False,
+        interpolate: bool = False,
         **kwargs,
     ):
         super().__init__()
-        self.normalize_input = normalize_input
+        self.normalize = normalize
+        self.is_entity = is_entity
+        self.interpolate = interpolate
 
-    def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
-        return pred_feats, batch_dict
+    def extract_text_features(self, captions: List[str], clip_encoder):
+        with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
+            text_features = get_caption_batch(
+                captions, clip_encoder, is_entity=self.is_entity, interpolate=self.interpolate
+            )
+        text_features = (
+            text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
+        )
+        return text_features
 
     def loss(
         self,
-        pred_feats: Float[Tensor, "M 512"],  # noqa: F821, F722
-        caption_embeddings: List[Float[Tensor, "N 512"]],  # noqa: F821, F722
-        batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821, F722
-        input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821, F722
-        valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F821
+        point_features: Float[Tensor, "M D"],  # noqa: F722
+        captions: List[List[str]],
+        point_indices: Int[Tensor, "L"],  # noqa: F821
+        caption_offests: Int[Tensor, "B + 1"],  # noqa: F821
+        num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
+        clip_encoder: nn.Module,
     ) -> Tensor:
-        """Compute the caption loss.
+        device, dtype = point_features.device, point_features.dtype
 
-        Args:
-            x: The input tensor
-            caption_embeddings: Batched caption embeddings. e.g. [all_caption_embeddings_for_batch0, all_caption_embeddings_for_batch1, ...]
-            batched_list_of_point_indices: The list of point indices. e.g. [[point_indices_for_batch0_obj0, point_indices_for_batch0_obj1, ...], [point_indices_for_batch1_obj0, point_indices_for_batch1_obj1, ...], ...]
-            input_batch_offsets: The batch offsets for the input tensor. e.g. [0, num_points_in_batch0, num_points_in_batch0 + num_points_in_batch1, ...]
-            valid_mask: The valid mask for the input tensor, generated by voxel_downsample_mapping.
-        """
-
-        # assert the number of captions is the same as the number of caption indices
-        assert all(
-            [
-                len(caption) == len(idx)
-                for caption, idx in zip(caption_embeddings, batched_list_of_point_indices)
-            ]
-        )
-        batch_size = len(batched_list_of_point_indices)
-        assert len(caption_embeddings) == batch_size
-        assert len(input_batch_offsets) == batch_size + 1
-        dtype = pred_feats.dtype
-        device = pred_feats.device
-
-        # Convert data to CSR format
-        corr_idx, _, counts = convert_list_list_tensor_to_tensor(
-            batched_list_of_point_indices,
-            batch_offsets=input_batch_offsets,
-            valid_mask=valid_mask,
-        )
-        corr_idx = corr_idx.long()
+        text_features = self.extract_text_features(captions, clip_encoder)
 
         # Scatter and reduce caption embeddings
-        flat_caption_embeddings = torch.cat(caption_embeddings, dim=0).to(
-            dtype=dtype, device=device
+        flat_caption_embeddings = torch.cat(text_features, dim=0).to(dtype=dtype, device=device)
+        caption_indices = torch.arange(len(flat_caption_embeddings)).repeat_interleave(
+            num_points_per_caption
         )
-        caption_indices = torch.arange(len(flat_caption_embeddings)).repeat_interleave(counts)
         rep_caption_embeddings = flat_caption_embeddings[caption_indices]
 
-        scattered_caption_embeddings = torch.zeros_like(pred_feats)
+        scattered_caption_embeddings = torch.zeros_like(point_features)
         scattered_caption_embeddings = scatter(
             rep_caption_embeddings,
-            corr_idx,
+            point_indices,
             dim=0,
             out=scattered_caption_embeddings,
             reduce="mean",
         )
 
         # Find which indices are not in corr_idx from 0 to len(pred_feats)
-        mask = torch.zeros(len(pred_feats), dtype=torch.bool, device=device)
-        mask[corr_idx.unique()] = True
+        mask = torch.zeros(len(point_features), dtype=torch.bool, device=device)
+        mask[point_indices.unique()] = True
 
         # Use this mask to index into pred_feats and scattered_caption_embeddings
-        pred_feats_masked = pred_feats[mask]
-        if self.normalize_input:
+        pred_feats_masked = point_features[mask]
+        if self.normalize:
             pred_feats_masked = nn.functional.normalize(pred_feats_masked, dim=-1)
         scattered_caption_embeddings_masked = scattered_caption_embeddings[mask]
 
@@ -228,85 +147,326 @@ class DenseCaptionAlignmentLoss(LossBase):
         return loss.mean()
 
 
-class CaptionLoss(LossBase):
+class CaptionLoss(CaptionLossBase):
     def __init__(
         self,
-        normalize_input: bool = True,
-        ignore_index: int = -100,
+        normalize: bool = True,
         use_logit_scale: Optional[bool] = False,
-        loss_reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
+        reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
         **kwargs,
     ):
         super().__init__()
-        self.normalize_input = normalize_input
-        self.loss_func = nn.NLLLoss(ignore_index=ignore_index, reduction="none")
-        assert loss_reduction in ["mean", "weighted_sum"]
-        self.loss_reduction = loss_reduction
+        self.normalize = normalize
+        self.loss_func = nn.NLLLoss(reduction="none")
+        assert reduction in ["mean", "weighted_sum"]
+        self.reduction = reduction
         self.use_logit_scale = use_logit_scale
         if use_logit_scale:
             self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07), requires_grad=True)
 
         self.kwargs = kwargs
 
-    def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
-        return pred_feats, batch_dict
+    def loss(
+        self,
+        point_features: Float[Tensor, "M 512"],  # noqa: F722
+        captions: List[List[str]],
+        point_indices: Int[Tensor, "L"],  # noqa: F821
+        caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
+        num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
+        clip_encoder: nn.Module,
+        **kwargs,
+    ) -> Tensor:
+        device = point_features.device
+
+        # extract text features
+        text_features, labels_per_segment, labels_per_caption = self.extract_text_features(
+            captions, clip_encoder
+        )
+
+        # normalize point features
+        if self.normalize:
+            point_features = nn.functional.normalize(point_features, dim=-1)
+
+        # Logit
+        logits = point_features @ text_features.T.to(device)
+        if self.use_logit_scale:
+            logits = self.logit_scale.exp() * logits
+        scores = F.log_softmax(logits, dim=-1)
+
+        rep_scores = scores[point_indices]
+        reduced_scores = segment_csr(rep_scores, caption_offsets.to(device), reduce="mean")
+
+        # Compute the loss
+        loss = self.loss_func(reduced_scores, labels_per_segment.to(device))
+
+        # Compute the cosine similarity
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "weighted_sum":
+            num_points_per_caption = num_points_per_caption.to(loss.device)
+            return (loss * num_points_per_caption).sum() / (num_points_per_caption.sum())
+        else:
+            raise ValueError(f"Unknown reduce type: {self.reduce}")
+
+
+class CaptionCLIPLoss(CaptionLossBase):
+    def __init__(
+        self,
+        normalize: bool = True,
+        reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
+        init_logit_scale: Optional[float] = 1 / 0.07,
+        all_gather: bool = True,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.normalize = normalize
+        self.reduction = reduction
+        assert reduction in ["mean", "weighted_sum"]
+        self.all_gather = all_gather
+
+        if init_logit_scale is not None:
+            self.logit_scale = nn.Parameter(
+                torch.ones([]) * np.log(init_logit_scale), requires_grad=True
+            )
+        else:
+            self.logit_scale = torch.ones([]) * np.log(init_logit_scale)
 
     def loss(
         self,
-        pred_feats: Float[Tensor, "M 512"],  # noqa: F722
-        unique_caption_embeds: Float[Tensor, "N 512"],  # noqa: F722
-        caption_targets: Int[Tensor, "M"],  # noqa: F821
-        batched_list_of_point_indices: List[Int[Tensor, "N"]],  # noqa: F821
-        input_batch_offsets: Int[Tensor, "B + 1"],  # noqa: F821
-        valid_mask: Optional[Bool[Tensor, "L"]] = None,  # noqa: F821
+        point_features: Float[Tensor, "M 512"],  # noqa: F722
+        captions: List[List[str]],
+        point_indices: Int[Tensor, "L"],  # noqa: F821
+        caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
+        clip_encoder: nn.Module,
+        **kwargs,
     ) -> Tensor:
-        """Compute the caption loss.
+        device = point_features.device
+        world_size = dist.get_world_size() if dist.is_initialized() else 1
 
-        Args:
-            x: The input tensor
-            unique_caption_embeds: The unique caption embeddings among all batches.
-            caption_targets: The caption targets, the unique indices of the caption embeddings.
-            batched_list_of_point_indices: The list of point indices. e.g. [[point_indices_for_batch0_obj0, point_indices_for_batch0_obj1, ...], [point_indices_for_batch1_obj0, point_indices_for_batch1_obj1, ...], ...]
-            input_batch_offsets: The batch offsets for the input tensor. e.g. [0, num_points_in_batch0, num_points_in_batch0 + num_points_in_batch1, ...]
-            valid_mask: The valid mask for the input tensor, generated by voxel_downsample_mapping.
-        """
-        batch_size = len(batched_list_of_point_indices)
-        assert len(input_batch_offsets) == batch_size + 1
-        # assert len(unique_caption_embeds) == len(np.unique(caption_targets))
-
-        # Convert data to CSR format
-        corr_idx, offsets, counts = convert_list_list_tensor_to_tensor(
-            batched_list_of_point_indices,
-            batch_offsets=input_batch_offsets,
-            valid_mask=valid_mask,
+        # extract text features
+        text_features, labels_per_segment, labels_per_caption = self.extract_text_features(
+            captions, clip_encoder
         )
 
-        # Reduce features
-        if self.normalize_input:
-            pred_feats = nn.functional.normalize(pred_feats, dim=-1)
+        if world_size > 1 and self.all_gather:
+            all_captions = [None for _ in range(world_size)]
+            dist.all_gather_object(all_captions, captions)
+            all_captions: List[List[str]] = [item for sublist in all_captions for item in sublist]
+            (
+                all_text_features,
+                all_labels_per_segment,
+                all_labels_per_caption,
+            ) = self.extract_text_features(all_captions, clip_encoder)
 
-        # Logit
-        device = pred_feats.device
-        caption_logits = pred_feats @ unique_caption_embeds.T.to(device)
-        if self.use_logit_scale:
-            caption_logits = self.logit_scale.exp() * caption_logits
-        caption_scores = F.log_softmax(caption_logits, dim=-1)
-
-        rep_caption_scores = caption_scores[corr_idx]
-        reduced_caption_scores = segment_csr(
-            rep_caption_scores,
-            offsets.to(device),
-            reduce="mean",
+        # aggregate point features
+        rep_point_features = point_features[point_indices]
+        segment_features = segment_csr(
+            rep_point_features, caption_offsets.to(device), reduce="mean"
         )
+        if self.normalize:
+            segment_features = nn.functional.normalize(segment_features, dim=-1)
 
-        # Compute the loss
-        loss = self.loss_func(reduced_caption_scores, caption_targets.to(caption_scores.device))
+        if world_size > 1 and self.all_gather:
+            all_segment_features = dist_utils.all_gather_different_shapes(segment_features)
+            all_segment_features[dist.get_rank()] = segment_features  # this is for gradient
+            all_segment_features = torch.cat(all_segment_features, 0)
 
-        # Compute the cosine similarity
-        if self.loss_reduction == "mean":
-            return loss.mean()
-        elif self.loss_reduction == "weighted_sum":
-            counts = counts.to(loss.device)
-            return (loss * counts).sum() / (counts.sum())
+        # logits
+        if world_size > 1 and self.all_gather:
+            logits_per_segment = self.logit_scale.exp() * (
+                all_segment_features @ all_text_features.T
+            )
+            logits_per_caption = logits_per_segment.T
         else:
-            raise ValueError(f"Unknown reduce type: {self.reduce}")
+            logits_per_segment = self.logit_scale.exp() * (segment_features @ text_features.T)
+            logits_per_caption = self.logit_scale.exp() * (text_features @ segment_features.T)
+
+        target_per_segment = (
+            all_labels_per_segment if world_size > 1 and self.all_gather else labels_per_segment
+        )
+        target_per_caption = (
+            all_labels_per_caption if world_size > 1 and self.all_gather else labels_per_caption
+        )
+        total_loss = (
+            torch.nn.functional.cross_entropy(logits_per_segment, target_per_segment.to(device))
+            + torch.nn.functional.cross_entropy(logits_per_caption, target_per_caption.to(device))
+        ) / 2
+
+        return total_loss
+
+
+class CaptionSigLIPLoss(CaptionCLIPLoss):
+    def __init__(
+        self,
+        normalize: bool = True,
+        reduction: Literal["mean", "weighted_sum"] = "weighted_sum",
+        init_logit_scale: Optional[float] = 10,
+        init_logit_bias: Optional[float] = -10,
+        bidir: bool = False,
+        all_gather: bool = True,
+        pooling_first: bool = True,
+        **kwargs,
+    ):
+        super().__init__(normalize, reduction, init_logit_scale, **kwargs)
+        if init_logit_bias is not None:
+            self.logit_bias = nn.Parameter(torch.ones([]) * init_logit_bias)
+        else:
+            self.logit_bias = None
+
+        self.bidir = bidir
+        self.all_gather = all_gather
+        self.pooling_first = pooling_first
+
+    def get_ground_truth(
+        self,
+        shape,
+        device,
+        labels_per_segment: Optional[Int[Tensor, "B"]] = None,  # noqa: F821
+        negative_only: bool = False,
+    ) -> torch.Tensor:
+        labels = torch.zeros(shape, device=device)
+        if not negative_only:
+            assert labels_per_segment is not None
+            labels[range(shape[0]), labels_per_segment] = 1
+        return labels
+
+    def get_logits(self, features, text_features):
+        logits = self.logit_scale.exp() * features @ text_features.T
+        if self.logit_bias is not None:
+            logits += self.logit_bias
+        return logits
+
+    def _loss(
+        self,
+        point_features,
+        text_features,
+        point_indices,
+        caption_offsets,
+        labels_per_segment: Optional[Int[Tensor, "B"]] = None,  # noqa: F821
+        negative_only: bool = False,
+    ):
+        device = point_features.device
+
+        # feature pooling first -> compute logits
+        if self.pooling_first:
+            rep_point_features = point_features[point_indices]
+            segment_features = segment_csr(
+                rep_point_features, caption_offsets.to(device), reduce="mean"
+            )
+            segment_features = nn.functional.normalize(segment_features, dim=-1)
+            logits = self.get_logits(segment_features, text_features)
+            labels = self.get_ground_truth(logits.shape, device, labels_per_segment, negative_only)
+            probs = F.sigmoid(logits)
+            loss = F.binary_cross_entropy(probs, labels)
+        # compute logits first -> probability pooling
+        else:
+            logits = self.get_logits(point_features, text_features)
+            probs = F.sigmoid(logits)
+            rep_probs = probs[point_indices]
+            reduced_probs = segment_csr(rep_probs, caption_offsets.to(device), reduce="mean")
+            labels = self.get_ground_truth(
+                reduced_probs.shape, device, labels_per_segment, negative_only
+            )
+            loss = F.binary_cross_entropy(reduced_probs, labels)
+        return loss
+
+    def loss(
+        self,
+        point_features: Float[Tensor, "M 512"],  # noqa: F722
+        captions: List[List[str]],
+        point_indices: Int[Tensor, "L"],  # noqa: F821
+        caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
+        num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
+        clip_encoder: nn.Module,
+        **kwargs,
+    ) -> Tensor:
+        device = point_features.device
+        world_size = dist.get_world_size() if dist.is_initialized() else 1
+
+        # extract text features
+        text_features, labels_per_segment, _ = self.extract_text_features(captions, clip_encoder)
+
+        # loss
+        loss = self._loss(
+            point_features, text_features, point_indices, caption_offsets, labels_per_segment
+        )
+
+        if world_size > 1 and self.all_gather:
+            # get max num captions
+            all_shapes = dist_utils.all_gather_tensor_shapes(text_features)
+            all_num_captions = all_shapes[:, 0]
+            max_num_captions = all_num_captions.max()
+            num_captions = text_features.shape[0]
+
+            # pad text features
+            text_features_padded = torch.zeros(
+                max_num_captions, text_features.shape[1], device=device
+            )
+            text_features_padded[:num_captions] = text_features
+
+            # exchange text features
+            rank = dist.get_rank()
+            right_rank = (rank + 1) % world_size
+            left_rank = (rank - 1 + world_size) % world_size
+            if self.bidir:
+                text_features_to_right, text_features_to_left = text_features_padded
+                num_captions_to_right = num_captions_to_left = all_num_captions[rank]
+                num_bidir, remainder = divmod(world_size - 1, 2)
+                for i in range(num_bidir):
+                    text_features_recv = dist_utils.neighbour_exchange_bidir_with_grad(
+                        left_rank,
+                        right_rank,
+                        text_features_to_left,
+                        text_features_to_right,
+                    )
+                    num_captions_rev = dist_utils.neighbour_exchange_bidir(
+                        left_rank,
+                        right_rank,
+                        num_captions_to_left,
+                        num_captions_to_right,
+                    )
+                    for f, n in zip(text_features_recv, num_captions_rev):
+                        loss += self._loss(
+                            point_features,
+                            f[:n],
+                            point_indices,
+                            caption_offsets,
+                            negative_only=True,
+                        )
+                    text_features_to_left, text_features_to_right = text_features_recv
+                    num_captions_to_left, num_captions_to_right = num_captions_rev
+
+                if remainder:
+                    text_features_recv = dist_utils.neighbour_exchange_with_grad(
+                        left_rank, right_rank, text_features_to_right
+                    )
+
+                    loss += self._loss(
+                        point_features,
+                        text_features_recv,
+                        point_indices,
+                        caption_offsets,
+                        negative_only=True,
+                    )
+            else:
+                text_features_to_right = text_features_padded
+                num_captions_to_right = all_num_captions[rank]
+                for i in range(world_size - 1):
+                    text_features_from_left = dist_utils.neighbour_exchange_with_grad(
+                        left_rank, right_rank, text_features_to_right
+                    )
+                    num_captions_from_left = dist_utils.neighbour_exchange(
+                        left_rank, right_rank, num_captions_to_right
+                    )
+                    _loss = self._loss(
+                        point_features,
+                        text_features_from_left[:num_captions_from_left],
+                        point_indices,
+                        caption_offsets,
+                        negative_only=True,
+                    )
+                    loss += _loss
+                    text_features_to_right = text_features_from_left
+                    num_captions_to_right = num_captions_from_left
+
+        return loss

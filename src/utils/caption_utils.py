@@ -66,6 +66,7 @@ def get_unique_caption_batch(
     return (
         caption_embeds,  # embedding
         torch.tensor(from_unique_indices),  # target
+        torch.tensor(to_unique_indices),  # target
     )
 
 
