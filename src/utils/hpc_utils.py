@@ -33,7 +33,7 @@ def _write_hpc_status(status: HPC_STATUS_TYPES, status_path: str) -> None:
 
 def is_hpc() -> bool:
     """Check if the current environment is a HPC environment (e.g. SLURM)."""
-    return "SLURM_JOB_ID" in os.environ
+    return "SLURM_JOBID" in os.environ
 
 
 class DefaultTrainerSignalFunctor:
@@ -150,7 +150,10 @@ def hpc_config(cfg: DictConfig) -> None:
         return cfg
 
     # Set the output_dir to be SLURM job ID
-    job_id = os.environ["SLURM_JOB_ID"]
+    job_id = os.environ["SLURM_JOBID"]
+    # If os.environ["CKPT_SLURM_JOBID"] is set, use it instead
+    if "CKPT_SLURM_JOBID" in os.environ:
+        job_id = os.environ["CKPT_SLURM_JOBID"]
     cfg.paths.output_dir = os.path.join("results", job_id)
 
     # Make sure the output_dir exists

@@ -87,15 +87,19 @@ class AutoResumeWandbLogger(WandbLogger):
         self._checkpoint_name = checkpoint_name
         # Add the $SLURM_JOBID to the wandb run name and tag
         if "SLURM_JOBID" in os.environ:
+            job_id = os.environ["SLURM_JOBID"]
+            if "CKPT_SLURM_JOBID" in os.environ:
+                job_id = os.environ["CKPT_SLURM_JOBID"]
+
             # If name is not None, append the SLURM_JOBID to the name. Otherwise, set the name to SLURM_JOBID
             if self._name is not None:
-                self._wandb_init["name"] = f"{self._name}_{os.environ['SLURM_JOBID']}"
+                self._wandb_init["name"] = f"{self._name}_{job_id}"
             else:
-                self._wandb_init["name"] = os.environ["SLURM_JOBID"]
+                self._wandb_init["name"] = job_id
             # append to the end of the tags list
             self._wandb_init["tags"] = [
                 *self._wandb_init.get("tags", []),
-                os.environ["SLURM_JOBID"],
+                job_id,
             ]
 
     def _resume_wandb_id(self, wandb_id_file: str, id: str) -> tuple[str, str]:
