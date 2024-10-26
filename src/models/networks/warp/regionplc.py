@@ -131,55 +131,40 @@ class RegionPLCToCLIP(NetworkBaseDict):
         backbone_cfg: Optional[DictConfig] = None,
         adapter_cfg: Optional[DictConfig] = None,
         voxel_size: float = 0.025,
-        point_to_voxel_method: Literal["wrapper", "mean"] = "mean",
         **kwargs,
     ):
         super().__init__()
         self.backbone = None
         self.adapter = None
         self.voxel_size = voxel_size
-        self.point_to_voxel_method = point_to_voxel_method
-        self.setup(backbone_cfg, adapter_cfg, point_to_voxel_method, **kwargs)
+        self.setup(backbone_cfg, adapter_cfg, **kwargs)
 
     def setup(
         self,
         backbone_cfg: DictConfig,
         adapter_cfg: DictConfig,
-        point_to_voxel_method: Literal["wrapper", "mean"] = "mean",
         **kwargs,
     ):
-        backbone = SparseConvUNet(**backbone_cfg)
-        if point_to_voxel_method == "wrapper":
-            self.backbone = PointToSparseWrapper(
-                backbone,
-                voxel_size=self.voxel_size,
-                concat_unpooled_pc=False,
-            )
-        else:
-            self.backbone = backbone
-        self.adapter = Adapter(**adapter_cfg)
+        self.backbone = PointToSparseWrapper(
+            nn.Sequential(SparseConvUNet(**backbone_cfg), Adapter(**adapter_cfg)),
+            voxel_size=self.voxel_size,
+            concat_unpooled_pc=False,
+            reduction=kwargs.get("reduction", "mean"),
+            unique_method=kwargs.get("unique_method", "torch"),
+        )
 
     def data_dict_to_input(self, data_dict: Dict):
-        if self.point_to_voxel_method == "mean":
-            st, data_dict = to_warp_sparse_tensor(data_dict)
-            return st, data_dict
-        else:
-            pc = PointCollection(
-                batched_features=data_dict["feat"],
-                batched_coordinates=data_dict["coord"],
-                offsets=data_dict["offset"],
-            )
-            return pc, data_dict
+        pc = PointCollection(
+            batched_features=data_dict["feat"],
+            batched_coordinates=data_dict["coord"],
+            offsets=data_dict["offset"],
+        )
+        return pc
 
     @override
     def forward(self, data_dict: Dict) -> Dict[str, Tensor]:
-        sf, data_dict = self.data_dict_to_input(data_dict)
+        sf = self.data_dict_to_input(data_dict)
         out_pc = self.backbone(sf)
-        out_pc = self.adapter(out_pc)
-        if self.point_to_voxel_method == "mean":
-            out_feats = out_pc.features
-            out_feats = out_feats[data_dict["v2p_map"]]
-        else:
-            out_feats = out_pc.features
+        out_feats = out_pc.features
         out_dict = dict(clip_feat=out_feats, pc=out_pc)
         return out_dict

@@ -8,11 +8,10 @@ from torch import Tensor, nn
 class NetworkBase(nn.Module, metaclass=ABCMeta):
     def __init__(self):
         super().__init__()
-        self.device_indicator_param = nn.Parameter(torch.empty(0))
 
     @property
     def device(self):
-        return self.device_indicator_param.device
+        return next(self.parameters()).device
 
     @abstractmethod
     def forward(self, input: Any) -> Any:
