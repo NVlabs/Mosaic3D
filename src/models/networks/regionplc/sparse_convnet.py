@@ -13,7 +13,6 @@ from src.utils import RankedLogger
 log = RankedLogger(__file__, rank_zero_only=True)
 
 
-# blocks
 class Custom1x1Subm3d(spconv.SparseConv3d):
     """# current 1x1 conv in Spconv2.x has a bug.
 

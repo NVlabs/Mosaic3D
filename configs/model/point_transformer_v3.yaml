@@ -4,14 +4,13 @@ optimizer:
   _target_: src.models.optimization.build_optimizer
   _partial_: true
   optim_cfg:
-    LR: 4e-3
+    LR: 1e-3
     SCHEDULER: adam_onecycle
     OPTIMIZER: adam_onecycle
     WEIGHT_DECAY: 0.0001
     MOMENTUM: 0.9
     STEP_EPOCH: 50
     MULTIPLIER: 0.1
-    CLIP_GRAD: False
     PCT_START: 0.39
     DIV_FACTOR: 1
     MOMS: [0.95, 0.85]
@@ -43,7 +42,8 @@ net:
     dec_patch_size: [1024, 1024, 1024, 1024]
     mlp_ratio: 4
     drop_path: 0.2
-    out_code_backend: "morton"
+    out_code_backend: "unique"
+    rand_perm_patch: true
 
   # last mlp
   adapter_cfg:
@@ -74,3 +74,5 @@ clip_encoder:
   text_dim: 512
 
 compile: false
+
+tags: ["point_transformer_v3"]

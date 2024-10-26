@@ -28,38 +28,40 @@ net:
   _target_: src.models.networks.warp.regionplc.RegionPLCToCLIP
   _partial_: true
 
-  voxel_size: 0.02
-
   backbone_cfg:
     in_channel: ${data.in_channel}
-    out_channel: 192
-    in_channels: [16, 32, 48, 64, 96, 128, 160, 192]
-    # out_channels: [16, 32, 48, 64, 96, 128, 160, 192]
-    out_channels: [192, 192, 192, 192, 192, 192, 192, 192]
+    in_channels: [16, 32, 48, 64, 80, 96, 112, 128]
+    out_channels: [16, 32, 48, 64, 80, 96, 112, 128]
     num_blocks: 2
 
   # last mlp
   adapter_cfg:
-    in_channel: ${model.net.backbone_cfg.out_channel}
+    in_channel: ${model.net.backbone_cfg.out_channels[0]}
     text_channel: 512
+    num_layers: 2
     last_norm: true
-    normalize_output: true
 
 loss_cfg:
   caption_loss:
     reduction: weighted_sum
     use_logit_scale: true
   seg_loss:
-    eval_only: true # no seg loss training if set to true
     normalize_input: false
-    text_clip_path: /datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth
+    text_clip_path: !!null
     loss_type: cross_entropy
     ignore_label: ${data.train_dataset.ignore_label}
     learnable_logit: false
+    eval_only: true
   binary_loss: false
-  caption_loss_weight: 1.0
+  binary_loss_weight: 1.0
+  caption_loss_weight: 0.5
   seg_loss_weight: 1.0
-  sync_dist: true # print synced loss (0.82 it/s vs 84 it/s)
+  clip_learnable_logit_scale: false
+  sync_dist: true
+  train_clip_text_alignment: false
+  train_clip_image_alignment: false
+  clip_text_loss_weight: 1.0
+  clip_image_loss_weight: 1.0
 
 # compile model for faster training with pytorch 2.0
 clip_encoder:
@@ -67,3 +69,13 @@ clip_encoder:
   text_dim: 512
 
 compile: false
+
+eval_cfg:
+  eval_clip_text_alignment: false
+  eval_clip_image_alignment: false
+
+  seg_eval:
+    normalize_input: ${model.loss_cfg.seg_loss.normalize_input}
+    text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
+
+use_prompt: false
