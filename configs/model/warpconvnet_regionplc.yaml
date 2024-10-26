@@ -54,7 +54,7 @@ loss_cfg:
     eval_only: true
   binary_loss: false
   binary_loss_weight: 1.0
-  caption_loss_weight: 0.5
+  caption_loss_weight: 1.0
   seg_loss_weight: 1.0
   clip_learnable_logit_scale: false
   sync_dist: true
