@@ -59,7 +59,8 @@ echo -e "
 Running a GPU job on
 
     Node: ${NODE}
-    JOB_ID ${SLURM_JOB_ID}
+    JOB_ID ${SLURM_JOBID}
+    CKPT_JOB_ID ${CKPT_SLURM_JOBID:-${SLURM_JOBID}}
     Date: $(TZ=America/Los_Angeles date)
     User: ${USER}
     Image: ${IMAGE_URL}
@@ -113,13 +114,13 @@ srun \
     bash -c "$CMD"
 
 # Get the status from $OUTPUT_FOLDER/status.txt
-STATUS_FILE="results/${SLURM_JOB_ID}/status.txt"
+STATUS_FILE="results/${CKPT_SLURM_JOBID:-${SLURM_JOBID}}/status.txt"
 if [ -f "$STATUS_FILE" ]; then
     STATUS=$(cat "$STATUS_FILE")
     echo "Status: $STATUS"
     if [ "${STATUS}" == "STOPPED" ] || [ "${STATUS}" == "RUNNING" ]; then
         echo "Resubmitting the job with script: ${SCRIPT_PATH} ${*}"
-        scontrol requeue "$SLURM_JOB_ID"
+        scontrol requeue "$SLURM_JOBID"
     fi
 else
     echo "Status file not found: $STATUS_FILE"
