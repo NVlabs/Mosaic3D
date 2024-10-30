@@ -7,7 +7,8 @@ import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
 
-from src.models.components.structure import Point
+from src.models.components.structure import Point, PointModule, PointSequential
+from src.models.networks.ppt.pdnorm import PDNorm
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
@@ -33,7 +34,7 @@ class Custom1x1Subm3d(spconv.SparseConv3d):
         return out_tensor
 
 
-class ResidualBlock(spconv.SparseModule):
+class ResidualBlock(PointModule):
     def __init__(self, in_channels, out_channels, norm_fn, indice_key=None, custom_sp1x1=False):
         super().__init__()
 
@@ -43,13 +44,13 @@ class ResidualBlock(spconv.SparseModule):
             spconv_1x1 = spconv.SubMConv3d
 
         if in_channels == out_channels:
-            self.i_branch = spconv.SparseSequential(nn.Identity())
+            self.i_branch = PointSequential(nn.Identity())
         else:
-            self.i_branch = spconv.SparseSequential(
+            self.i_branch = PointSequential(
                 spconv_1x1(in_channels, out_channels, kernel_size=1, bias=False)
             )
 
-        self.conv_branch = spconv.SparseSequential(
+        self.conv_branch = PointSequential(
             norm_fn(in_channels),
             nn.ReLU(),
             spconv.SubMConv3d(
@@ -72,21 +73,24 @@ class ResidualBlock(spconv.SparseModule):
             ),
         )
 
-    def forward(self, input):
+    def forward(self, point: Point):
         identity = spconv.SparseConvTensor(
-            input.features, input.indices, input.spatial_shape, input.batch_size
+            point.sparse_conv_feat.features,
+            point.sparse_conv_feat.indices,
+            point.sparse_conv_feat.spatial_shape,
+            point.sparse_conv_feat.batch_size,
         )
-        output = self.conv_branch(input)
-        out_feats = output.features + self.i_branch(identity).features
-        output = output.replace_feature(out_feats)
-
+        output = self.conv_branch(point)
+        out_feats = output.sparse_conv_feat.features + self.i_branch(identity).features
+        output.sparse_conv_feat = output.sparse_conv_feat.replace_feature(out_feats)
+        output.feat = output.sparse_conv_feat.features
         return output
 
 
-class VGGBlock(spconv.SparseModule):
+class VGGBlock(PointModule):
     def __init__(self, in_channels, out_channels, norm_fn, indice_key=None):
         super().__init__()
-        self.conv_layers = spconv.SparseSequential(
+        self.conv_layers = PointSequential(
             norm_fn(in_channels),
             nn.ReLU(),
             spconv.SubMConv3d(
@@ -103,7 +107,7 @@ class VGGBlock(spconv.SparseModule):
         return self.conv_layers(input)
 
 
-class UBlock(nn.Module):
+class UBlock(PointModule):
     def __init__(self, nPlanes, norm_fn, block_reps, block, indice_key_id=1):
         super().__init__()
         self.nPlanes = nPlanes
@@ -118,10 +122,10 @@ class UBlock(nn.Module):
             for i in range(block_reps)
         }
         blocks = OrderedDict(blocks)
-        self.blocks = spconv.SparseSequential(blocks)
+        self.blocks = PointSequential(blocks)
 
         if len(nPlanes) > 1:
-            self.conv = spconv.SparseSequential(
+            self.conv = PointSequential(
                 norm_fn(nPlanes[0]),
                 nn.ReLU(),
                 spconv.SparseConv3d(
@@ -138,7 +142,7 @@ class UBlock(nn.Module):
                 nPlanes[1:], norm_fn, block_reps, block, indice_key_id=indice_key_id + 1
             )
 
-            self.deconv = spconv.SparseSequential(
+            self.deconv = PointSequential(
                 norm_fn(nPlanes[1]),
                 nn.ReLU(),
                 spconv.SparseInverseConv3d(
@@ -159,22 +163,30 @@ class UBlock(nn.Module):
                     indice_key=f"subm{indice_key_id}",
                 )
             blocks_tail = OrderedDict(blocks_tail)
-            self.blocks_tail = spconv.SparseSequential(blocks_tail)
+            self.blocks_tail = PointSequential(blocks_tail)
 
-    def forward(self, input: spconv.SparseConvTensor):
-        output = self.blocks(input)
+    def forward(self, point: Point):
+        output_point = self.blocks(point)
         identity = spconv.SparseConvTensor(
-            output.features, output.indices, output.spatial_shape, output.batch_size
+            output_point.sparse_conv_feat.features,
+            output_point.sparse_conv_feat.indices,
+            output_point.sparse_conv_feat.spatial_shape,
+            output_point.sparse_conv_feat.batch_size,
         )
 
         if len(self.nPlanes) > 1:
-            output_decoder = self.conv(output)
+            output_decoder = self.conv(output_point)
             output_decoder = self.u(output_decoder)
             output_decoder = self.deconv(output_decoder)
-            out_feats = torch.cat((identity.features, output_decoder.features), dim=1)
-            output = output.replace_feature(out_feats)
-            output = self.blocks_tail(output)
-        return output
+            out_feats = torch.cat(
+                (identity.features, output_decoder.sparse_conv_feat.features), dim=1
+            )
+            sparse_conv_feat = output_point.sparse_conv_feat
+            sparse_conv_feat = sparse_conv_feat.replace_feature(out_feats)
+            output_point.sparse_conv_feat = sparse_conv_feat
+            output_point.feat = output_point.sparse_conv_feat.features
+            output_point = self.blocks_tail(output_point)
+        return output_point
 
 
 class UBlockDecoder(nn.Module):
@@ -193,7 +205,7 @@ class UBlockDecoder(nn.Module):
                 detach=detach,
             )
 
-            self.deconv = spconv.SparseSequential(
+            self.deconv = PointSequential(
                 norm_fn(nPlanes[1]),
                 nn.ReLU(),
                 spconv.SparseInverseConv3d(
@@ -214,33 +226,41 @@ class UBlockDecoder(nn.Module):
                     indice_key=f"subm{indice_key_id}",
                 )
             blocks_tail = OrderedDict(blocks_tail)
-            self.blocks_tail = spconv.SparseSequential(blocks_tail)
+            self.blocks_tail = PointSequential(blocks_tail)
 
-    def forward(self, input_list):
-        output = input_list[0]
+    def forward(self, point_list: List[Point]):
+        output_point = point_list[0]
         if self.detach:
             identity = spconv.SparseConvTensor(
-                output.features.detach(),
-                output.indices,
-                output.spatial_shape,
-                output.batch_size,
+                output_point.sparse_conv_feat.features.detach(),
+                output_point.sparse_conv_feat.indices,
+                output_point.sparse_conv_feat.spatial_shape,
+                output_point.sparse_conv_feat.batch_size,
             )
         else:
             identity = spconv.SparseConvTensor(
-                output.features, output.indices, output.spatial_shape, output.batch_size
+                output_point.sparse_conv_feat.features,
+                output_point.sparse_conv_feat.indices,
+                output_point.sparse_conv_feat.spatial_shape,
+                output_point.sparse_conv_feat.batch_size,
             )
 
         if len(self.nPlanes) > 1:
-            output_decoder = self.u(input_list[1:])
+            output_decoder = self.u(point_list[1:])
             output_decoder = self.deconv(output_decoder)
-            out_feats = torch.cat((identity.features, output_decoder.features), dim=1)
-            output = output.replace_feature(out_feats)
-            output = self.blocks_tail(output)
+            out_feats = torch.cat(
+                (identity.features, output_decoder.sparse_conv_feat.features), dim=1
+            )
+            sparse_conv_feat = output_point.sparse_conv_feat
+            sparse_conv_feat = sparse_conv_feat.replace_feature(out_feats)
+            output_point.sparse_conv_feat = sparse_conv_feat
+            output_point.feat = output_point.sparse_conv_feat.features
+            output_point = self.blocks_tail(output_point)
 
-        return output
+        return output_point
 
 
-class MLP(nn.Sequential):
+class MLP(PointSequential):
     def __init__(self, channels, norm_fn=None, num_layers=2, last_norm_fn=False, last_bias=True):
         assert len(channels) >= 2
         modules = []
@@ -266,7 +286,7 @@ class MLP(nn.Sequential):
             nn.init.constant_(self[-1].bias, 0)
 
 
-class SparseConvUNet(nn.Module):
+class SparseConvUNet(PointModule):
     def __init__(
         self,
         in_channel: int,
@@ -276,9 +296,26 @@ class SparseConvUNet(nn.Module):
         custom_sp1x1: bool = False,
         num_blocks: Optional[int] = None,
         num_filters: Optional[int] = None,
+        pdnorm_bn: bool = False,
+        pdnorm_decouple: bool = False,
+        pdnorm_adaptive: bool = False,
+        pdnorm_affine: bool = True,
+        pdnorm_conditions: Optional[List[str]] = None,
+        zero_init: bool = False,
     ):
         super().__init__()
-        norm_fn = functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1)
+        if pdnorm_bn:
+            norm_fn = functools.partial(
+                PDNorm,
+                conditions=pdnorm_conditions,
+                decouple=pdnorm_decouple,
+                adaptive=pdnorm_adaptive,
+                norm_layer=functools.partial(
+                    nn.BatchNorm1d, eps=1e-4, momentum=0.1, affine=pdnorm_affine
+                ),
+            )
+        else:
+            norm_fn = functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1)
 
         self.in_channel = in_channel
         self.mid_channel = mid_channel
@@ -287,13 +324,14 @@ class SparseConvUNet(nn.Module):
         self.custom_sp1x1: custom_sp1x1
         self.num_blocks = num_blocks
         self.num_filters = num_filters
+        self.zero_init = zero_init
 
         if self.block_residual:
             block = functools.partial(ResidualBlock, custom_sp1x1=custom_sp1x1)
         else:
             block = VGGBlock
 
-        self.input_conv = spconv.SparseSequential(
+        self.input_conv = PointSequential(
             spconv.SubMConv3d(
                 self.in_channel,
                 self.mid_channel,
@@ -311,30 +349,29 @@ class SparseConvUNet(nn.Module):
             block_channels = [self.mid_channel * (i + 1) for i in range(self.num_blocks)]
 
         self.unet = UBlock(block_channels, norm_fn, self.block_reps, block, indice_key_id=1)
-        self.output_layer = spconv.SparseSequential(norm_fn(self.mid_channel), nn.ReLU())
+        self.output_layer = PointSequential(norm_fn(self.mid_channel), nn.ReLU())
 
         # init parameters
-        self.apply(self.set_bn_init)
+        self.apply(self.init_weights)
 
-    @staticmethod
-    def set_bn_init(m):
-        classname = m.__class__.__name__
-        if classname.find("BatchNorm") != -1:
-            m.weight.data.fill_(1.0)
-            m.bias.data.fill_(0.0)
+    def init_weights(self, m):
+        if isinstance(m, nn.BatchNorm1d):
+            if m.affine:
+                nn.init.constant_(m.weight, 1.0)
+                nn.init.constant_(m.bias, 0.0)
+        elif isinstance(m, PDNorm):
+            if self.zero_init:
+                nn.init.constant_(m.modulation[-1].weight, 0.0)
+                nn.init.constant_(m.modulation[-1].bias, 0.0)
 
     def forward(self, point: Point):
-        sparse_tensor = point.sparse_conv_feat
-
-        output = self.input_conv(sparse_tensor)
+        output = self.input_conv(point)
         output = self.unet(output)
         output = self.output_layer(output)
-
-        point.sparse_conv_feat = output
         return point
 
 
-class Adapter(nn.Module):
+class Adapter(PointModule):
     def __init__(
         self,
         in_channel: int,
@@ -361,9 +398,8 @@ class Adapter(nn.Module):
         )
 
     def forward(self, x: Point) -> Point:  # noqa: F722
-        feats = self.adapter(x.sparse_conv_feat.features)
-        x.sparse_conv_feat = x.sparse_conv_feat.replace_feature(feats)
-        return x
+        output = self.adapter(x)
+        return output
 
 
 class BinaryHead(nn.Module):
@@ -414,7 +450,7 @@ class BinaryHead(nn.Module):
             detach=detach,
         )
 
-        self.binary_classifier = spconv.SparseSequential(
+        self.binary_classifier = PointSequential(
             norm_fn(in_channel), nn.ReLU(), nn.Linear(in_channel, 1)
         )
         self.binary_loss_func = nn.BCEWithLogitsLoss()

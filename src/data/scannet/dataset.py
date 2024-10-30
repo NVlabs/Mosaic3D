@@ -1,7 +1,7 @@
 import os
 from glob import glob
 from pathlib import Path
-from typing import List, Optional, Union, Literal
+from typing import List, Literal, Optional, Union
 
 import fire
 import numpy as np
@@ -244,10 +244,11 @@ class ScanNetDataset(DatasetBase):
             coord=coord,
             color=color,
             segment=segment,
-            instance=instance,
             binary=binary_label,
             origin_idx=np.arange(coord.shape[0]).astype(np.int64),
         )
+        if self.split != "train":
+            data_dict["instance"] = instance
 
         # load mask data
         if self.mask_dir is not None:

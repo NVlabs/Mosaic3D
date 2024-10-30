@@ -3,8 +3,8 @@
 #SBATCH --partition=batch_singlenode,grizzly,polar,polar2,polar3,polar4
 #SBATCH --time=04:00:00                  # Adjust time limit as needed
 #SBATCH --overcommit                     # allows more than one process per CPU
-#SBATCH --cpus-per-task=16               # number of cores
-#SBATCH --mem-per-cpu=64G                # memory per CPU core
+#SBATCH --cpus-per-task=64               # number of cores
+#SBATCH --mem-per-cpu=16G                # memory per CPU core
 #SBATCH --output=slurm_outputs/%j.log
 #SBATCH --job-name=openvocab-3d-training
 #SBATCH --signal=SIGUSR1@300             # Send SIGUSR1 300 seconds before time limit
