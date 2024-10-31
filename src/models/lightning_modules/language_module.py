@@ -192,14 +192,14 @@ class DenseLanguageLitModule(LitModuleBase):
                     binary_scores.view(-1)[valid_idx],
                     binary_labels.view(-1)[valid_idx].to(binary_scores),
                 )
-                * self.hparams.loss_cfg.binary_loss_weight
+                * self.hparams.loss_cfg.weights.binary_loss
             )
 
         clip_feat = out_dict["clip_feat"]
         if self.clip_alignment_loss is not None:
             seg_loss = (
                 self.clip_alignment_loss.loss(clip_feat, batch["segment"])
-                * self.hparams.loss_cfg.seg_loss_weight
+                * self.hparams.loss_cfg.weights.seg_loss
             )
 
         caption_loss_kargs = {
@@ -211,7 +211,7 @@ class DenseLanguageLitModule(LitModuleBase):
         }
         caption_loss = (
             self.caption_loss.loss(clip_feat, **caption_loss_kargs)
-            * self.hparams.loss_cfg.caption_loss_weight
+            * self.hparams.loss_cfg.weights.caption_loss
         )
 
         # CLIP image loss
@@ -225,7 +225,7 @@ class DenseLanguageLitModule(LitModuleBase):
                     clip_indices_image_to_point=batch["clip_indices_image_to_point"],
                     is_loss=True,
                 )
-                * self.hparams.loss_cfg.clip_image_loss_weight
+                * self.hparams.loss_cfg.weights.clip_image_loss
             )
 
         loss = binary_loss + seg_loss + caption_loss + clip_image_alignment_loss

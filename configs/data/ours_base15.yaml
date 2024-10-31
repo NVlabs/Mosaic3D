@@ -1,5 +1,5 @@
 defaults:
-  - ours_openvocab
+  - scannet 
   - ptv3_transforms
 
 train_dataset:

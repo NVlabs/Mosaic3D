@@ -1,7 +1,0 @@
-defaults:
-  - openscene-lseg_openvocab
-
-loss_cfg:
-  caption_loss:
-    is_entity: true
-    interpolate: false

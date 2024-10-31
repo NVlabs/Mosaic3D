@@ -4,8 +4,14 @@
 # order of defaults determines the order in which configs override each other
 defaults:
   - _self_
-  - data: regionplc_base15
-  - model: regionplc_fastai
+  - data: ours_openvocab 
+
+  - model: regionplc_openvocab
+  - model/clip: clip-b16 
+  - model/loss: caption
+  - optim: fastai
+  - scheduler: fastai
+  
   - callbacks: default
   - logger: null # set logger here or use command line (e.g. `python train.py logger=tensorboard`)
   - trainer: default
@@ -33,7 +39,13 @@ task_name: "train"
 # tags to help you identify your experiments
 # you can overwrite this in experiment configs
 # overwrite from command line with `python train.py tags="[first_tag, second_tag]"`
-tags: ["dev"]
+tags:
+  - ${hydra:runtime.choices.model}
+  - ${hydra:runtime.choices.model/clip}
+  - ${hydra:runtime.choices.model/loss}
+  - ${hydra:runtime.choices.optim}
+  - ${hydra:runtime.choices.scheduler}
+  - ${hydra:runtime.choices.data}
 
 # set False to skip model training
 train: True

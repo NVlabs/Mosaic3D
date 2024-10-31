@@ -1,0 +1,7 @@
+# @package model
+scheduler:
+  _target_: torch.optim.lr_scheduler.PolynomialLR
+  _partial_: true
+  power: 0.9
+
+scheduler_interval: step

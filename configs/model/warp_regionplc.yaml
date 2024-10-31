@@ -1,24 +1,21 @@
-_target_: src.models.networks.regionplc.litmodule.RegionPLCLitModule
+_target_: src.models.networks.warp.litmodule.WarpLitModule
 
 net:
-  _target_: src.models.networks.regionplc.sparse_convnet.SparseConvUNetTextSeg
+  _target_: src.models.networks.warp.regionplc.RegionPLCToCLIP
   _partial_: true
 
   backbone_cfg:
     in_channel: ${data.in_channel}
-    mid_channel: 16
-    block_reps: 2
-    block_residual: true
-    custom_sp1x1: true
-    num_blocks: 7
+    in_channels: [16, 32, 48, 64, 80, 96, 112, 128]
+    out_channels: [16, 32, 48, 64, 80, 96, 112, 128]
+    num_blocks: 2
 
+  # last mlp
   adapter_cfg:
-    in_channel: ${model.net.backbone_cfg.mid_channel}
-    text_channel: ${model.clip_encoder.text_dim}
+    in_channel: ${model.net.backbone_cfg.out_channels[0]}
+    text_channel: 512
     num_layers: 2
     last_norm: true
-
-  binary_head_cfg: false
 
 eval_cfg:
   eval_clip_text_alignment: false
@@ -29,4 +26,5 @@ eval_cfg:
     text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
 
 use_prompt: false
+
 compile: false

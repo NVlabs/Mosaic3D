@@ -1,11 +1,10 @@
-defaults:
-  - openscene-lseg_openvocab
-
+# @package model
 optimizer:
   _target_: src.models.optimization.build_optimizer
   _partial_: true
+  lr: 4e-3
   optim_cfg:
-    LR: 4e-3
+    LR: ${model.optimizer.lr}
     SCHEDULER: adam_onecycle
     OPTIMIZER: adam_onecycle
     WEIGHT_DECAY: 0.0001
@@ -17,12 +16,3 @@ optimizer:
     DIV_FACTOR: 1
     MOMS: [0.95, 0.85]
 
-scheduler:
-  _target_: src.models.optimization.build_scheduler
-  _partial_: true
-  last_epoch: -1
-  optim_cfg: ${model.optimizer.optim_cfg}
-
-clip_encoder:
-  model_id: hf-hub:UCSC-VLAA/ViT-L-16-HTxt-Recap-CLIP
-  text_dim: 768
