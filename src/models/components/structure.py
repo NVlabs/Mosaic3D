@@ -267,3 +267,22 @@ class PointSequential(PointModule):
                 else:
                     input = module(input)
         return input
+
+class Custom1x1Subm3d(spconv.SparseConv3d):
+    """# current 1x1 conv in Spconv2.x has a bug.
+
+    It will be removed after the bug is fixed
+    """
+
+    def forward(self, input):
+        features = torch.mm(
+            input.features, self.weight.view(self.out_channels, self.in_channels).T
+        )
+        if self.bias is not None:
+            features += self.bias
+        out_tensor = spconv.SparseConvTensor(
+            features, input.indices, input.spatial_shape, input.batch_size
+        )
+        out_tensor.indice_dict = input.indice_dict
+        out_tensor.grid = input.grid
+        return out_tensor

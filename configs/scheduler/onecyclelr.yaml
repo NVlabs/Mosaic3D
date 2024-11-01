@@ -3,9 +3,9 @@ scheduler:
   _target_: torch.optim.lr_scheduler.OneCycleLR
   _partial_: true
   max_lr: ${model.optimizer.lr}
-  pct_start: 0.39
+  pct_start: 0.05
   anneal_strategy: cos
-  div_factor: 1
+  div_factor: 10
   final_div_factor: 10000.0
 
 scheduler_interval: step

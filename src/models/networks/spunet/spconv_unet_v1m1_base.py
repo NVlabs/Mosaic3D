@@ -4,15 +4,14 @@ Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
 Please cite our work if the code is helpful to you.
 """
 
-from functools import partial
 from collections import OrderedDict
+from functools import partial
 
+import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
 
-import spconv.pytorch as spconv
-
-from src.models.components.structure import Point
+from src.models.components.structure import Custom1x1Subm3d, Point
 from src.models.networks.openscene.utils import trunc_normal_
 
 
@@ -36,7 +35,7 @@ class BasicBlock(spconv.SparseModule):
             self.proj = spconv.SparseSequential(nn.Identity())
         else:
             self.proj = spconv.SparseSequential(
-                spconv.SubMConv3d(in_channels, embed_channels, kernel_size=1, bias=False),
+                Custom1x1Subm3d(in_channels, embed_channels, kernel_size=1, bias=False),
                 norm_fn(embed_channels),
             )
 
@@ -206,9 +205,7 @@ class SpUNetBase(nn.Module):
             enc_channels = channels[s]
             dec_channels = channels[len(channels) - s - 2]
 
-        self.final = spconv.SubMConv3d(
-            channels[-1], out_channels, kernel_size=1, padding=1, bias=False
-        )
+        self.final = Custom1x1Subm3d(channels[-1], out_channels, kernel_size=1, bias=False)
         self.apply(self._init_weights)
 
     @staticmethod
