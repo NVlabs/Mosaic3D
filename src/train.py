@@ -95,22 +95,23 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     train_metrics = trainer.callback_metrics
 
-    test_metrics = {}
-    if cfg.get("test"):
-        log.info("Starting testing!")
-        ckpt_path = trainer.checkpoint_callback.best_model_path
-        if ckpt_path == "":
-            log.warning("Best ckpt not found! Using current weights for testing...")
-            ckpt_path = None
+    if signal_handler.is_finished():
+        test_metrics = {}
+        if cfg.get("test"):
+            log.info("Starting testing!")
+            ckpt_path = trainer.checkpoint_callback.best_model_path
+            if ckpt_path == "":
+                log.warning("Best ckpt not found! Using current weights for testing...")
+                ckpt_path = None
 
-        # Create a new trainer and model with a single GPU
-        torch.distributed.destroy_process_group()
-        if trainer.is_global_zero:
-            test_trainer = Trainer(devices=1, callbacks=callbacks, logger=logger)
-            test_model: LightningModule = hydra.utils.instantiate(cfg.model)
-            test_trainer.test(model=test_model, datamodule=datamodule, ckpt_path=ckpt_path)
-            log.info(f"Best ckpt path: {ckpt_path}")
-            test_metrics = test_trainer.callback_metrics
+            # Create a new trainer and model with a single GPU
+            torch.distributed.destroy_process_group()
+            if trainer.is_global_zero:
+                test_trainer = Trainer(devices=1, callbacks=callbacks, logger=logger)
+                test_model: LightningModule = hydra.utils.instantiate(cfg.model)
+                test_trainer.test(model=test_model, datamodule=datamodule, ckpt_path=ckpt_path)
+                log.info(f"Best ckpt path: {ckpt_path}")
+                test_metrics = test_trainer.callback_metrics
 
     # merge train and test metrics
     metric_dict = {**train_metrics, **test_metrics}
