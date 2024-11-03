@@ -1,7 +1,0 @@
-defaults:
-  - regionplc_openvocab_fastai
-
-# compile model for faster training with pytorch 2.0
-clip_encoder:
-  model_id: hf-hub:timm/ViT-B-16-SigLIP
-  text_dim: 768

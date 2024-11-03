@@ -1,0 +1,31 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: sc+ma+st+ar 
+  - override /model: regionplc
+  - override /model/clip: recap_clip
+  - override /model/loss: caption
+  - override /optim: fastai
+  - override /scheduler: fastai
+  - override /callbacks: cluster_nolr
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+seed: 12345
+
+trainer:
+  max_epochs: 128
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "regionplc"
+
+callbacks:
+  model_checkpoint:
+    monitor: ${data.checkpoint_monitor}

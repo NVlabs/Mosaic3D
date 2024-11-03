@@ -2,6 +2,22 @@ import torch
 import torch.distributed as dist
 
 
+def get_world_size() -> int:
+    if not dist.is_available():
+        return 1
+    if not dist.is_initialized():
+        return 1
+    return dist.get_world_size()
+
+
+def get_rank() -> int:
+    if not dist.is_available():
+        return 0
+    if not dist.is_initialized():
+        return 0
+    return dist.get_rank()
+
+
 def pad_tensor(tensor, size):
     padded = torch.zeros(size, dtype=tensor.dtype, device=tensor.device)
     slices = tuple(slice(0, min(s, ps)) for s, ps in zip(tensor.shape, size))

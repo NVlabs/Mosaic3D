@@ -5,6 +5,7 @@ Inspirited by chrischoy/SpatioTemporalSegmentation
 Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
 Please cite our work if the code is helpful to you.
 """
+
 import copy
 import numbers
 import random
@@ -865,7 +866,7 @@ class SphereCrop:
     def __init__(self, point_max=80000, sample_rate=None, mode="random"):
         self.point_max = point_max
         self.sample_rate = sample_rate
-        assert mode in ["random", "center", "all"]
+        assert mode in ["random", "center", "all", "captioned"]
         self.mode = mode
 
     def __call__(self, data_dict):
@@ -927,6 +928,11 @@ class SphereCrop:
                 center = data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
             elif self.mode == "center":
                 center = data_dict["coord"][data_dict["coord"].shape[0] // 2]
+            elif self.mode == "captioned":
+                point_indices = data_dict["caption_data"]["idx"]
+                sel_point_indices = np.random.randint(len(point_indices))
+                random_idx = np.random.choice(point_indices[sel_point_indices])
+                center = data_dict["coord"][random_idx]
             else:
                 raise NotImplementedError
             num_points_before = data_dict["coord"].shape[0]

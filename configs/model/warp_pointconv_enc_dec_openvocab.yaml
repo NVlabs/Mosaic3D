@@ -3,9 +3,3 @@ defaults:
 
 net:
   binary_head_cfg: false # disable binary head
-
-loss_cfg:
-  binary_loss: false # disable binary loss
-  seg_loss:
-    eval_only: true
-  caption_loss_weight: 1.0

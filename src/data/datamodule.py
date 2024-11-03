@@ -1,8 +1,10 @@
-from typing import Any, Callable, Optional, List
+from typing import Any, Callable, List, Optional
 
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
+from src.data.concat_dataset import ConcatDataset
+from src.data.multi_dataloader import MultiDatasetDataloader
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -66,3 +68,17 @@ class DataModule(LightningDataModule):
 
     def test_dataloader(self) -> List[DataLoader[Any]]:
         return self.val_dataloader()
+
+
+class MultiDataModule(DataModule):
+    def train_dataloader(self) -> DataLoader[Any]:
+        if self.data_train is None:
+            raise ValueError("No training dataset found. Please call `setup('fit')` first.")
+
+        assert isinstance(self.data_train, ConcatDataset), "train_dataset must be a ConcatDataset"
+        return MultiDatasetDataloader(
+            self.data_train,
+            self.hparams.batch_size,
+            self.hparams.num_workers,
+            self.hparams.collate_fn,
+        )

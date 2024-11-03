@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 import numpy as np
+import time
 import torch
 import torch.nn as nn
 from torchmetrics import MaxMetric, MeanMetric
@@ -176,9 +177,16 @@ class DenseLanguageLitModule(LitModuleBase):
         raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
-        # Forward
-        out_dict = self(batch)
+        self._train_start = time.time()
 
+        # Time forward pass
+        self._forward_start = time.time()
+        out_dict = self(batch)
+        forward_time = time.time() - self._forward_start
+        self.forward_time(forward_time)
+
+        # Time loss computation
+        self._loss_start = time.time()
         # loss
         binary_loss, seg_loss, caption_loss = 0, 0, 0
         clip_image_alignment_loss = 0
@@ -192,14 +200,14 @@ class DenseLanguageLitModule(LitModuleBase):
                     binary_scores.view(-1)[valid_idx],
                     binary_labels.view(-1)[valid_idx].to(binary_scores),
                 )
-                * self.hparams.loss_cfg.binary_loss_weight
+                * self.hparams.loss_cfg.weights.binary_loss
             )
 
         clip_feat = out_dict["clip_feat"]
         if self.clip_alignment_loss is not None:
             seg_loss = (
                 self.clip_alignment_loss.loss(clip_feat, batch["segment"])
-                * self.hparams.loss_cfg.seg_loss_weight
+                * self.hparams.loss_cfg.weights.seg_loss
             )
 
         caption_loss_kargs = {
@@ -211,7 +219,7 @@ class DenseLanguageLitModule(LitModuleBase):
         }
         caption_loss = (
             self.caption_loss.loss(clip_feat, **caption_loss_kargs)
-            * self.hparams.loss_cfg.caption_loss_weight
+            * self.hparams.loss_cfg.weights.caption_loss
         )
 
         # CLIP image loss
@@ -225,10 +233,12 @@ class DenseLanguageLitModule(LitModuleBase):
                     clip_indices_image_to_point=batch["clip_indices_image_to_point"],
                     is_loss=True,
                 )
-                * self.hparams.loss_cfg.clip_image_loss_weight
+                * self.hparams.loss_cfg.weights.clip_image_loss
             )
 
         loss = binary_loss + seg_loss + caption_loss + clip_image_alignment_loss
+        loss_time = time.time() - self._loss_start
+        self.loss_time(loss_time)
 
         lr = self.optimizers().param_groups[0]["lr"]
         log_metrics = dict(loss=loss, caption_loss=caption_loss, lr=lr)
@@ -244,6 +254,21 @@ class DenseLanguageLitModule(LitModuleBase):
         log_metrics["num_points"] = batch["coord"].shape[0] / bs
         log_metrics["num_objects"] = np.mean(
             [len(captions) for captions in batch["caption_data"]["caption"]]
+        )
+
+        # Calculate training time and mark start of next data loading
+        train_time = time.time() - self._train_start
+        self.train_time(train_time)
+        self._data_load_start = time.time()
+
+        # Add timing metrics to existing logging
+        log_metrics.update(
+            {
+                "time/data_loading": self.data_load_time.compute(),
+                "time/forward": self.forward_time.compute(),
+                "time/loss": self.loss_time.compute(),
+                "time/training": self.train_time.compute(),
+            }
         )
 
         self.log_dict(
