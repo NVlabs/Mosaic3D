@@ -23,3 +23,5 @@ exclude_lines = [
     "raise NotImplementedError()",
     "if __name__ == .__main__.:",
 ]
+[tool.black]
+line-length = 99

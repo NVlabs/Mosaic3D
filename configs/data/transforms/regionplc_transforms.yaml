@@ -1,43 +1,23 @@
+# @package data
 train_transforms:
   - type: Copy
     keys_dict:
       coord: origin_coord
-  - type: CenterShift
-    apply_z: true
-  - type: RandomRotate
-    p: 0.5
-    angle: [-1, 1]
-    center: [0, 0, 0]
-    axis: "z"
-  - type: RandomRotate
-    p: 0.5
-    angle: [-0.015625, 0.015625]
-    axis: "x"
-  - type: RandomRotate
-    p: 0.5
-    angle: [-0.015625, 0.015625]
-    axis: "y"
-  - type: RandomScale
-    scale: [0.9, 1.1]
+  - type: MeanShift
   - type: RandomFlip
     p: 0.5
-  - type: RandomJitter
-    sigma: 0.005
-    clip: 0.02
-  - type: ElasticDistortion
-  - type: ChromaticAutoContrast
-    p: 0.2
-  - type: ChromaticTranslation
-    p: 0.95
-    ratio: 0.05
+  - type: RandomRotate
+    p: 1.0
+    angle: [-1, 1]
+    center: [0, 0, 0]
+    axis: z
   - type: ChromaticJitter
-    p: 0.95
-    std: 0.05
+    p: 1.0
+    std: 0.007
+  - type: ElasticDistortion
   - type: SphereCrop
     point_max: 250000
     mode: random
-  - type: CenterShift
-    apply_z: false
   - type: NormalizeColor
   - type: ToTensor
   - type: Collect
@@ -55,14 +35,13 @@ train_transforms:
     offset_keys_dict:
       offset: coord
       pc_count: origin_coord
-    feat_keys: ["color"]
+    feat_keys: ["color", "coord"]
 
 val_transforms:
   - type: Copy
     keys_dict:
       coord: origin_coord
-  - type: CenterShift
-    apply_z: true
+  - type: MeanShift
   - type: NormalizeColor
   - type: ToTensor
   - type: Collect
@@ -80,6 +59,6 @@ val_transforms:
     offset_keys_dict:
       offset: coord
       pc_count: origin_coord
-    feat_keys: ["color"]
+    feat_keys: ["color", "coord"]
 
-in_channel: 3
+in_channel: 6

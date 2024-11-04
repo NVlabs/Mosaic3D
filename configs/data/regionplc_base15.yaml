@@ -1,6 +1,3 @@
-defaults:
-  - regionplc_transforms
-
 _target_: src.data.datamodule.DataModule
 
 train_dataset:

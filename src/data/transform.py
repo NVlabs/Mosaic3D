@@ -1,16 +1,9 @@
-"""3D Point Cloud Augmentation.
-
-Inspirited by chrischoy/SpatioTemporalSegmentation
-
-Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
-Please cite our work if the code is helpful to you.
-"""
-
 import copy
 import numbers
 import random
 from collections.abc import Mapping, Sequence
 from typing import List, Optional
+from collections import Counter
 
 import numpy as np
 import scipy
@@ -21,6 +14,7 @@ import torch
 from jaxtyping import Int
 from torch import Tensor
 
+from src.data.caption_transform import CaptionFilter
 from src.utils.registry import Registry
 
 TRANSFORMS = Registry("transforms")
@@ -1152,6 +1146,63 @@ class InstanceParser:
         data_dict["instance_centroid"] = centroid
         data_dict["bbox"] = bbox
         return data_dict
+
+
+@TRANSFORMS.register_module()
+class FilterCaption:
+    """Transform wrapper for CaptionFilter.
+
+    Args:
+        min_words (int): Minimum words required
+        max_words (int): Maximum words allowed
+        min_letter_ratio (float): Minimum letter ratio
+        max_repetition_ratio (float): Maximum word repetition ratio
+        min_unique_ratio (float): Minimum unique word ratio
+        max_consecutive (int): Maximum consecutive repeats
+    """
+
+    def __init__(
+        self,
+        min_words: int = 3,
+        max_words: int = 50,
+        min_letter_ratio: float = 0.5,
+        max_repetition_ratio: float = 0.4,
+        min_unique_ratio: float = 0.3,
+        max_consecutive: int = 3,
+    ):
+        self.filter = CaptionFilter(
+            min_words=min_words,
+            max_words=max_words,
+            min_letter_ratio=min_letter_ratio,
+            max_repetition_ratio=max_repetition_ratio,
+            min_unique_ratio=min_unique_ratio,
+            max_consecutive=max_consecutive,
+        )
+
+    def __call__(self, data_dict):
+        if "caption_data" not in data_dict:
+            return data_dict
+
+        caption_dict = data_dict["caption_data"]
+        captions = caption_dict["caption"]
+        caption_point_indices = caption_dict["idx"]
+
+        # Get valid flags for each caption
+        valid_flags = self.filter(captions)
+
+        # Filter captions and their corresponding point indices
+        if not all(valid_flags):  # Only update if we have invalid captions
+            filtered_captions = [cap for cap, valid in zip(captions, valid_flags) if valid]
+            filtered_indices = [
+                idx for idx, valid in zip(caption_point_indices, valid_flags) if valid
+            ]
+
+            data_dict["caption_data"] = {"caption": filtered_captions, "idx": filtered_indices}
+
+        return data_dict
+
+    def __repr__(self):
+        return f"FilterCaption(filter={self.filter})"
 
 
 class Compose:

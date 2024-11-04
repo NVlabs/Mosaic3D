@@ -5,6 +5,7 @@
 
 defaults:
   - override /data: scannet_seem_panoptic_125k 
+  - override /data/transforms: ptv3_transforms
   - override /model: regionplc
   - override /model/clip: recap_clip
   - override /model/loss: caption

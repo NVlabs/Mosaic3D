@@ -5,6 +5,7 @@
 
 defaults:
   - override /data: sc+ma+st+ar 
+  - override /data/transforms: ptv3_transforms
   - override /model: regionplc
   - override /model/clip: recap_clip
   - override /model/loss: caption

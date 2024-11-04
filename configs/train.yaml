@@ -5,6 +5,7 @@
 defaults:
   - _self_
   - data: ours_openvocab 
+  - data/transforms: regionplc_transforms
 
   - model: regionplc_openvocab
   - model/clip: clip-b16 
