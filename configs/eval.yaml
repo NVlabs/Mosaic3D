@@ -3,13 +3,20 @@
 defaults:
   - _self_
   - data: mnist # choose datamodule with `test_dataloader()` for evaluation
+  - data/transforms: null
+
   - model: mnist
+  - model/clip: null
+  - model/loss: null
+  - optim: null
+  - scheduler: null
+
+  - callbacks: null
   - logger: null
   - trainer: default
   - paths: default
   - extras: default
   - hydra: default
-  - callbacks: null
   - experiment: null
 
 task_name: "eval"

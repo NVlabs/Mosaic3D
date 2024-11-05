@@ -157,6 +157,7 @@ class DenseLanguageLitModule(LitModuleBase):
                 fg_class_idx=dataset.fg_class_idx,
                 bg_class_idx=dataset.bg_class_idx,
                 ignore_label=dataset.ignore_label,
+                instance_ignore_class_idx=dataset.instance_ignore_class_idx,
             )
             self.val_metrics.append(val_metric)
             self.val_class_info.append(val_class_info)
@@ -344,7 +345,7 @@ class DenseLanguageLitModule(LitModuleBase):
 
         # 2. instance segmentation (optional)
         if "mAP_evaluator" in metrics:
-            self._update_instance_segmentation_metrics(batch, logits, metrics)
+            self._update_instance_segmentation_metrics(batch, logits, metrics, class_info)
 
         # 3. CLIP image alignment (optional)
         if self.eval_clip_image_alignment:
@@ -369,9 +370,10 @@ class DenseLanguageLitModule(LitModuleBase):
             )
             metrics["clip_text_score"].update(clip_avg_score)
 
-    def _update_instance_segmentation_metrics(self, batch, logits, metrics):
+    def _update_instance_segmentation_metrics(self, batch, logits, metrics, class_info):
         offset = batch["offset"]
         batch_size = len(offset) - 1
+        ignore_class_idx = class_info["instance_ignore_class_idx"]
         for i in range(batch_size):
             gt_classes = batch["segment"][offset[i] : offset[i + 1]]
             gt_instances = batch["instance"][offset[i] : offset[i + 1]]
@@ -379,9 +381,11 @@ class DenseLanguageLitModule(LitModuleBase):
             pred_masks = batch["masks_binary"][i]
 
             # mask logits (voting)
-            pred_logits = torch.nn.functional.softmax(pred_logits, dim=-1)
-            pred_logits = torch.stack([pred_logits[mask].mean(dim=0) for mask in pred_masks])
-            pred_scores, pred_classes = torch.max(pred_logits, dim=1)
+            pred_logits_fg = pred_logits.clone()
+            pred_logits_fg[..., ignore_class_idx] = torch.finfo(pred_logits.dtype).min
+            pred_logits_fg = torch.nn.functional.softmax(pred_logits_fg, dim=-1)
+            pred_logits_fg = torch.stack([pred_logits_fg[mask].mean(dim=0) for mask in pred_masks])
+            pred_scores, pred_classes = torch.max(pred_logits_fg, dim=1)
 
             metrics["mAP_evaluator"].update(
                 pred_classes=pred_classes,
