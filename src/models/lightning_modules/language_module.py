@@ -1,7 +1,7 @@
+import time
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-import time
 import torch
 import torch.nn as nn
 from torchmetrics import MaxMetric, MeanMetric

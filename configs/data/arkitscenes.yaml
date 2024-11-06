@@ -6,9 +6,9 @@ train_dataset:
   split: train
   data_dir: /datasets/arkitscenes/3dod
   caption_dir: /datasets/openvocab-3d-captions
-  caption_subset: caption.osprey.arkitscenes
+  caption_subset: caption.osprey.arkitscenes-rectified
   segment_dir: /datasets/openvocab-3d-captions
-  segment_subset: segment.sam2.arkitscenes
+  segment_subset: segment.sam2.arkitscenes-rectified
   object_sample_ratio: 0.2
   ignore_label: -100
   repeat: 1

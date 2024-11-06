@@ -8,6 +8,7 @@
 #SBATCH --output=slurm_outputs/%j.log
 #SBATCH --job-name=openvocab-3d-training
 #SBATCH --signal=SIGUSR1@300             # Send SIGUSR1 300 seconds before time limit
+#SBATCH --gres=gpu:8
 
 # Usage:
 #
@@ -22,7 +23,7 @@
 GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
 
 # Set default TAG to "warp"
-TAG="warp"
+TAG="latest"
 
 # Check if the next argument doesn't start with "--" or contains "=" (indicating it's a TAG)
 if [[ $# -gt 0 && ${1:0:2} != "--" && ! $1 =~ "=" ]]; then

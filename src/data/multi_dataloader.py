@@ -40,6 +40,7 @@ class MultiDatasetDataloader:
         seed=None,
     ):
         self.datasets = concat_dataset.datasets
+        self.global_repeat = concat_dataset.repeat
         self.ratios = [dataset.repeat for dataset in self.datasets]
         # reset data repeat, original repeat serve as ratios
         for dataset in self.datasets:
