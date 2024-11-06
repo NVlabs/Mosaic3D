@@ -13,12 +13,11 @@ import numpy as np
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
 from src.models.components.structure import mean_pooling
+from src.models.networks.warp.adapter import Adapter
 
-from warpconvnet.nn.sequential import Sequential
-from warpconvnet.geometry.base_geometry import SpatialFeatures
 from warpconvnet.geometry.point_collection import PointCollection
 from warpconvnet.geometry.spatially_sparse_tensor import SpatiallySparseTensor
-from warpconvnet.models.internal.backbones.regionplc import SparseConvUNet
+from warpconvnet.models.backbones.sparse_conv_unet import SparseConvUNet
 from warpconvnet.nn.pools import PointToSparseWrapper
 from warpconvnet.utils.batch_index import (
     batch_index_from_offset,
@@ -29,8 +28,6 @@ log = RankedLogger(__name__, rank_zero_only=True)
 
 
 def to_warp_sparse_tensor(data_dict: Dict, hash_method: Literal["fnv", "ravel"] = "ravel"):
-    # RegionPLC specific data processing.
-    # Only used for matching the input format of RegionPLC.
     # TODO(cchoy): Use more optimized warpconvnet functions
     assert {"feat", "coord"}.issubset(data_dict.keys())
     if "grid_coord" not in data_dict.keys():
@@ -65,65 +62,7 @@ def to_warp_sparse_tensor(data_dict: Dict, hash_method: Literal["fnv", "ravel"] 
     return sparse_conv_feat, data_dict
 
 
-class MLP(nn.Sequential):
-    def __init__(self, channels, norm_fn=None, num_layers=2, last_norm=False, last_bias=True):
-        assert len(channels) >= 2
-        modules = []
-        for i in range(num_layers - 1):
-            modules.append(nn.Linear(channels[i], channels[i + 1]))
-            if norm_fn:
-                modules.append(norm_fn(channels[i + 1]))
-            modules.append(nn.ReLU())
-        modules.append(nn.Linear(channels[-2], channels[-1], bias=last_bias))
-        if last_norm:
-            modules.append(norm_fn(channels[-1]))
-            modules.append(nn.ReLU())
-
-        return super().__init__(*modules)
-
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.constant_(m.bias, 0)
-        if isinstance(self[-1], nn.Linear):
-            nn.init.normal_(self[-1].weight, 0, 0.01)
-            nn.init.constant_(self[-1].bias, 0)
-
-
-class Adapter(nn.Module):
-    def __init__(
-        self,
-        in_channel: int,
-        text_channel: int,
-        num_layers: int,
-        last_norm: bool = True,
-    ):
-        super().__init__()
-        self.in_channel = in_channel
-        self.text_channel = text_channel
-        self.last_norm = last_norm
-
-        # vision adapter
-        adapter_channel_list = [in_channel, text_channel]
-        if num_layers == 2:
-            multiplier = int(np.log2(text_channel / in_channel))
-            adapter_channel_list = [in_channel, in_channel * multiplier, text_channel]
-
-        self.adapter = MLP(
-            adapter_channel_list,
-            norm_fn=functools.partial(nn.BatchNorm1d, eps=1e-4, momentum=0.1),
-            num_layers=num_layers,
-            last_norm=last_norm,
-        )
-
-    def forward(self, sf: SpatialFeatures) -> SpatialFeatures:
-        feats = self.adapter(sf.features)
-        sf = sf.replace(batched_features=feats)
-        return sf
-
-
-class RegionPLCToCLIP(NetworkBaseDict):
+class SparseConvUNetToCLIP(NetworkBaseDict):
     """Convert a point cloud to a language aligned feature vector using MinkUNet18."""
 
     def __init__(
@@ -135,7 +74,6 @@ class RegionPLCToCLIP(NetworkBaseDict):
     ):
         super().__init__()
         self.backbone = None
-        self.adapter = None
         self.voxel_size = voxel_size
         self.setup(backbone_cfg, adapter_cfg, **kwargs)
 

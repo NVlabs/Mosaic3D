@@ -1,19 +1,19 @@
 _target_: src.models.networks.warp.litmodule.WarpLitModule
 
 net:
-  _target_: src.models.networks.warp.regionplc.RegionPLCToCLIP
+  _target_: src.models.networks.warp.sparse_conv_unet.SparseConvUNetToCLIP
   _partial_: true
 
   backbone_cfg:
-    in_channel: ${data.in_channel}
-    in_channels: [16, 32, 48, 64, 80, 96, 112, 128]
-    out_channels: [16, 32, 48, 64, 80, 96, 112, 128]
+    in_channels: ${data.in_channel}
+    enc_channels: [16, 32, 48, 64, 80, 96, 112, 128]
+    dec_channels: [16, 32, 48, 64, 80, 96, 112, 128]
     num_blocks: 2
 
   # last mlp
   adapter_cfg:
-    in_channel: ${model.net.backbone_cfg.out_channels[0]}
-    text_channel: 512
+    in_channel: ${model.net.backbone_cfg.dec_channels[0]}
+    text_channel: ${model.clip_encoder.text_dim}
     num_layers: 2
     last_norm: true
 

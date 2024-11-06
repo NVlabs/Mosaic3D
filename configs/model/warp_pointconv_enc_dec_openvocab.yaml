@@ -1,5 +1,0 @@
-defaults:
-  - warp_pointconv_enc_dec
-
-net:
-  binary_head_cfg: false # disable binary head

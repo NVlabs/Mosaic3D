@@ -1,4 +1,4 @@
-# Test the regionplc SparseConvUNetTextSeg vs. warpconvnet RegionPLCToCLIP
+# Test the regionplc SparseConvUNetTextSeg vs. warpconvnet SparseConvUNetToCLIP
 from typing import Sequence, Dict
 import unittest
 import hydra
@@ -12,7 +12,7 @@ from warpconvnet.utils.batch_index import batch_index_from_offset
 from warpconvnet.utils.unique import unique_inverse
 
 from src.models.networks.regionplc.sparse_convnet import SparseConvUNetTextSeg
-from src.models.networks.warp.regionplc import RegionPLCToCLIP, to_warp_sparse_tensor
+from src.models.networks.warp.sparse_conv_unet import SparseConvUNetToCLIP, to_warp_sparse_tensor
 from src.models.components.structure import mean_pooling
 
 
@@ -131,7 +131,7 @@ class TestRegionPLC(unittest.TestCase):
             ),
         )
 
-        wp_model = RegionPLCToCLIP(
+        wp_model = SparseConvUNetToCLIP(
             backbone_cfg=DictConfig(
                 {
                     "in_channel": 3,
@@ -201,7 +201,7 @@ class TestRegionPLC(unittest.TestCase):
     def test_regionplc_forward(self):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         channels = [16 * (i + 1) for i in range(7)]
-        warp_model = RegionPLCToCLIP(
+        warp_model = SparseConvUNetToCLIP(
             backbone_cfg=DictConfig(
                 {
                     "in_channel": 6,
