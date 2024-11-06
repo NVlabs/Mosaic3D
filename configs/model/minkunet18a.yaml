@@ -9,6 +9,8 @@ net:
 eval_cfg:
   eval_clip_text_alignment: false
   eval_clip_image_alignment: false
+  ignore_background: false
+  ignore_class_prob: false
 
   seg_eval:
     normalize_input: ${model.loss_cfg.seg_loss.normalize_input}

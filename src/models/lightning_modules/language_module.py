@@ -85,10 +85,14 @@ class DenseLanguageLitModule(LitModuleBase):
             self.train_clip_image_alignment = loss_cfg.get("train_clip_image_alignment", False)
             self.eval_clip_text_alignment = eval_cfg.get("eval_clip_text_alignment", False)
             self.eval_clip_image_alignment = eval_cfg.get("eval_clip_image_alignment", False)
+            self.ignore_background = eval_cfg.get("ignore_background", False)
+            self.ignore_class_prob = eval_cfg.get("ignore_class_prob", False)
         else:
             self.train_clip_image_alignment = False
             self.eval_clip_text_alignment = False
             self.eval_clip_image_alignment = False
+            self.ignore_background = False
+            self.ignore_class_prob = False
 
     def prepare_data(self) -> None:
         # download clip model on rank 0
@@ -382,10 +386,16 @@ class DenseLanguageLitModule(LitModuleBase):
 
             # mask logits (voting)
             pred_logits_fg = pred_logits.clone()
-            pred_logits_fg[..., ignore_class_idx] = torch.finfo(pred_logits.dtype).min
+
+            if self.ignore_background:
+                pred_logits_fg[..., ignore_class_idx] = torch.finfo(pred_logits.dtype).min
+
             pred_logits_fg = torch.nn.functional.softmax(pred_logits_fg, dim=-1)
             pred_logits_fg = torch.stack([pred_logits_fg[mask].mean(dim=0) for mask in pred_masks])
             pred_scores, pred_classes = torch.max(pred_logits_fg, dim=1)
+
+            if self.ignore_class_prob:
+                pred_scores = torch.ones_like(pred_scores)
 
             metrics["mAP_evaluator"].update(
                 pred_classes=pred_classes,
