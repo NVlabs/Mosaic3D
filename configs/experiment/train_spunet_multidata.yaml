@@ -6,11 +6,11 @@
 defaults:
   - override /data: sc+ar+ma+st
   - override /data/transforms: null
-  - override /model: regionplc
+  - override /model: spunet34c
   - override /model/clip: recap_clip
   - override /model/loss: caption
-  - override /optim: fastai
-  - override /scheduler: fastai
+  - override /optim: sgd
+  - override /scheduler: onecyclelr
   - override /callbacks: cluster_nolr
   - override /trainer: gpu
 

@@ -8,7 +8,10 @@ import numpy as np
 import plotly.graph_objects as go
 from omegaconf import OmegaConf
 
+from src.data.arkitscenes.dataset import ARKitScenesDataset
+from src.data.matterport3d.dataset import Matterport3DDataset
 from src.data.scannet.dataset import ScanNetDataset
+from src.data.structured3d.dataset import Structured3DDataset
 
 cfg_str = """
 val_transforms:
@@ -36,6 +39,50 @@ val_transforms:
       pc_count: origin_coord
     feat_keys: ["color"]
 """
+# Initialize dataset
+cfg = OmegaConf.create(cfg_str)
+kwargs = {
+    "split": "train",
+    "caption_dir": "/datasets/openvocab-3d-captions",
+    "segment_dir": "/datasets/openvocab-3d-captions",
+    "object_sample_ratio": 1.0,
+    "transforms": cfg.val_transforms,
+}
+scannet_dataset = ScanNetDataset(
+    **kwargs,
+    data_dir="/datasets/scannet_hf",
+    caption_subset="caption.osprey.scannet-125k",
+    segment_subset="segment.sam2.scannet-125k",
+)
+matterport3_dataset = Matterport3DDataset(
+    **kwargs,
+    data_dir="/datasets/matterport3d/matterport_3d",
+    caption_subset="caption.osprey.matterport3d",
+    segment_subset="segment.sam2.matterport3d",
+)
+arkitscenes_dataset = ARKitScenesDataset(
+    **kwargs,
+    data_dir="/datasets/arkitscenes/3dod",
+    caption_subset="caption.osprey.arkitscenes",
+    segment_subset="segment.sam2.arkitscenes",
+)
+structured3d_dataset = Structured3DDataset(
+    **kwargs,
+    data_dir="/datasets/structured3d",
+    caption_subset=["caption.osprey.structured3d", "caption.osprey.structured3d-pano"],
+    segment_subset=["segment.sam2.structured3d", "segment.sam2.structured3d-pano"],
+)
+
+# Create dataset mapping
+datasets = {
+    "ScanNet": scannet_dataset,
+    "Matterport3D": matterport3_dataset,
+    "ARKitScenes": arkitscenes_dataset,
+    "Structured3D": structured3d_dataset,
+}
+
+# default dataset
+dataset = scannet_dataset
 
 
 def create_point_cloud_plot(xyz, color):
@@ -152,26 +199,11 @@ def get_caption_length(scene_index):
     return len(caption_data["caption"])
 
 
-# Initialize dataset
-cfg = OmegaConf.create(cfg_str)
-dataset = ScanNetDataset(
-    data_dir="/datasets/scannet_hf",
-    split="train",
-    transforms=cfg.val_transforms,
-    caption_dir="/datasets/openvocab-3d-captions",
-    caption_subset="caption.osprey.scannet-125k",
-    segment_dir="/datasets/openvocab-3d-captions",
-    segment_subset="segment.sam2.scannet-125k",
-    object_sample_ratio=1.0,
-    binary_mask_dir="/datasets/scannet_masks/oracle_scannet200_full",
-    num_captions_per_mask=-1,
-)
-
 with gr.Blocks(
-    title="ScanNet Scene Visualizer",
+    title="3D Scene Visualizer",
 ) as iface:
-    gr.Markdown("# ScanNet Scene Visualizer")
-    gr.Markdown("Visualize 3D scenes from ScanNet dataset with object highlighting")
+    gr.Markdown("# 3D Scene Visualizer")
+    gr.Markdown("Visualize 3D scenes from multiple datasets with object highlighting")
 
     # Get initial visualization data
     initial_fig, _, _, _ = visualize_scene(0, 0)
@@ -179,9 +211,14 @@ with gr.Blocks(
     # Initialize dropdown choices with first scene's captions
     sample = dataset[0]
     initial_choices = [f"{i}: {cap}" for i, cap in enumerate(sample["caption_data"]["caption"])]
-    initial_mask_dir = dataset.binary_mask_dir
 
     with gr.Row():
+        dataset_dropdown = gr.Dropdown(
+            label="Select Dataset",
+            choices=list(datasets.keys()),
+            value="ScanNet",
+            interactive=True,
+        )
         scene_slider = gr.Slider(
             minimum=0, maximum=len(dataset) - 1, step=1, label="Scene Index", value=0
         )
@@ -191,33 +228,34 @@ with gr.Blocks(
             value=initial_choices[0],  # Set initial value here
             interactive=True,
         )
-        mask_dir = gr.Dropdown(
-            label="Mask Directory",
-            choices=[
-                "/datasets/scannet_masks/oracle_scannet200_full",
-                "/datasets/scannet_masks/segment3d",
-            ],
-            value=initial_mask_dir,
-            interactive=True,
-        )
-        load_all_captions = gr.Checkbox(
-            label="Load All Captions per Mask",
-            value=dataset.num_captions_per_mask < 0,
-            interactive=True,
-        )
 
     with gr.Row():
         # Left column: Point cloud
         with gr.Column(scale=2):
             point_cloud = gr.Plot(label="Point Cloud", value=initial_fig)
 
-        with gr.Column(scale=-1):
+        with gr.Column(scale=1):
             caption_text = gr.Textbox(
                 label="Caption",
                 value="\n".join(initial_choices[0].split(": ", 1)[1].split("@")),
             )
 
     # Event handlers
+    def dataset_change(dataset_name):
+        """Update when dataset changes"""
+        global dataset
+        dataset = datasets[dataset_name]
+        sample = dataset[0]
+        captions = sample["caption_data"]["caption"]
+        choices = [f"{i}: {cap}" for i, cap in enumerate(captions)]
+
+        return [
+            gr.Slider(minimum=0, maximum=len(dataset) - 1, value=0),
+            gr.Dropdown(choices=choices, value=choices[0]),
+            update_visualization_only(0, 0),
+            choices[0].split(": ", 1)[1],
+        ]
+
     def scene_change(scene_idx):
         """Update dropdown and visualization when scene changes"""
         sample = dataset[scene_idx]
@@ -237,29 +275,11 @@ with gr.Blocks(
         caption = caption_choice.split(": ", 1)[1]
         return [update_visualization_only(scene_idx, obj_idx), caption]
 
-    def mask_dir_change(scene_idx, mask_dir):
-        """Update visualization when mask directory is changed"""
-        dataset.binary_mask_dir = Path(mask_dir)
-        sample = dataset[scene_idx]
-        captions = sample["caption_data"]["caption"]
-        choices = [f"{i}: {cap}" for i, cap in enumerate(captions)]
-        return [
-            gr.Dropdown(choices=choices, value=choices[0]),
-            update_visualization_only(scene_idx, 0),
-            choices[0].split(": ", 1)[1],
-        ]
-
-    def load_all_captions_change(scene_idx, load_all):
-        """Update visualization when load all captions checkbox changes"""
-        dataset.num_captions_per_mask = -1 if load_all else 1
-        sample = dataset[scene_idx]
-        captions = sample["caption_data"]["caption"]
-        choices = [f"{i}: {cap}" for i, cap in enumerate(captions)]
-        return [
-            gr.Dropdown(choices=choices, value=choices[0]),
-            update_visualization_only(scene_idx, 0),
-            choices[0].split(": ", 1)[1],
-        ]
+    dataset_dropdown.change(
+        fn=dataset_change,
+        inputs=[dataset_dropdown],
+        outputs=[scene_slider, caption_dropdown, point_cloud, caption_text],
+    )
 
     scene_slider.change(
         fn=scene_change,
@@ -273,22 +293,6 @@ with gr.Blocks(
         outputs=[point_cloud, caption_text],
     )
 
-    load_all_captions.change(
-        fn=load_all_captions_change,
-        inputs=[scene_slider, load_all_captions],
-        outputs=[caption_dropdown, point_cloud, caption_text],
-    )
-
-    mask_dir.change(
-        fn=mask_dir_change,
-        inputs=[scene_slider, mask_dir],
-        outputs=[caption_dropdown, point_cloud, caption_text],
-    )
-
-    # Initialize dropdown with first scene's captions
-    # sample = dataset[0]
-    # initial_choices = [f"{i}: {cap}" for i, cap in enumerate(sample["caption_data"]["caption"])]
-    # caption_dropdown.update(choices=initial_choices, value=initial_choices[0])
 
 if __name__ == "__main__":
     iface.launch(server_name="0.0.0.0")

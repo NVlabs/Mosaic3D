@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -314,6 +315,24 @@ class DenseLanguageLitModule(LitModuleBase):
         logits = self.clip_alignment_eval[dataloader_idx].predict(
             out_dict["clip_feat"], return_logit=True
         )
+        if (
+            hasattr(self.trainer, "ckpt_path")
+            and self.trainer.ckpt_path is not None
+            and os.environ.get("SAVE_PRED", None) is not None
+        ):
+            pred_save_dir = os.path.join(
+                os.path.dirname(os.path.dirname(self.trainer.ckpt_path)), "pred"
+            )
+            if not os.path.exists(pred_save_dir):
+                os.makedirs(pred_save_dir, exist_ok=True)
+            torch.save(
+                {
+                    "feat": out_dict["clip_feat"].cpu(),
+                    "coord": batch["origin_coord"].cpu(),
+                    "pc_count": batch["pc_count"].cpu(),
+                },
+                os.path.join(pred_save_dir, f"pred_{batch_idx}.pth"),
+            )
 
         # 1. semantic segmentation
         preds_all = logits.max(1)[1]

@@ -118,7 +118,8 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
 
     @staticmethod
     def build_class_mapper(class_idx, ignore_label, squeeze_label=False):
-        remapper = np.ones(256, dtype=np.int64) * ignore_label
+        num_classes = max(256, len(class_idx))
+        remapper = np.ones(num_classes, dtype=np.int64) * ignore_label
         for i, x in enumerate(class_idx):
             if squeeze_label:
                 remapper[x] = i

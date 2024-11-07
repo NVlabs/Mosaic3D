@@ -1,0 +1,19 @@
+_target_: src.models.networks.ptv3.litmodule.PTv3LitModule
+
+net:
+  _target_: src.models.networks.ptv3.model.PointTransformerV3
+  _partial_: true
+
+  in_channels: ${data.in_channel}
+  out_channels: ${model.clip_encoder.text_dim}
+
+eval_cfg:
+  eval_clip_text_alignment: false
+  eval_clip_image_alignment: false
+
+  seg_eval:
+    normalize_input: ${model.loss_cfg.seg_loss.normalize_input}
+    text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
+
+use_prompt: false
+compile: false

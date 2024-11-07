@@ -11,10 +11,7 @@ from torch_scatter import scatter
 from warpconvnet.utils.ravel import ravel_multi_index_auto_shape
 
 from src.models.components.misc import batch2offset, offset2batch
-
-
-def encode():
-    pass
+from src.models.networks.ptv3.serialization import encode
 
 
 def fnv_hash_vec(arr):
@@ -267,6 +264,7 @@ class PointSequential(PointModule):
                 else:
                     input = module(input)
         return input
+
 
 class Custom1x1Subm3d(spconv.SparseConv3d):
     """# current 1x1 conv in Spconv2.x has a bug.
