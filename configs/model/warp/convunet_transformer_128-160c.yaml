@@ -1,0 +1,12 @@
+defaults:
+  - warp/convunet@  # map this to model
+
+net:
+  backbone_cfg:
+    enc_channels: [32, 64, 96, 128, 160]
+    dec_channels: [128, 128, 128, 160, 160]
+    block_types: ["res", "res", "res", "res", "pattn"]
+    num_heads: [8, 8, 8, 8, 8]
+
+  adapter_cfg:
+    last_norm: false

@@ -157,3 +157,28 @@ To install pre-commit hooks and ensure your merge requests pass these checks, ru
 ```bash
 pre-commit install
 ```
+
+### Using the Latest WarpConvNet
+
+The warpconvnet codebase is updated frequently. To use the latest version, clone the repository inside openvocab-3d repository and make sure the cluster job to use the cloned warpconvnet by installing the warpconvnet via pip directly.
+
+1. Clone the warpconvnet repository inside openvocab-3d repository
+
+```bash
+cd openvocab-3d
+git clone --recurse-submodules https://gitlab-master.nvidia.com/3dmmllm/warp.git warpconvnet
+```
+
+2. When running SLURM jobs, make sure to add `cd warpconvnet; pip install -e .; cd ..;` before running the training script.
+
+
+```bash
+# Your train.sbatch
+CMD="
+...
+
+cd warpconvnet; pip install -e .; cd ..;
+
+torchrun ...
+"
+```
