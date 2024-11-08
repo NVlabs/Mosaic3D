@@ -157,16 +157,3 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
     @abstractmethod
     def load_caption(self, scene_name: str):
         raise NotImplementedError
-
-    def augment_captions(self, xyz, point_indices, captions):
-        new_point_indices = []
-        augmented_captions = []
-        for idx, caption in zip(point_indices, captions):
-            if len(idx) > 1:
-                coords = xyz[idx]
-                centroid = coords.mean(axis=0)
-                centroid_str = f"({centroid[0]:.2f}, {centroid[1]:.2f}, {centroid[2]:.2f})"
-                caption = f"{caption}, located at {centroid_str})"
-                augmented_captions.append(caption)
-                new_point_indices.append(idx)
-        return new_point_indices, augmented_captions

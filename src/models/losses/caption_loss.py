@@ -1,16 +1,17 @@
 from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
-import src.utils.dist_utils as dist_utils
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 from jaxtyping import Bool, Float, Int
-from src.models.losses.loss_base import LossBase
-from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 from torch import Tensor
 from torch.nn import functional as F
 from torch_scatter import scatter, segment_csr
+
+import src.utils.dist_utils as dist_utils
+from src.models.losses.loss_base import LossBase
+from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 
 
 class CaptionLossBase(LossBase):

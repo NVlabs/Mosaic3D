@@ -1,9 +1,9 @@
 import copy
 import numbers
 import random
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import List, Optional
-from collections import Counter
 
 import numpy as np
 import scipy
@@ -1203,6 +1203,83 @@ class FilterCaption:
 
     def __repr__(self):
         return f"FilterCaption(filter={self.filter})"
+
+
+@TRANSFORMS.register_module()
+class AugmentCaption:
+    def __init__(self):
+        self.location_prompts = [
+            # Original patterns
+            "{}, located at {}",
+            "{}, placed at {}",
+            "{}, positioned at {}",
+            "{}, set at {}",
+            "{}, situated at {}",
+            "{}, anchored at {}",
+            "{}, fixed at {}",
+            "{}, installed at {}",
+            "{}, mounted at {}",
+            # Position and arrangement patterns
+            "{}, arranged at {}",
+            "{}, aligned at {}",
+            "{}, centered at {}",
+            "{}, oriented at {}",
+            "{}, stationed at {}",
+            "{}, established at {}",
+            "{}, secured at {}",
+            "{}, deployed at {}",
+            "{}, housed at {}",
+            # Geographic and spatial patterns
+            "{}, found at {}",
+            "{}, discovered at {}",
+            "{}, spotted at {}",
+            "{}, observed at {}",
+            "{}, detected at {}",
+            "{}, present at {}",
+            "{}, visible at {}",
+            "{}, appearing at {}",
+            "{}, residing at {}",
+            # Placement and fixture patterns
+            "{}, affixed at {}",
+            "{}, attached at {}",
+            "{}, fastened at {}",
+            "{}, secured at {}",
+            "{}, embedded at {}",
+            "{}, integrated at {}",
+            "{}, incorporated at {}",
+            "{}, settled at {}",
+            "{}, rooted at {}",
+            # Location and presence patterns
+            "{}, standing at {}",
+            "{}, resting at {}",
+            "{}, remaining at {}",
+            "{}, contained at {}",
+            "{}, confined at {}",
+            "{}, preserved at {}",
+            "{}, maintained at {}",
+            "{}, stored at {}",
+            "{}, kept at {}",
+        ]
+
+    def __call__(self, data_dict):
+        if "caption_data" not in data_dict:
+            return data_dict
+
+        caption_dict = data_dict["caption_data"]
+        coord = data_dict["coord"]
+        captions = caption_dict["caption"]
+        caption_point_indices = caption_dict["idx"]
+        new_captions, new_idx = [], []
+        for caption, idx in zip(captions, caption_point_indices):
+            if len(idx) > 1:
+                centroid = coord[idx].mean(axis=0)
+                centroid_str = f"({centroid[0]:.2f}, {centroid[1]:.2f}, {centroid[2]:.2f})"
+                prompt = random.choice(self.location_prompts)
+                augmented_caption = prompt.format(caption, centroid_str)
+                new_captions.append(augmented_caption)
+                new_idx.append(idx)
+        data_dict["caption_data"] = {"caption": new_captions, "idx": new_idx}
+        return data_dict
 
 
 class Compose:
