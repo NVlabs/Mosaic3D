@@ -1,17 +1,16 @@
 from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
+import src.utils.dist_utils as dist_utils
 import torch
 import torch.distributed as dist
 import torch.nn as nn
 from jaxtyping import Bool, Float, Int
+from src.models.losses.loss_base import LossBase
+from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 from torch import Tensor
 from torch.nn import functional as F
 from torch_scatter import scatter, segment_csr
-
-import src.utils.dist_utils as dist_utils
-from src.models.losses.loss_base import LossBase
-from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
 
 
 class CaptionLossBase(LossBase):
@@ -356,18 +355,17 @@ class CaptionSigLIPLoss(CaptionCLIPLoss):
             segment_features = nn.functional.normalize(segment_features, dim=-1)
             logits = self.get_logits(segment_features, text_features)
             labels = self.get_ground_truth(logits.shape, device, labels_per_segment, negative_only)
-            probs = F.sigmoid(logits)
-            loss = F.binary_cross_entropy(probs, labels)
+            loss = F.binary_cross_entropy_with_logits(logits, labels)
         # compute logits first -> probability pooling
         else:
+            point_features = nn.functional.normalize(point_features, dim=-1)
             logits = self.get_logits(point_features, text_features)
-            probs = F.sigmoid(logits)
-            rep_probs = probs[point_indices]
-            reduced_probs = segment_csr(rep_probs, caption_offsets.to(device), reduce="mean")
+            rep_logits = logits[point_indices]
+            reduced_logits = segment_csr(rep_logits, caption_offsets.to(device), reduce="mean")
             labels = self.get_ground_truth(
-                reduced_probs.shape, device, labels_per_segment, negative_only
+                reduced_logits.shape, device, labels_per_segment, negative_only
             )
-            loss = F.binary_cross_entropy(reduced_probs, labels)
+            loss = F.binary_cross_entropy_with_logits(reduced_logits, labels)
         return loss
 
     def loss(

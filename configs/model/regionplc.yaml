@@ -16,7 +16,7 @@ net:
     in_channel: ${model.net.backbone_cfg.mid_channel}
     text_channel: ${model.clip_encoder.text_dim}
     num_layers: 2
-    last_norm: true
+    last_norm: false
 
   binary_head_cfg: false
 
@@ -30,5 +30,5 @@ eval_cfg:
     normalize_input: ${model.loss_cfg.seg_loss.normalize_input}
     text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
 
-use_prompt: false
+use_prompt: true
 compile: false

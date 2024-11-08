@@ -27,6 +27,6 @@ eval_cfg:
     normalize_input: ${model.loss_cfg.seg_loss.normalize_input}
     text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
 
-use_prompt: false
+use_prompt: true
 
 compile: false
