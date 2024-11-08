@@ -24,6 +24,7 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         caption_subset: Optional[Union[str, List[str]]] = None,
         segment_dir: Optional[str] = None,
         segment_subset: Optional[Union[str, List[str]]] = None,
+        object_num_max: Optional[int] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -38,6 +39,7 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         assert self.data_dir.exists(), f"{self.data_dir} not exist."
 
         self.split = split
+        self.object_num_max = object_num_max
         self.object_sample_ratio = object_sample_ratio
         self.base_class_idx = base_class_idx
         self.novel_class_idx = novel_class_idx
@@ -157,3 +159,15 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
     @abstractmethod
     def load_caption(self, scene_name: str):
         raise NotImplementedError
+
+    def load_caption_and_sample(self, scene_name: str):
+        try:
+            point_indices, captions = self.load_caption(scene_name)
+            if self.object_num_max is not None and self.object_num_max < len(point_indices):
+                sel = np.random.choice(len(point_indices), self.object_num_max, replace=False)
+                point_indices = [point_indices[i] for i in sel]
+                captions = [captions[i] for i in sel]
+        except Exception as e:
+            log.error(f"Error loading caption for scene {scene_name}: {e}", stacklevel=2)
+            point_indices, captions = [], []
+        return point_indices, captions

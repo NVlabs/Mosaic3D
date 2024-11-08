@@ -9,7 +9,7 @@ train_dataset:
   caption_subset: caption.osprey.scannet
   segment_dir: /datasets/openvocab-3d-captions
   segment_subset: segment.sam2.scannet
-  object_sample_ratio: 1.0
+  object_num_max: 300 
   ignore_label: -100
   repeat: 4
   transforms: ${data.train_transforms}

@@ -3,7 +3,7 @@ _partial_: true
 data_dir: /datasets/scannet_hf
 caption_dir: /datasets/regionplc_converted/
 caption_subset: detic-template_and_kosmos_125k_iou0.2
-object_sample_ratio: 0.2
+object_num_max: 300
 split: train
 transforms:
   - type: Copy

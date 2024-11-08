@@ -40,6 +40,7 @@ class ScanNetDataset(DatasetBase):
         caption_subset: Optional[Union[str, List[str]]] = None,
         segment_dir: Optional[str] = None,
         segment_subset: Optional[Union[str, List[str]]] = None,
+        object_num_max: Optional[int] = None,
         object_sample_ratio: Optional[float] = None,
         base_class_idx: Optional[List[int]] = None,
         novel_class_idx: Optional[List[int]] = None,
@@ -63,6 +64,7 @@ class ScanNetDataset(DatasetBase):
             caption_subset=caption_subset,
             segment_dir=segment_dir,
             segment_subset=segment_subset,
+            object_num_max=object_num_max,
             object_sample_ratio=object_sample_ratio,
             base_class_idx=base_class_idx,
             novel_class_idx=novel_class_idx,
@@ -138,43 +140,25 @@ class ScanNetDataset(DatasetBase):
 
         cumsum = np.cumsum(num_points)[:-1]
         point_indices = np.split(point_indices_flatten, cumsum)
-
-        if self.object_sample_ratio < 1.0:
-            sel = np.random.choice(
-                np.arange(len(object_ids)),
-                max(1, int(len(object_ids) * self.object_sample_ratio)),
-                replace=False,
-            )
-            object_ids = object_ids[sel]
-            captions = captions[sel]
-            num_points = num_points[sel]
-            point_indices = [point_indices[i] for i in sel]
-
         point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
+
         captions = list(captions)
         return point_indices, captions
 
     def _load_caption(self, scene_name, caption_dir, segment_dir):
         indices_path = segment_dir / scene_name / "point_indices.npz"
-        point_indices = unpack_list_of_np_arrays(indices_path)
-
         caption_path = caption_dir / scene_name / "captions.npz"
+        if not indices_path.exists() or not caption_path.exists():
+            return [], []
+
+        point_indices = unpack_list_of_np_arrays(indices_path)
         captions = unpack_list_of_np_arrays(caption_path)
 
         # flatten the list of list
         point_indices = [item for sublist in point_indices for item in sublist]
+        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
         captions = [item for sublist in captions for item in sublist]
 
-        if self.object_sample_ratio < 1.0:
-            sel = np.random.choice(
-                np.arange(len(captions)),
-                max(1, int(len(captions) * self.object_sample_ratio)),
-                replace=False,
-            )
-            captions = [captions[i] for i in sel]
-            point_indices = [point_indices[i] for i in sel]
-
-        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
         return point_indices, captions
 
     def load_clip_point_indices(
@@ -262,11 +246,7 @@ class ScanNetDataset(DatasetBase):
 
         # load captions
         if self.split == "train" or self.clip_text_alignment:
-            try:
-                point_indices, captions = self.load_caption(scene_name)
-            except Exception as e:
-                log.error(f"Error loading caption for scene {scene_name}: {e}", stacklevel=2)
-                point_indices, captions = [], []
+            point_indices, captions = self.load_caption_and_sample(scene_name)
             data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
             if self.clip_text_alignment:

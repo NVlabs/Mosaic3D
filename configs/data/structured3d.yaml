@@ -13,7 +13,7 @@ train_dataset:
   segment_subset:
     - segment.sam2.structured3d
     - segment.sam2.structured3d-pano
-  object_sample_ratio: 1.0
+  object_num_max: 300
   base_class_idx: []
   novel_class_idx: []
   ignore_class_idx: [22, 23, 24]

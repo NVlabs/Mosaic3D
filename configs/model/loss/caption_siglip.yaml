@@ -4,6 +4,7 @@ loss_cfg:
     type: siglip
     reduction: weighted_sum
     use_logit_scale: true
+    pooling_first: true
   seg_loss:
     normalize_input: false
     text_clip_path: !!null

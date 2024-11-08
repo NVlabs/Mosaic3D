@@ -19,7 +19,7 @@ train_dataset:
       segment_subset: 
         - segment.sam2.scannet-125k
         - segment.seem-panoptic.scannet-125k
-      object_sample_ratio: 0.15
+      object_num_max: 300
       ignore_label: ${data.train_dataset.ignore_label}
       repeat: 1
       transforms:
@@ -95,10 +95,14 @@ train_dataset:
       split: train
       data_dir: /datasets/arkitscenes/3dod
       caption_dir: /datasets/openvocab-3d-captions
-      caption_subset: caption.osprey.arkitscenes-rectified
+      caption_subset: 
+        - caption.osprey.arkitscenes-rectified
+        - caption.seem-panoptic-osprey.arkitscenes-rectified
       segment_dir: /datasets/openvocab-3d-captions
-      segment_subset: segment.sam2.arkitscenes-rectified
-      object_sample_ratio: 0.2
+      segment_subset: 
+        - segment.sam2.arkitscenes-rectified
+        - segment.seem-panoptic.arkitscenes-rectified
+      object_num_max: 300
       ignore_label: -100
       repeat: 1
       transforms:

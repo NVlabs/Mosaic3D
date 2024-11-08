@@ -9,7 +9,7 @@ train_dataset:
   caption_subset: caption.osprey.matterport3d
   segment_dir: /datasets/openvocab-3d-captions
   segment_subset: segment.sam2.matterport3d
-  object_sample_ratio: 0.2
+  object_num_max: 300
   base_class_idx: []
   novel_class_idx: []
   ignore_class_idx: [19]
