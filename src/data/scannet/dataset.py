@@ -52,6 +52,7 @@ class ScanNetDataset(DatasetBase):
         clip_input_resolution: int = 224,
         mask_dir: Optional[str] = None,
         log_postfix: Optional[str] = None,
+        use_location_augmentation: bool = False,
     ):
         super().__init__(
             dataset_name="scannetv2",
@@ -79,6 +80,8 @@ class ScanNetDataset(DatasetBase):
         # load clip preprocessing/tokenizer
         self.tokenize_text = clip.tokenize
         self.preprocess_image = clip._transform(clip_input_resolution)
+
+        self.use_location_augmentation = use_location_augmentation
 
     def load_point_cloud(self, scene_name: str):
         scene_dir = self.data_dir / self.split / scene_name
@@ -261,6 +264,8 @@ class ScanNetDataset(DatasetBase):
         if self.split == "train" or self.clip_text_alignment:
             try:
                 point_indices, captions = self.load_caption(scene_name)
+                if self.use_location_augmentation:
+                    point_indices, captions = self.augment_captions(coord, point_indices, captions)
             except Exception as e:
                 log.error(f"Error loading caption for scene {scene_name}: {e}", stacklevel=2)
                 point_indices, captions = [], []
