@@ -47,7 +47,6 @@ tags:
   - ${hydra:runtime.choices.optim}
   - ${hydra:runtime.choices.scheduler}
   - ${hydra:runtime.choices.data}
-  - ${hydra:runtime.choices.data/transforms}
 
 # set False to skip model training
 train: True
