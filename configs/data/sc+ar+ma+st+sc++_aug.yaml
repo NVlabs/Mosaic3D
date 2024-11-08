@@ -268,7 +268,7 @@ train_dataset:
       split: train
       data_dir: /datasets/structured3d
       caption_dir: /datasets/openvocab-3d-captions
-      ccaption_subset:
+      caption_subset:
         - caption.osprey.structured3d
         - caption.osprey.structured3d-pano
         - caption.seem-panoptic-osprey.structured3d
