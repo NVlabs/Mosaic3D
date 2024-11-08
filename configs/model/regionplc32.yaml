@@ -1,0 +1,6 @@
+defaults:
+ - regionplc
+
+net:
+  backbone_cfg:
+    mid_channel: 32 
