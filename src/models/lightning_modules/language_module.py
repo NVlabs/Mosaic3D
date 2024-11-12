@@ -297,10 +297,7 @@ class DenseLanguageLitModule(LitModuleBase):
                         f"a {c} in a scene" if "other" not in c else "other" for c in class_names
                     ]  # OpenScene setting
                 text_embedding = caption_utils.forward_text_encoder(
-                    class_names,
-                    self.clip_encoder,
-                    normalize=True,
-                    device=self.clip_encoder.text_projection.device,
+                    class_names, self.clip_encoder, normalize=True, device=self.device
                 )
                 eval_module.set_target_embedding(text_embedding.to(self.device))
             else:
