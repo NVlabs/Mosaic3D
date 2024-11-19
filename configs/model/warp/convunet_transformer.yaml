@@ -1,5 +1,5 @@
 defaults:
-  - warp/convunet@  # map this to model
+  - warp/convunet@ # map this to model
 
 net:
   backbone_cfg:

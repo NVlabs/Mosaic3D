@@ -52,7 +52,7 @@ train_dataset:
       mode: captioned
     - type: SphereCrop
       point_max: 120000
-      mode: captioned 
+      mode: captioned
     - type: NormalizeColor
     - type: ToTensor
     - type: Collect

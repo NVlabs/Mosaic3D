@@ -142,7 +142,7 @@ class HPCSignalHandler:
     def is_stopped(self):
         global _STATUS
         return _STATUS == "STOPPED"
-    
+
     def is_finished(self):
         global _STATUS
         return _STATUS == "FINISHED"

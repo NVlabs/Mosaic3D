@@ -29,9 +29,7 @@ def project_3d_point_to_image(xyz_world, pose, depth, depth_hw, depth_intrinsic)
     image_depth = depth_1d[uv_1d.astype(np.int64)]
     depth_mask_1d = depth_mask_1d[uv_1d.astype(np.int64)]
     projected_depth = d[valid_idx]
-    depth_valid_mask = depth_mask_1d & (
-        np.abs(image_depth - projected_depth) <= 0.2 * image_depth
-    )
+    depth_valid_mask = depth_mask_1d & (np.abs(image_depth - projected_depth) <= 0.2 * image_depth)
 
     # corresponding image coords
     uv_1d = uv_1d[depth_valid_mask]

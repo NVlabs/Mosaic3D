@@ -4,7 +4,7 @@
 #SBATCH --time=04:00:00                  # Adjust time limit as needed
 #SBATCH --exclusive
 #SBATCH --cpus-per-task=31
-#SBATCH --mem=1843200                      
+#SBATCH --mem=1843200
 #SBATCH --output=slurm_outputs/%j.log
 #SBATCH --job-name=openvocab-3d-training
 #SBATCH --signal=SIGUSR1@300             # Send SIGUSR1 300 seconds before time limit

@@ -71,7 +71,7 @@ def xyz2key(
     b: Optional[Union[torch.Tensor, int]] = None,
     depth: int = 16,
 ):
-    r"""Encodes :attr:`x`, :attr:`y`, :attr:`z` coordinates to the shuffled keys
+    r"""Encodes `x`, `y`, and `z` coordinates to the shuffled keys
     based on pre-computed look up tables. The speed of this function is much
     faster than the method based on for-loop.
 
@@ -80,8 +80,8 @@ def xyz2key(
       y (torch.Tensor): The y coordinate.
       z (torch.Tensor): The z coordinate.
       b (torch.Tensor or int): The batch index of the coordinates, and should be
-          smaller than 32768. If :attr:`b` is :obj:`torch.Tensor`, the size of
-          :attr:`b` must be the same as :attr:`x`, :attr:`y`, and :attr:`z`.
+          smaller than 32768. If `b` is `torch.Tensor`, the size of
+          `b` must be the same as `x`, `y`, and `z`.
       depth (int): The depth of the shuffled key, and must be smaller than 17 (< 17).
     """
 
@@ -103,7 +103,7 @@ def xyz2key(
 
 
 def key2xyz(key: torch.Tensor, depth: int = 16):
-    r"""Decodes the shuffled key to :attr:`x`, :attr:`y`, :attr:`z` coordinates
+    r"""Decodes the shuffled key to `x`, `y`, `z` coordinates
     and the batch index based on pre-computed look up tables.
 
     Args:

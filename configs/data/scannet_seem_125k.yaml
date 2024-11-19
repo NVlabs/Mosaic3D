@@ -8,4 +8,3 @@ train_dataset:
   segment_subset:
     - segment.sam2.scannet-125k
     - segment.seem.scannet-125k
-

@@ -58,7 +58,7 @@ train_dataset:
       mode: captioned
     - type: SphereCrop
       point_max: 120000
-      mode: captioned 
+      mode: captioned
     - type: NormalizeColor
     - type: ToTensor
     - type: Collect
@@ -76,7 +76,7 @@ train_dataset:
       offset_keys_dict:
         offset: coord
         pc_count: origin_coord
-      feat_keys: ["color"] 
+      feat_keys: ["color"]
 
 val_datasets:
   - _target_: src.data.scannet.dataset.ScanNetDataset

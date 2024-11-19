@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: sc+ma+st+ar 
+  - override /data: sc+ma+st+ar
   - override /data/transforms: null
   - override /model: spunet34c+ppt
   - override /model/clip: recap_clip

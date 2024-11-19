@@ -14,4 +14,4 @@ loss_cfg:
     binary_loss: 1.0
     caption_loss: 0.5
     seg_loss: 1.0
-  sync_dist: false 
+  sync_dist: false

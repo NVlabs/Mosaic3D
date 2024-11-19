@@ -4,11 +4,11 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: scannet_seem_panoptic_125k 
+  - override /data: scannet_seem_panoptic_125k
   - override /model: ptv3
   - override /model/clip: recap_clip
   - override /model/loss: caption
-  - override /optim: adamw 
+  - override /optim: adamw
   - override /scheduler: onecyclelr
   - override /callbacks: cluster_nolr
   - override /trainer: gpu

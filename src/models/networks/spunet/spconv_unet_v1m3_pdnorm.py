@@ -11,6 +11,7 @@ from typing import List, Optional
 import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
+from torch_scatter import scatter
 
 from src.models.components.structure import (
     Custom1x1Subm3d,

@@ -1,5 +1,5 @@
 defaults:
-  - scannet 
+  - scannet
 
 train_dataset:
   caption_subset: caption.osprey.scannet-125k

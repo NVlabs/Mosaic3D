@@ -26,9 +26,7 @@ class TestMeanPooling(unittest.TestCase):
     def test_mean_pooling(self):
         # convert the coordinatest to voxel coordinates
         voxel_coords = self.pc.coordinates // self.voxel_size
-        batch_indices = batch_index_from_offset(
-            self.pc.offsets, device=str(self.device)
-        )
+        batch_indices = batch_index_from_offset(self.pc.offsets, device=str(self.device))
         batched_coords = torch.cat(
             [batch_indices.view(-1, 1).int(), voxel_coords.int()], dim=1
         ).contiguous()
@@ -55,9 +53,7 @@ class TestMeanPooling(unittest.TestCase):
     def test_point_to_sparse_wrapper(self):
         # convert the coordinatest to voxel coordinates
         voxel_coords = self.pc.coordinates // self.voxel_size
-        batch_indices = batch_index_from_offset(
-            self.pc.offsets, device=str(self.device)
-        )
+        batch_indices = batch_index_from_offset(self.pc.offsets, device=str(self.device))
         batched_coords = torch.cat(
             [batch_indices.view(-1, 1).int(), voxel_coords.int()], dim=1
         ).contiguous()

@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: scannet_seem_panoptic_125k 
+  - override /data: scannet_seem_panoptic_125k
   - override /data/transforms: ptv3_transforms_caption
   - override /model: warp/convunet_transformer
   - override /model/clip: recap_clip

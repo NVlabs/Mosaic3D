@@ -2,7 +2,7 @@ _target_: src.models.networks.regionplc.litmodule.RegionPLCLitModule
 
 net:
   _target_: src.models.networks.ppt.model.PPT
-  _partial_: true 
+  _partial_: true
 
   conditions: ${data.train_dataset.conditions}
   context_channels: 256

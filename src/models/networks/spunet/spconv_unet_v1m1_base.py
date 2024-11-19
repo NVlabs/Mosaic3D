@@ -331,7 +331,6 @@ class SpUNetBase(nn.Module):
 
 
 class SpUNetBottleneck(SpUNetBase):
-
     def __init__(
         self,
         in_channels,

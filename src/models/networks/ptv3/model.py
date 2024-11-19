@@ -89,7 +89,7 @@ class Point(Dict):
         assert "batch" in self.keys()
         if "grid_coord" not in self.keys():
             # if you don't want to operate GridSampling in data augmentation,
-            # please add the following augmentation into your pipline:
+            # please add the following augmentation into your pipeline:
             # dict(type="Copy", keys_dict={"grid_size": 0.01}),
             # (adjust `grid_size` to what your want)
             assert {"grid_size", "coord"}.issubset(self.keys())
@@ -147,7 +147,7 @@ class Point(Dict):
         assert {"feat", "batch"}.issubset(self.keys())
         if "grid_coord" not in self.keys():
             # if you don't want to operate GridSampling in data augmentation,
-            # please add the following augmentation into your pipline:
+            # please add the following augmentation into your pipeline:
             # dict(type="Copy", keys_dict={"grid_size": 0.01}),
             # (adjust `grid_size` to what your want)
             assert {"grid_size", "coord"}.issubset(self.keys())
@@ -202,7 +202,7 @@ class PointSequential(PointModule):
 
     def __getitem__(self, idx):
         if not (-len(self) <= idx < len(self)):
-            raise IndexError("index {} is out of range".format(idx))
+            raise IndexError(f"index {idx} is out of range")
         if idx < 0:
             idx += len(self)
         it = iter(self._modules.values())
@@ -288,12 +288,7 @@ class PDNorm(PointModule):
         return point
 
 
-"""
-Point Transformer - V3 Mode1
-
-Author: Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
-Please cite our work if the code is helpful to you.
-"""
+# Point Transformer V3 Model by Xiaoyang Wu (xiaoyang.wu.cs@gmail.com)
 
 # import math
 # from functools import partial

@@ -171,7 +171,6 @@ git clone --recurse-submodules https://gitlab-master.nvidia.com/3dmmllm/warp.git
 
 2. When running SLURM jobs, make sure to add `cd warpconvnet; pip install -e .; cd ..;` before running the training script.
 
-
 ```bash
 # Your train.sbatch
 CMD="

@@ -4,7 +4,7 @@ train_dataset:
   _target_: src.data.concat_dataset.ConcatDataset
   _partial_: true
   ignore_label: -100
-  conditions: ["ScanNet", "ARKitScenes","Matterport3D", "Structured3D"]
+  conditions: ["ScanNet", "ARKitScenes", "Matterport3D", "Structured3D"]
   repeat: 4
   datasets:
     - _target_: src.data.scannet.dataset.ScanNetDataset
@@ -12,11 +12,11 @@ train_dataset:
       data_dir: /datasets/scannet_hf
       split: train
       caption_dir: /datasets/openvocab-3d-captions
-      caption_subset: 
+      caption_subset:
         - caption.osprey.scannet-125k
         - caption.seem-panoptic-osprey.scannet-125k
       segment_dir: /datasets/openvocab-3d-captions
-      segment_subset: 
+      segment_subset:
         - segment.sam2.scannet-125k
         - segment.seem-panoptic.scannet-125k
       object_num_max: 300
@@ -96,11 +96,11 @@ train_dataset:
       split: train
       data_dir: /datasets/arkitscenes/3dod
       caption_dir: /datasets/openvocab-3d-captions
-      caption_subset: 
+      caption_subset:
         - caption.osprey.arkitscenes-rectified
         - caption.seem-panoptic-osprey.arkitscenes-rectified
       segment_dir: /datasets/openvocab-3d-captions
-      segment_subset: 
+      segment_subset:
         - segment.sam2.arkitscenes-rectified
         - segment.seem-panoptic.arkitscenes-rectified
       object_num_max: 300
@@ -152,7 +152,7 @@ train_dataset:
           mode: captioned
         - type: SphereCrop
           point_max: 120000
-          mode: captioned 
+          mode: captioned
         - type: NormalizeColor
         - type: AugmentCaption
         - type: Add
@@ -175,17 +175,17 @@ train_dataset:
           offset_keys_dict:
             offset: coord
             pc_count: origin_coord
-          feat_keys: ["color"] 
+          feat_keys: ["color"]
     - _target_: src.data.matterport3d.dataset.Matterport3DDataset
       _partial_: true
       split: train
       data_dir: /datasets/matterport3d/matterport_3d
       caption_dir: /datasets/openvocab-3d-captions
-      caption_subset: 
+      caption_subset:
         - caption.osprey.matterport3d
         - caption.seem-panoptic-osprey.matterport3d
       segment_dir: /datasets/openvocab-3d-captions
-      segment_subset: 
+      segment_subset:
         - segment.sam2.matterport3d
         - segment.seem-panoptic.matterport3d
       object_num_max: 300
