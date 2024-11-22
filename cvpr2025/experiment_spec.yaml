@@ -1,0 +1,108 @@
+paths:
+  junha: &junha_path /lustre/fsw/portfolios/nvr/users/junhal/projects/openvocab-3d/results
+  chunghyun: &chunghyun_path /lustre/fsw/portfolios/nvr/users/chunghyunp/projects/openvocab-3d/results
+
+experiments:
+  data_scale:
+    xaxis: "Dataset size"
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: sc
+        jobid: 3988223
+      - name: sc+ar
+        jobid: 3965619
+      - name: sc+ar+sc++
+        jobid: 3940846
+      - name: sc+ar+sc+++ma
+        jobid: 3965623
+      - name: sc+ar+sc+++ma+st
+        jobid: 3940849
+
+  data_scale_wo_ppt:
+    xaxis: "Dataset size"
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: sc
+        jobid: 3988301
+      - name: sc+ar
+        jobid: 3948665
+      - name: sc+ar+sc++
+        jobid: 3940847
+      - name: sc+ar+sc+++ma
+        jobid: 3948717
+      - name: sc+ar+sc+++ma+st
+        jobid: 4048017
+
+  model_scale:
+    xaxis: "Model size"
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: spunet14a
+        jobid: 3965725
+      - name: spunet18a
+        jobid: 3940922
+      - name: spunet34c
+        jobid: 3940846
+      - name: spunet50c
+        jobid: 3965724
+      - name: spunet101c
+        jobid: 3965721
+
+  model_scale_wo_ppt:
+    xaxis: "Model size"
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: spunet14a
+        jobid: 3952934
+      - name: spunet18a
+        jobid: 3940921
+      - name: spunet34c
+        jobid: 3940847
+      - name: spunet50c
+        jobid: 3953471
+      - name: spunet101c
+        jobid: 3953472
+
+  clip_ablation:
+    xaxis: "CLIP variant"
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: clip-b32
+        jobid: 4072776
+      - name: clip-b16
+        jobid: 4072733
+      - name: clip-l14
+        jobid: 4072735
+      - name: recap-clip
+        jobid: 3940849
+      - name: siglip
+        jobid: 4072774
+
+  longer_training:
+    xaxis: "Training duration"
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: repeat2
+        jobid: 4073699
+      - name: repeat3
+        jobid: 4073701
+      - name: repeat4
+        jobid: 4073703
+      - name: repeat5
+        jobid: 4073704
+
+  use_segment3d_in_captioning:
+    xaxis: ""
+    yaxis: "ScanNet200 Val mIoU"
+    root_path: *junha_path
+    job_list:
+      - name: segment3d-mosaic
+        jobid: 4100572
+      - name: segment3d-gathered
+        jobid: 4101273
