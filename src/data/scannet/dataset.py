@@ -108,9 +108,14 @@ class ScanNetDataset(DatasetBase):
                 and hasattr(self, "segment_dir")
                 and (self.segment_dir[i] / scene_name / "point_indices.npz").exists()
             ):
-                point_indices, captions = self._load_caption(
-                    scene_name, caption_dir, self.segment_dir[i]
-                )
+                if "gathered" in str(caption_dir):
+                    point_indices, captions = self._load_caption_gathered(
+                        scene_name, caption_dir, self.segment_dir[i]
+                    )
+                else:
+                    point_indices, captions = self._load_caption(
+                        scene_name, caption_dir, self.segment_dir[i]
+                    )
             else:
                 raise FileNotFoundError(
                     f"No caption data found for scene {scene_name} in any of the provided directories."
@@ -143,6 +148,28 @@ class ScanNetDataset(DatasetBase):
         point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
 
         captions = list(captions)
+        return point_indices, captions
+
+    def _load_caption_gathered(self, scene_name, caption_dir, segment_dir):
+        indices_path = segment_dir / scene_name / "point_indices.npz"
+        caption_path = caption_dir / scene_name / "captions.npz"
+        if not indices_path.exists() or not caption_path.exists():
+            return [], []
+
+        point_indices = unpack_list_of_np_arrays(indices_path)
+        captions = unpack_list_of_np_arrays(caption_path)
+
+        num_captions_per_object = [len(c) for c in captions]
+        # randomly select one caption per object
+        idx_select_caption = np.cumsum(
+            np.insert(num_captions_per_object, 0, 0)[0:-1]
+        ) + np.random.randint(0, num_captions_per_object, len(num_captions_per_object))
+
+        # flatten the list of list
+        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
+        captions = [item for sublist in captions for item in sublist]
+        captions = [captions[i] for i in idx_select_caption]
+
         return point_indices, captions
 
     def _load_caption(self, scene_name, caption_dir, segment_dir):

@@ -163,6 +163,7 @@ class DenseLanguageLitModule(LitModuleBase):
                 bg_class_idx=dataset.bg_class_idx,
                 ignore_label=dataset.ignore_label,
                 instance_ignore_class_idx=dataset.instance_ignore_class_idx,
+                subset_mapper=dataset.subset_mapper if hasattr(dataset, "subset_mapper") else None,
             )
             self.val_metrics.append(val_metric)
             self.val_class_info.append(val_class_info)
@@ -288,6 +289,7 @@ class DenseLanguageLitModule(LitModuleBase):
         return loss
 
     def on_validation_epoch_start(self):
+        self.clip_encoder = self.clip_encoder.to(self.device)
         for class_info, eval_module in zip(self.val_class_info, self.clip_alignment_eval):
             class_names = class_info["class_names"]
 
@@ -464,6 +466,38 @@ class DenseLanguageLitModule(LitModuleBase):
                     f"{val_section}/macc_all": macc_all,
                 }
             )
+            if class_info["subset_mapper"] is not None:
+                subset_mapper = class_info["subset_mapper"]
+                subset_names = subset_mapper["subset_names"]
+                subset_mious = {}
+                subset_maccs = {}
+                for subset_name in subset_names:
+                    subset_mious[subset_name] = np.nanmean(
+                        [
+                            class_ious[class_name]
+                            for class_name in class_names
+                            if subset_mapper[class_name] == subset_name
+                        ]
+                    )
+                    subset_maccs[subset_name] = np.nanmean(
+                        [
+                            class_accs[class_name]
+                            for class_name in class_names
+                            if subset_mapper[class_name] == subset_name
+                        ]
+                    )
+                log_metrics.update(
+                    {
+                        f"{val_section}/miou_{subset_name}": v
+                        for subset_name, v in subset_mious.items()
+                    }
+                )
+                log_metrics.update(
+                    {
+                        f"{val_section}/macc_{subset_name}": v
+                        for subset_name, v in subset_maccs.items()
+                    }
+                )
 
             if (
                 hasattr(class_info, "base_class_idx")

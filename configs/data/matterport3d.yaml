@@ -25,8 +25,38 @@ val_datasets:
     ignore_class_idx: ${data.train_dataset.ignore_class_idx}
     novel_class_idx: ${data.train_dataset.novel_class_idx}
     ignore_label: ${data.train_dataset.ignore_label}
-    split: val
-    log_postfix: matterport3d
+    split: test
+    log_postfix: matterport3d_21
+    transforms: ${data.val_transforms}
+  - _target_: src.data.matterport3d.dataset.Matterport3D40Dataset
+    _partial_: true
+    data_dir: /datasets/matterport3d/matterport_3d_40
+    base_class_idx: ${data.train_dataset.base_class_idx}
+    ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+    novel_class_idx: ${data.train_dataset.novel_class_idx}
+    ignore_label: ${data.train_dataset.ignore_label}
+    split: test
+    log_postfix: matterport3d_40
+    transforms: ${data.val_transforms}
+  - _target_: src.data.matterport3d.dataset.Matterport3D80Dataset
+    _partial_: true
+    data_dir: /datasets/matterport3d/matterport_3d_80
+    base_class_idx: ${data.train_dataset.base_class_idx}
+    ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+    novel_class_idx: ${data.train_dataset.novel_class_idx}
+    ignore_label: ${data.train_dataset.ignore_label}
+    split: test
+    log_postfix: matterport3d_80
+    transforms: ${data.val_transforms}
+  - _target_: src.data.matterport3d.dataset.Matterport3D160Dataset
+    _partial_: true
+    data_dir: /datasets/matterport3d/matterport_3d_160
+    base_class_idx: ${data.train_dataset.base_class_idx}
+    ignore_class_idx: ${data.train_dataset.ignore_class_idx}
+    novel_class_idx: ${data.train_dataset.novel_class_idx}
+    ignore_label: ${data.train_dataset.ignore_label}
+    split: test
+    log_postfix: matterport3d_160
     transforms: ${data.val_transforms}
 
 collate_fn:
