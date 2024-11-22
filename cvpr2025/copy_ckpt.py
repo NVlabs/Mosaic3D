@@ -114,7 +114,10 @@ def sync_directories(config, out_dir, method="parallel", max_workers=4, batch_si
                     )
 
 
-def main(config_file: str, out_dir: str):
+def main(
+    config_file: str = "cvpr2025/experiment_spec.yaml",
+    out_dir: str = "/lustre/fsw/portfolios/nvr/projects/nvr_lpr_nvgptvision/checkpoints/openvocab-3d",
+):
     if not os.path.exists(config_file):
         raise FileNotFoundError(f"Config file {config_file} not found")
     with open(config_file) as f:
