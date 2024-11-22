@@ -106,3 +106,35 @@ experiments:
         jobid: 4100572
       - name: segment3d-gathered
         jobid: 4101273
+
+  mask_decoder:
+    xaxis: ""
+    yaxis: "ScanNet200 val mAP"
+    root_path: *chunghyun_path
+    job_list:
+      - name: baseline
+        jobid: 3493077
+      - name: mask-decoder
+        jobid: 3949208
+
+  data_pipeline:
+    xaxis: "Pipeline"
+    yaxis: "ScanNet200 val mIoU"
+    root_path: *chunghyun_path
+    job_list:
+      - name: detic-kosmos
+        jobid: 3984536
+      - name: llava-seem-llava
+        jobid: 3984529
+      - name: ram++-seem-llava
+        jobid: 3984701
+      - name: ram++-sam-ferret
+        jobid: 3985741
+      - name: ram++-sam-osprey
+        jobid: 3986066
+      - name: ram++-sam2-osprey
+        jobid: 3985821
+      - name: ram++-sam2-osprey-125k
+        jobid: 3985822
+      - name: ram++-sam2-seem-osprey-125k
+        jobid: 3989655
