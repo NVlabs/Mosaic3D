@@ -138,3 +138,21 @@ experiments:
         jobid: 3985822
       - name: ram++-sam2-seem-osprey-125k
         jobid: 3989655
+
+  ov3d_reimplementation:
+    xaxis: ""
+    yaxis: "ScanNet200 val mIoU"
+    root_path: *chunghyun_path
+    job_list:
+      - name: ov3d-dense-align
+        jobid: 4099536
+      - name: ov3d-align
+        jobid: 4099569
+      - name: ov3d-contrastive
+        jobid: 4099627
+      - name: ov3d++-dense-align
+        jobid: 4099696
+      - name: ov3d++-align
+        jobid: 4099704
+      - name: ov3d++-contrastive
+        jobid: 4099718
