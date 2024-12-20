@@ -23,7 +23,7 @@
 GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
 
 # Set default TAG to "warp"
-TAG="latest"
+TAG="warp"
 
 # Check if the next argument doesn't start with "--" or contains "=" (indicating it's a TAG)
 if [[ $# -gt 0 && ${1:0:2} != "--" && ! $1 =~ "=" ]]; then

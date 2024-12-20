@@ -65,7 +65,9 @@ class MinkUNetToCLIP(NetworkBaseDict):
             voxel_size=self.voxel_size,
             concat_unpooled_pc=False,
         )
-        self.adapter = ToFeatureAdapter(**adapter_cfg)
+        self.adapter = None
+        if adapter_cfg is not None:
+            self.adapter = ToFeatureAdapter(**adapter_cfg)
 
     @override
     def data_dict_to_input(self, data_dict: Dict) -> Dict:
@@ -80,7 +82,10 @@ class MinkUNetToCLIP(NetworkBaseDict):
     @override
     def forward(self, data_dict: Dict) -> Dict[str, Tensor]:
         data_dict = self.data_dict_to_input(data_dict)
-        out_feat = self.backbone_3d(data_dict["pc"])
-        clip_feat = self.adapter(out_feat)
-        out_dict = dict(clip_feat=clip_feat, pc=data_dict["pc"])
+        out_pc = self.backbone_3d(data_dict["pc"])
+        if self.adapter is not None:
+            clip_feat = self.adapter(out_pc)
+            out_dict = dict(clip_feat=clip_feat, pc=data_dict["pc"])
+        else:
+            out_dict = dict(clip_feat=out_pc.features, pc=data_dict["pc"])
         return out_dict

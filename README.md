@@ -181,3 +181,8 @@ cd warpconvnet; pip install -e .; cd ..;
 torchrun ...
 "
 ```
+
+## Debugging Tips
+
+Use the following command to enable CUDA kernel launch blocking.
+For pytorch unique CUDA illegal memory access error, use the warp docker image tag `warp` on `gitlab-master.nvidia.com/3dmmllm/openvocab-3d:warp`.

@@ -1,0 +1,37 @@
+_target_: src.models.networks.warp.litmodule.WarpLitModule
+
+net:
+  _target_: src.models.networks.warp.mink_unet.MinkUNetToCLIP
+  _partial_: true
+
+  voxel_size: 0.02
+
+  backbone_cfg:
+    in_channels: ${data.in_channel}
+    # out_channels: 192
+    out_channels: ${model.clip_encoder.text_dim}
+    # MinkUNet18A
+    planes: [32, 64, 128, 256, 128, 128, 96, 96]
+    layers: [2, 2, 2, 2, 2, 2, 2, 2]
+    init_dim: 32
+    voxel_size: ${model.net.voxel_size}
+    block_types: "bbbbbbbb"
+
+  # adapter_cfg:
+  #   in_channel: ${model.net.backbone_cfg.out_channels}
+  #   text_channel: ${model.clip_encoder.text_dim}
+  #   last_norm: true
+  #   normalize_output: true
+
+eval_cfg:
+  eval_clip_text_alignment: false
+  eval_clip_image_alignment: false
+  ignore_background: false
+  ignore_class_prob: false
+
+  seg_eval:
+    normalize_input: ${model.loss_cfg.seg_loss.normalize_input}
+    text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
+
+use_prompt: true
+compile: false
