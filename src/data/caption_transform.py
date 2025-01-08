@@ -10,6 +10,20 @@ class FilterCaptionEmpty:
         return [bool(caption.strip()) for caption in captions]
 
 
+class FilterCaptionNumPoints:
+    """Filter captions based on number of points."""
+
+    def __init__(self, min_num_points: int = 5, max_num_points: Optional[int] = None):
+        self.min_num_points = min_num_points
+        self.max_num_points = max_num_points
+
+    def __call__(self, point_indices: List[List[int]]) -> List[bool]:
+        if self.max_num_points is None:
+            return [self.min_num_points <= len(indices) for indices in point_indices]
+        else:
+            return [self.min_num_points <= len(indices) <= self.max_num_points for indices in point_indices]
+
+
 class FilterCaptionWordCount:
     """Filter captions based on word count.
 
@@ -173,10 +187,19 @@ class CaptionFilter:
         min_letter_ratio: float = 0.5,
         max_repetition_ratio: float = 0.4,
         max_consecutive: int = 3,
+        min_num_points: Optional[int] = None,
+        max_num_points: Optional[int] = None,
         **kwargs,
     ):
+        if min_num_points is not None or max_num_points is not None:
+            self.point_filters = [
+                FilterCaptionNumPoints(min_num_points, max_num_points),
+            ]
+        else:
+            self.point_filters = []
+
         # Create filters in order of computational complexity
-        self.filters = [
+        self.caption_filters = [
             FilterCaptionEmpty(),  # Fastest: just string operations
             FilterCaptionWordCount(min_words, max_words),  # Fast: simple splitting
             FilterCaptionLetterRatio(min_letter_ratio),  # Medium: character counting
@@ -185,12 +208,17 @@ class CaptionFilter:
             FilterCaptionPhraseRepeats(max_consecutive),  # Slowest: phrase analysis
         ]
 
-    def __call__(self, captions: List[str]) -> List[bool]:
+    def __call__(self, captions: List[str], point_indices: Optional[List[List[int]]] = None) -> List[bool]:
         """Apply all filters in sequence, failing fast."""
         valid_flags = [True] * len(captions)
 
+        if point_indices is not None and len(self.point_filters) > 0:
+            for filter_fn in self.point_filters:    
+                point_flags = filter_fn(point_indices)
+                valid_flags = [flag and point_flag for flag, point_flag in zip(valid_flags, point_flags)]
+
         # Apply each filter only to captions that passed previous filters
-        for filter_fn in self.filters:
+        for filter_fn in self.caption_filters:
             # Only process captions that are still valid
             current_captions = [cap for cap, flag in zip(captions, valid_flags) if flag]
             if not current_captions:
@@ -235,7 +263,7 @@ class CaptionFilter:
         results = {}
 
         # Test each filter individually
-        for filter_fn in self.filters:
+        for filter_fn in self.caption_filters:
             filter_name = filter_fn.__class__.__name__
             result = filter_fn([preprocessed])[0]
             results[filter_name] = result

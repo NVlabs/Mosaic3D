@@ -19,6 +19,7 @@ def test_caption_filter():
         min_letter_ratio=0.5,
         max_repetition_ratio=0.4,
         max_consecutive=3,
+        min_num_points=5,
     )
 
     # Test cases
