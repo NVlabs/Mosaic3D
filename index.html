@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D Segmentation</title>
+    <!-- Add Bulma CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <!-- Add Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        .hero {
+            background: #f6f8fa;
+        }
+        .publication-title {
+            font-family: 'Google Sans', sans-serif;
+        }
+        .publication-authors {
+            color: #4a4a4a;
+        }
+        .publication-banner {
+            max-height: 300px;
+            width: 100%;
+            object-fit: cover;
+        }
+        .publication-header .hero-body {
+            padding-bottom: 3rem;
+            padding-top: 3rem;
+        }
+        .button.is-rounded {
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar is-light" role="navigation" aria-label="main navigation">
+        <div class="container">
+            <div class="navbar-menu is-active">
+                <div class="navbar-start">
+                    <a class="navbar-item" href="#abstract">Abstract</a>
+                    <a class="navbar-item" href="#method">Method</a>
+                    <a class="navbar-item" href="#results">Results</a>
+                    <a class="navbar-item" href="#citation">Citation</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-body">
+            <div class="container has-text-centered">
+                <h1 class="title publication-title is-1 has-text-black">
+                    Mosaic3D
+                </h1>
+                <h2 class="title publication-title is-2 has-text-black">
+                    Foundation Dataset and Model for Open-Vocabulary 3D Segmentation
+                </h2>
+                <div class="publication-authors">
+                    <span class="author-block">
+                        Junha Lee<sup>1,2</sup>,
+                    </span>
+                    <span class="author-block">
+                        Chunghyun Park<sup>1,2</sup>,
+                    </span>
+                    <span class="author-block">
+                        Jaesung Choe<sup>1</sup>,
+                    </span>
+                    <span class="author-block">
+                        Frank Wang<sup>1</sup>,
+                    </span>
+                    <span class="author-block">
+                        Jan Kautz<sup>1</sup>,
+                    </span>
+                    <span class="author-block">
+                        Minsu Cho<sup>2</sup>,
+                    </span>
+                    <span class="author-block">
+                        Chris Choy<sup>1</sup>
+                    </span>
+                </div>
+
+                <div class="is-size-5 publication-authors">
+                    <span class="author-block"><sup>1</sup>NVIDIA</span>
+                    <span class="author-block"><sup>2</sup>KAIST</span>
+                </div>
+
+                <div class="column has-text-centered">
+                    <div class="publication-links">
+                        <span class="link-block">
+                            <a href="#" class="button is-medium is-primary">
+                                <span class="icon">
+                                    <i class="fas fa-file-alt"></i>
+                                </span>
+                                <span>Paper</span>
+                            </a>
+                        </span>
+                        <span class="link-block">
+                            <a href="#" class="button is-medium is-info">
+                                <span class="icon">
+                                    <i class="fab fa-github"></i>
+                                </span>
+                                <span>Code</span>
+                            </a>
+                        </span>
+                        <span class="link-block">
+                            <a href="#" class="button is-medium is-success">
+                                <span class="icon">
+                                    <i class="fas fa-database"></i>
+                                </span>
+                                <span>Data</span>
+                            </a>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Content -->
+    <section class="section">
+        <div class="container">
+            <!-- Abstract -->
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Abstract</h2>
+                    <div class="content has-text-justified">
+                        <p>We tackle open-vocabulary 3D scene understanding by introducing a novel data generation pipeline and training framework.
+                            Our method addresses three critical requirements for effective training: precise 3D region segmentation, comprehensive textual descriptions, and sufficient dataset scale.
+                            By leveraging state-of-the-art open-vocabulary image segmentation models and region-aware Vision-Language Models (VLM), we develop an automatic pipeline that generates high-quality 3D mask-text pairs.
+                            Applying this pipeline to multiple 3D scene datasets, we create the Mosaic3D dataset, a dataset of over 30K annotated scenes with 5.6M mask-text pairs—significantly larger than existing datasets.
+                            Building upon this data, we propose Mosaic3D, a foundation model combining a 3D encoder trained with contrastive learning and a lightweight mask decoder for open-vocabulary 3D semantic and instance segmentation.
+                            Our approach achieves state-of-the-art results on open-vocabulary 3D semantic and instance segmentation tasks including ScanNet200, Matterport3D, and ScanNet++, with ablation studies validating the effectiveness of our large-scale training data.
+                            </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Method -->
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Method</h2>
+                    <div class="content has-text-justified">
+                        <p>Brief description of your method...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Results</h2>
+                    <div class="content has-text-justified">
+                        <p>Key results and findings...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Citation -->
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-four-fifths">
+                    <h2 class="title is-3">Citation</h2>
+                    <div class="content has-text-justified">
+                        <pre><code>@article{lee2025mosaic3d,
+title={Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D Segmentation},
+author={Junha Lee and Chunghyun Park and Jaesung Choe and Frank Wang and Jan Kautz and Minsu Cho and Chris Choy},
+journal={arXiv},
+year={2025}
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</body>
+</html>
