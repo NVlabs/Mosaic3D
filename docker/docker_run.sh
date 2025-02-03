@@ -17,6 +17,7 @@ docker run \
     -v "/home/${USER}:/root" \
     -v "$(pwd):/workspace" \
     -v "${DATASET_PATH}:/datasets" \
+    --name "mosaic3d" \
     --device=/dev/nvidiactl \
     --device=/dev/nvidia0 \
     --device=/dev/nvidia-modeset \
