@@ -19,8 +19,15 @@ docker run \
     -v "${DATASET_PATH}:/datasets" \
     --name "mosaic3d" \
     --device=/dev/nvidiactl \
-    --device=/dev/nvidia0 \
     --device=/dev/nvidia-modeset \
     --device=/dev/nvidia-uvm \
     --device=/dev/nvidia-uvm-tools \
+    --device=/dev/nvidia0 \
+    --device=/dev/nvidia1 \
+    --device=/dev/nvidia2 \
+    --device=/dev/nvidia3 \
+    --device=/dev/nvidia4 \
+    --device=/dev/nvidia5 \
+    --device=/dev/nvidia6 \
+    --device=/dev/nvidia7 \
     "$DOCKER_IMAGE"
