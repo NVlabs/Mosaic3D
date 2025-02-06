@@ -19,6 +19,7 @@ def main(
     dataset: str,
     mask_dirs: List[str],
     split: str,
+    use_score: bool = False,
 ) -> None:
     gt_dir = Path(f"/datasets/{dataset.replace('v2', '')}_hf") / split.replace("-tiny", "")
     mask_dirs = [Path(mask_dir) for mask_dir in mask_dirs]
@@ -57,7 +58,12 @@ def main(
         # Point indices to masks
         num_masks = len(point_indices_all)
         pred_classes = torch.zeros(num_masks, dtype=torch.long)
-        pred_scores = torch.ones(num_masks)
+        if use_score:
+            pred_scores = torch.from_numpy(
+                np.load(mask_dir / scene / "point_indices.npz")["scores"]
+            )
+        else:
+            pred_scores = torch.ones(num_masks)
         pred_masks = torch.zeros((num_masks, num_points))
         for i, indices in enumerate(point_indices_all):
             pred_masks[i, indices] = 1
@@ -90,6 +96,7 @@ if __name__ == "__main__":
         "--mask_dirs", action="append", default=[], help="Paths to mask directories"
     )
     parser.add_argument("--split", type=str, default="val")
+    parser.add_argument("--use_score", action="store_true")
 
     args = parser.parse_args()
 
@@ -101,4 +108,5 @@ if __name__ == "__main__":
         dataset=args.dataset,
         mask_dirs=args.mask_dirs,
         split=args.split,
+        use_score=args.use_score,
     )
