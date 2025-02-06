@@ -6,8 +6,8 @@ from uuid import uuid4
 
 import numpy as np
 import torch
-import torch.distributed as dist
 from torchmetrics import Metric
+from tqdm import tqdm
 
 from src.utils import RankedLogger
 
@@ -65,7 +65,7 @@ class InstanceSegmentationEvaluator(Metric):
             f"Computing instance segmentation evaluation with {len(self.pred_classes)} predictions"
         )
         scenes = []
-        for i in range(len(self.pred_classes)):
+        for i in tqdm(range(len(self.pred_classes)), desc="Associating instances"):
             gt_instances, pred_instances = self.associate_instances(
                 {
                     "pred_classes": self.pred_classes[i].cpu().numpy(),

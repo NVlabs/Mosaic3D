@@ -81,6 +81,6 @@ def convert_openins3d_masks():
 
 
 if __name__ == "__main__":
-    # download_ckpt()
-    # download_openins3d_masks()
+    download_ckpt()
+    download_openins3d_masks()
     convert_openins3d_masks()
