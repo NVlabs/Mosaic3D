@@ -208,14 +208,6 @@ class Res16UNetBase(ResNetBase):
             bn_momentum=bn_momentum,
         )
 
-        self.final = conv(
-            self.PLANES[7],
-            out_channels,
-            kernel_size=1,
-            stride=1,
-            bias=True,
-            D=D,
-        )
         self.relu = MinkowskiReLU(inplace=True)
 
     def forward(self, x):
