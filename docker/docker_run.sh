@@ -14,14 +14,15 @@ docker run \
     --gpus all \
     --shm-size=32g \
     -it \
-    -v "/home/${USER}:/root" \
+    --name mosaic3d \
+    -v "/home/${USER}:/home/${USER}" \
     -v "$(pwd):/workspace" \
     -v "${DATASET_PATH}:/datasets" \
-    --name "mosaic3d" \
+    -v /etc/passwd:/etc/passwd:ro \
+    -v /etc/group:/etc/group:ro \
+    --user "$(id -u):$(id -g)" \
+    --workdir /workspace \
     --device=/dev/nvidiactl \
-    --device=/dev/nvidia-modeset \
-    --device=/dev/nvidia-uvm \
-    --device=/dev/nvidia-uvm-tools \
     --device=/dev/nvidia0 \
     --device=/dev/nvidia1 \
     --device=/dev/nvidia2 \
@@ -30,4 +31,8 @@ docker run \
     --device=/dev/nvidia5 \
     --device=/dev/nvidia6 \
     --device=/dev/nvidia7 \
-    "$DOCKER_IMAGE"
+    --device=/dev/nvidia-modeset \
+    --device=/dev/nvidia-uvm \
+    --device=/dev/nvidia-uvm-tools \
+    "$DOCKER_IMAGE" \
+    /bin/zsh
