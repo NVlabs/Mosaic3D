@@ -14,13 +14,12 @@ docker run \
     --gpus all \
     --shm-size=32g \
     -it \
+    --ipc host \
+    --net host \
     --name mosaic3d \
-    -v "/home/${USER}:/home/${USER}" \
+    -v "/home/${USER}:/root" \
     -v "$(pwd):/workspace" \
     -v "${DATASET_PATH}:/datasets" \
-    -v /etc/passwd:/etc/passwd:ro \
-    -v /etc/group:/etc/group:ro \
-    --user "$(id -u):$(id -g)" \
     --workdir /workspace \
     --device=/dev/nvidiactl \
     --device=/dev/nvidia0 \
