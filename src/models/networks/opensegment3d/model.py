@@ -342,8 +342,12 @@ if __name__ == "__main__":
         "offset": torch.tensor([4000, 10000], dtype=torch.long, device=device),
         "feat": torch.rand(10000, 3, device=device),
     }
-    pred_classes, pred_masks = model(input_dict)
+    out_dict = model(input_dict)
     print(">>> Forward passed")
-    print("    pred_classes.shape:", pred_classes.shape)
-    print("    len(pred_masks):", len(pred_masks))
-    print("    pred_masks[0].shape:", pred_masks[0].shape)
+    for k, v in out_dict.items():
+        if isinstance(v, torch.Tensor):
+            print(f"    {k}.shape:", v.shape)
+        elif isinstance(v, list):
+            print(f"    len({k}):", len(v))
+            for i, vv in enumerate(v):
+                print(f"        {k}[{i}].shape:", vv.shape)
