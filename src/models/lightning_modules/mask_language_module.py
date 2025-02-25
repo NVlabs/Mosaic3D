@@ -246,7 +246,6 @@ class MaskLanguageLitModule(LitModuleBase):
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         metrics = self.val_metrics[dataloader_idx]
-        class_info = self.val_class_info[dataloader_idx]
         clip_evaluator = self.clip_alignment_eval[dataloader_idx]
 
         # Inference

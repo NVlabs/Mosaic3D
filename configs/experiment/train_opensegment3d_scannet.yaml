@@ -9,7 +9,7 @@ defaults:
   - override /model: opensegment3d_spunet34c
   - override /model/clip: recap_clip
   - override /model/loss: mask_caption
-  - override /optim: sgd
+  - override /optim: adamw
   - override /scheduler: onecyclelr
   - override /callbacks: cluster_nolr
   - override /trainer: gpu
@@ -18,6 +18,11 @@ defaults:
 # this allows you to overwrite only specified parameters
 
 seed: 12345
+
+model:
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-2
 
 trainer:
   max_epochs: 128
