@@ -3,6 +3,7 @@
 import math
 import torch
 from torch import nn
+from torch.cuda.amp import autocast
 import numpy as np
 
 # from utils.pc_util import shift_scale_points
@@ -101,7 +102,7 @@ class PositionEmbeddingCoordsSine(nn.Module):
                 rems -= 2
 
             if cdim != prev_dim:
-                dim_t = torch.arange(cdim, dtype=torch.float32, device=xyz.device)
+                dim_t = torch.arange(cdim, dtype=xyz.dtype, device=xyz.device)
                 dim_t = self.temperature ** (2 * (dim_t // 2) / cdim)
 
             # create batch x cdim x nccords embedding
@@ -150,6 +151,7 @@ class PositionEmbeddingCoordsSine(nn.Module):
     def forward(self, xyz, num_channels=None, input_range=None):
         assert isinstance(xyz, torch.Tensor)
         assert xyz.ndim == 3
+
         # xyz is batch x npoints x 3
         if self.pos_type == "sine":
             with torch.no_grad():

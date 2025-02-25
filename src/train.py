@@ -8,7 +8,10 @@ from lightning import Callback, LightningDataModule, LightningModule, Trainer
 from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
-import warp
+try:
+    import warp
+except ImportError:
+    WARP_AVAILABLE = False
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -145,5 +148,6 @@ def main(cfg: DictConfig) -> Optional[float]:
 
 
 if __name__ == "__main__":
-    warp.init()
+    if WARP_AVAILABLE:
+        warp.init()
     main()

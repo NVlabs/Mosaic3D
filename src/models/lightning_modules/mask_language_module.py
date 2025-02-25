@@ -1,0 +1,323 @@
+from typing import Dict, Optional, Any
+import time
+
+import numpy as np
+import torch
+import torch.nn as nn
+from torchmetrics import MaxMetric, MeanMetric
+
+import src.utils.caption_utils as caption_utils
+from src.models.components.clip_models import build_clip_model, download_clip_model
+from src.models.components.evaluator import InstanceSegmentationEvaluator
+from src.models.lightning_modules.module_base import LitModuleBase
+from src.models.losses.mask_caption_loss import (
+    MaskCaptionAlignmentLoss,
+    MaskCaptionLoss,
+    MaskCaptionCLIPLoss,
+    MaskCaptionSigLIPLoss,
+)
+from src.models.losses.clip_alignment_loss import (
+    CLIPAlignmentEval,
+)
+from src.utils import RankedLogger
+
+log = RankedLogger(__file__, rank_zero_only=True)
+
+
+class MaskLanguageLitModule(LitModuleBase):
+    def __init__(
+        self,
+        net,
+        optimizer,
+        scheduler,
+        scheduler_interval: str,
+        clip_encoder: Dict,
+        compile: bool,
+        loss_cfg: Dict,
+        eval_cfg: Optional[Dict] = None,
+        use_prompt: bool = False,
+    ):
+        super().__init__()
+
+        self.save_hyperparameters(logger=False)
+
+        self.net = None
+
+        # segmentation loss
+        self.seg_loss = loss_cfg["seg_loss"]
+        self.seg_loss_weights = dict(
+            loss_ce=self.seg_loss.matcher.cost_class,
+            loss_mask=self.seg_loss.matcher.cost_mask,
+            loss_dice=self.seg_loss.matcher.cost_dice,
+        )
+
+        # caption loss
+        self.caption_loss_type = loss_cfg["caption_loss"]["type"]
+        if self.caption_loss_type == "contrastive":
+            self.caption_loss = MaskCaptionLoss(**loss_cfg["caption_loss"])
+        elif self.caption_loss_type == "alignment":
+            self.caption_loss = MaskCaptionAlignmentLoss(**loss_cfg["caption_loss"])
+        elif self.caption_loss_type == "region_alignment":
+            self.caption_loss = MaskCaptionAlignmentLoss(**loss_cfg["caption_loss"])
+        elif self.caption_loss_type == "clip":
+            self.caption_loss = MaskCaptionCLIPLoss(**loss_cfg["caption_loss"])
+        elif self.caption_loss_type == "siglip":
+            self.caption_loss = MaskCaptionSigLIPLoss(**loss_cfg["caption_loss"])
+        else:
+            raise ValueError(f"Caption loss type {self.caption_loss_type} not supported")
+
+        # for averaging loss across batches
+        self.train_loss = MeanMetric()
+
+        # for tracking best so far validation accuracy
+        self.val_metrics = nn.ModuleList()
+        self.val_class_info = []
+
+        # Sync distributed metrics
+        self.train_sync_dist = loss_cfg.get("sync_dist", False)
+
+    def prepare_data(self) -> None:
+        # download clip model on rank 0
+        ckpt_path = download_clip_model(self.hparams.clip_encoder)
+        log.info(f"Downloaded CLIP model to {ckpt_path}")
+
+    def configure_model(self) -> None:
+        # network
+        if self.net is not None:
+            return
+
+        self.net = self.hparams.net()
+        # Print network on the first GPU
+        if self.local_rank == 0:
+            log.info(self.net)
+
+        # clip encoder
+        self.clip_encoder = build_clip_model(self.hparams.clip_encoder, device=self.device)
+
+        # freeze clip encoder
+        for params in self.clip_encoder.parameters():
+            params.requires_grad = False
+
+    def setup(self, stage: str) -> None:
+        val_dataloaders = self.trainer.datamodule.val_dataloader()
+        if not isinstance(val_dataloaders, list):
+            val_dataloaders = [val_dataloaders]
+
+        for val_dataloader in val_dataloaders:
+            dataset = val_dataloader.dataset
+            dataset_name = dataset.dataset_name
+            class_names = dataset.CLASS_LABELS
+            postfix = dataset.log_postfix
+            assert postfix is not None, "log_postfix is required for clarity"
+
+            metric = nn.ModuleDict(
+                {
+                    "map_evaluator": InstanceSegmentationEvaluator(
+                        class_names=class_names,
+                        segment_ignore_index=dataset.instance_ignore_class_idx
+                        + [dataset.ignore_label],
+                        instance_ignore_index=dataset.ignore_label,
+                        subset_mapper=dataset.subset_mapper,
+                    ),
+                    "map_best": MaxMetric(),
+                }
+            )
+
+            class_info = dict(
+                dataset_name=dataset_name,
+                postfix=postfix,
+                class_names=class_names,
+                fg_class_idx=dataset.fg_class_idx,
+                bg_class_idx=dataset.bg_class_idx,
+                ignore_label=dataset.ignore_label,
+                instance_ignore_class_idx=dataset.instance_ignore_class_idx,
+                subset_mapper=dataset.subset_mapper if hasattr(dataset, "subset_mapper") else None,
+            )
+            self.val_metrics.append(metric)
+            self.val_class_info.append(class_info)
+
+        self.clip_alignment_eval = nn.ModuleList(
+            [
+                CLIPAlignmentEval(**self.hparams.eval_cfg.seg_eval)
+                for _ in range(len(self.val_metrics))
+            ]
+        )
+
+    def forward(self, batch: Any) -> Dict[str, Any]:
+        output = self.net(batch)
+        out_dict = self._output_to_dict(output, batch)
+        return out_dict
+
+    def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def training_step(self, batch, batch_idx):
+        self._train_start = time.time()
+
+        # Time forward pass
+        self._forward_start = time.time()
+        out_dict = self(batch)
+        forward_time = time.time() - self._forward_start
+        self.forward_time(forward_time)
+
+        # Time loss computation
+        self._loss_start = time.time()
+        seg_loss, caption_loss = 0, 0
+
+        # segmentation loss with Hungarian matching
+        caption_data = batch["caption_data"]
+        seg_losses, mapping = self.seg_loss(out_dict, caption_data, return_indices=True)
+        seg_loss = (
+            sum(seg_losses[k] * self.seg_loss_weights[k] for k in seg_losses.keys())
+            * self.hparams.loss_cfg.weights.seg_loss
+        )
+
+        # caption loss
+        matched_mask_features = []
+        matched_captions = []
+        for mask_features, caption_datum, indices in zip(
+            out_dict["clip_feat"], caption_data, mapping
+        ):
+            captions = caption_datum["caption"]
+            src_idx, trg_idx = indices
+            matched_mask_features.append(mask_features[src_idx])
+            matched_captions.append([captions[i] for i in trg_idx])
+        matched_mask_features = torch.cat(matched_mask_features)
+        caption_loss = (
+            self.caption_loss.loss(matched_mask_features, matched_captions, self.clip_encoder)
+            * self.hparams.loss_cfg.weights.caption_loss
+        )
+
+        # total loss
+        loss = seg_loss + caption_loss
+        loss_time = time.time() - self._loss_start
+        self.loss_time(loss_time)
+
+        lr = self.optimizers().param_groups[0]["lr"]
+        log_metrics = dict(loss=loss, seg_loss=seg_loss, caption_loss=caption_loss, lr=lr)
+
+        # useful metadata
+        bs = len(batch["offset"]) - 1
+        log_metrics["num_points"] = batch["coord"].shape[0] / bs
+        log_metrics["num_objects"] = np.mean([len(x["caption"]) for x in caption_data])
+
+        # Calculate training time and mark start of next data loading
+        train_time = time.time() - self._train_start
+        self.train_time(train_time)
+        self._data_load_start = time.time()
+
+        # Add timing metrics to existing logging
+        log_metrics.update(
+            {
+                "time/data_loading": self.data_load_time.compute(),
+                "time/forward": self.forward_time.compute(),
+                "time/loss": self.loss_time.compute(),
+                "time/training": self.train_time.compute(),
+            }
+        )
+
+        self.log_dict(
+            {f"train/{key}": value for key, value in log_metrics.items()},
+            prog_bar=True,
+            logger=True,
+            on_step=True,
+            on_epoch=False,
+            sync_dist=self.train_sync_dist,
+        )
+        return loss
+
+    def on_validation_epoch_start(self):
+        self.clip_encoder = self.clip_encoder.to(self.device)
+        for class_info, eval_module in zip(self.val_class_info, self.clip_alignment_eval):
+            class_names = class_info["class_names"]
+
+            if eval_module.emb_target is None:
+                if self.hparams.use_prompt:
+                    class_names = [
+                        f"a {c} in a scene" if "other" not in c else "other" for c in class_names
+                    ]
+                text_embedding = caption_utils.forward_text_encoder(
+                    class_names, self.clip_encoder, normalize=True, device=self.device
+                )
+                eval_module.set_target_embedding(text_embedding.to(self.device))
+            else:
+                if eval_module.emb_target.device != self.device:
+                    eval_module.emb_target = eval_module.emb_target.to(self.device)
+
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        metrics = self.val_metrics[dataloader_idx]
+        class_info = self.val_class_info[dataloader_idx]
+        clip_evaluator = self.clip_alignment_eval[dataloader_idx]
+
+        # Inference
+        out_dict = self(batch)
+        batch_binary_logits = out_dict["logit"]  # [B, Q, 1]
+        batch_masks = out_dict["mask"]  # List[Tensor[N, Q]]
+        batch_clip_feats = out_dict["clip_feat"]  # [B, Q, D]
+
+        offset = batch["offset"]
+        batch_size = len(offset) - 1
+        for i in range(batch_size):
+            gt_classes = batch["segment"][offset[i] : offset[i + 1]]  # [N]
+            gt_instances = batch["instance"][offset[i] : offset[i + 1]]  # [N]
+
+            clip_feats = batch_clip_feats[i]  # [Q, D]
+            mask_binary_probs = batch_binary_logits[i].sigmoid()  # [Q, 1]
+            mask_logits = clip_evaluator.predict(clip_feats, return_logit=True)  # [Q, C]
+            mask_probs = nn.functional.softmax(mask_logits, dim=-1)  # [Q, C]
+            mask_probs = mask_binary_probs * mask_probs  # [Q, C]
+            masks = batch_masks[i]  # [N, Q]
+
+            # TODO: add post-processing
+
+            heatmap = masks.sigmoid()  # [N, Q]
+            masks = (masks.T > 0).float()  # [Q, N]
+            mask_scores_per_image = (heatmap.T * masks).sum(1, keepdim=True) / (
+                masks.sum(1, keepdim=True) + 1e-6
+            )  # [Q, 1]
+            mask_probs = mask_scores_per_image * mask_probs  # [Q, C]
+            scores, classes = mask_probs.max(1)  # [Q]
+
+            metrics["map_evaluator"].update(
+                pred_classes=classes,
+                pred_scores=scores,
+                pred_masks=masks,
+                gt_segment=gt_classes,
+                gt_instance=gt_instances,
+            )
+
+    def on_validation_epoch_end(self) -> None:
+        for class_info, metrics in zip(self.val_class_info, self.val_metrics):
+            postfix = class_info["postfix"]
+            val_section = f"val_{postfix}"
+
+            ap_results = metrics["map_evaluator"].compute()
+
+            # class-wise metrics
+            log_metrics = {}
+            for class_name, class_metrics in ap_results["classes"].items():
+                for k, v in class_metrics.items():
+                    log_metrics[f"{val_section}/{k}_{class_name}"] = v
+
+            # overall metrics
+            ap_results.pop("classes")
+            log_metrics.update({f"{val_section}/{k}": v for k, v in ap_results.items()})
+
+            # log metrics only if not sanity checking
+            if not self.trainer.sanity_checking:
+                self.log_dict(log_metrics, sync_dist=True, logger=True)
+
+            metrics["map_evaluator"].reset()
+
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
+        self.validation_step(batch, batch_idx, dataloader_idx)
+
+    def children(self):
+        for name, module in self.named_children():
+            if name != "clip_encoder":
+                yield module
+
+    def parameters(self):
+        for name, params in self.named_parameters():
+            if "clip_encoder" not in name:
+                yield params

@@ -9,7 +9,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from torch.utils.data.dataloader import default_collate
 
-from src.models.components.misc import offset2batch
+from src.models.components.misc import offset2bincount
 
 
 def convert_list_list_tensor_to_tensor(
@@ -154,6 +154,34 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
         batch["feat"] = torch.ones_like(batch["feat"])
 
     batch["grid_size"] = grid_size
+    return batch
+
+
+def point_collate_fn_with_captioned_masks(batch, grid_size, mix_prob=0, drop_feat: bool = False):
+    batch = [b for b in batch if b is not None]
+    assert isinstance(batch[0], Mapping)
+
+    # Extract caption data before collating
+    batch_captioned_masks = [x.pop("caption_data") for x in batch if "caption_data" in x]
+    batch = point_collate_fn(batch, grid_size, mix_prob, drop_feat)
+
+    if batch_captioned_masks:
+        # Create binary masks for each caption's point indices
+        collated_masks = []
+        for num_points, caption_data in zip(
+            offset2bincount(batch["offset"]), batch_captioned_masks
+        ):
+            masks = torch.zeros(
+                [len(caption_data["caption"]), num_points],
+                dtype=torch.bool,
+                device=batch["feat"].device,
+            )
+            for i, idx in enumerate(caption_data["idx"]):
+                masks[i, idx] = True
+            collated_masks.append({"mask": masks, "caption": caption_data["caption"]})
+
+        batch["caption_data"] = collated_masks
+
     return batch
 
 

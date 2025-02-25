@@ -166,7 +166,7 @@ class OpenSegment3D(nn.Module):
                         masks[:num_voxels] = False
                     else:
                         indices = torch.randperm(num_voxels, device=device)[:sample_size]
-                        masks = torch.zeros(num_voxels, dtype=torch.bool, device=device)
+                        masks = torch.zeros(sample_size, dtype=torch.bool, device=device)
 
                     indices_all.append(indices)
                     masks_all.append(masks)
@@ -186,7 +186,7 @@ class OpenSegment3D(nn.Module):
                 )
 
                 batched_attn.permute((0, 2, 1))[batched_attn.sum(1) == sample_size] = False
-                batched_masks = torch.stack(masks_all)
+                batched_masks = torch.vstack(masks_all)
                 batched_attn = torch.logical_or(batched_attn, batched_masks[..., None])
 
                 # transformer decoder
@@ -208,14 +208,16 @@ class OpenSegment3D(nn.Module):
             queries,
             decomposed_pfeats,
         )
+
         return dict(
-            logits=pred_classes,
-            masks=pred_masks,
-            clip_feats=pred_clip_feats,
+            backbone_point=point,
+            logit=pred_classes,  # [B, Q, 1]
+            mask=pred_masks,  # List[[N, Q]]
+            clip_feat=pred_clip_feats,  # [B, Q, D]
         )
 
     def mask_module(self, queries: torch.Tensor, decomposed_point_feats: List[torch.Tensor]):
-        queries = self.decoder_norm(queries)  # [b, q, d]
+        queries = self.decoder_norm(queries)
         pred_classes = self.class_head(queries)
         mask_embeds = self.mask_head(queries)
         pred_masks = [
@@ -246,6 +248,7 @@ class OpenSegment3D(nn.Module):
             attn_masks, _ = spconv.ops.indice_avgpool_implicit_gemm(
                 attn_masks, indice_data.pair_fwd, indice_data.pair_fwd.shape[1], False
             )
+        attn_masks = attn_masks < 0
 
         return attn_masks
 
@@ -296,10 +299,8 @@ class OpenSegment3D(nn.Module):
                     masked_centroids.max(dim=0, keepdim=True).values,
                 ]
 
-                with autocast(enabled=False):
-                    pos_enc = self.pos_enc(
-                        masked_centroids[None, ...].float(), input_range=scene_bounds
-                    )
+                with autocast(enabled=True):
+                    pos_enc = self.pos_enc(masked_centroids[None, ...], input_range=scene_bounds)
 
                 pos_enc = rearrange(pos_enc, "1 d n -> n d")
                 pos_encs[batch_split] = pos_enc

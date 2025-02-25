@@ -15,7 +15,7 @@ val_datasets:
     transforms: ${data.val_transforms}
 
 collate_fn:
-  _target_: src.data.collate.point_collate_fn
+  _target_: src.data.collate.point_collate_fn_with_captioned_masks
   _partial_: true
   grid_size: 0.02
 
