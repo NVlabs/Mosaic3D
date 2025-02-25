@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=nvr_lpr_nvgptvision
-#SBATCH --partition=grizzly,polar,polar2,polar3,polar4
+#SBATCH --partition=grizzly,polar,polar3,polar4
 #SBATCH --time=04:00:00                  # Adjust time limit as needed
 #SBATCH --exclusive
 #SBATCH --cpus-per-task=31

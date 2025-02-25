@@ -314,13 +314,9 @@ class DenseLanguageLitModule(LitModuleBase):
         logits = self.clip_alignment_eval[dataloader_idx].predict(
             out_dict["clip_feat"], return_logit=True
         )
-        if (
-            hasattr(self.trainer, "ckpt_path")
-            and self.trainer.ckpt_path is not None
-            and os.environ.get("SAVE_PRED", None) is not None
-        ):
+        if os.environ.get("SAVE_PRED", None) is not None:
             pred_save_dir = os.path.join(
-                os.path.dirname(os.path.dirname(self.trainer.ckpt_path)), "pred"
+                os.path.dirname(os.path.dirname(self.logger.log_dir)), "pred"
             )
             if not os.path.exists(pred_save_dir):
                 os.makedirs(pred_save_dir, exist_ok=True)
