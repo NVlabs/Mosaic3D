@@ -23,6 +23,7 @@ model:
     lr: 6e-3
   scheduler:
     final_div_factor: 1000.0
+  best_metric: ${data.checkpoint_monitor}
 
 trainer:
   max_epochs: 128

@@ -99,6 +99,7 @@ export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 pip install flash-attn;
+pip install -U lightning>=2.5.0;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \

@@ -40,6 +40,7 @@ class DenseLanguageLitModule(LitModuleBase):
         clip_encoder: Dict,
         compile: bool,
         loss_cfg: Dict,
+        best_metric: str,
         eval_cfg: Optional[Dict] = None,
         use_prompt: bool = False,
     ):
@@ -71,12 +72,14 @@ class DenseLanguageLitModule(LitModuleBase):
         )
         self.binary_loss = nn.BCEWithLogitsLoss() if loss_cfg.get("binary_loss", None) else None
 
-        # for averaging loss across batches
-        self.train_loss = MeanMetric()
-
         # for tracking best so far validation accuracy
-        self.val_metrics = nn.ModuleList()
-        self.val_class_info = []
+        self.val_metrics = nn.ModuleDict()
+        self.val_class_info = dict()
+        self.val_dataset_names = dict()
+        self.val_best_metric = MaxMetric()
+
+        # Save val_best_metric to hparams and restore if resuming
+        self.save_hyperparameters({"val_best_metric": self.val_best_metric})
 
         # Sync distributed metrics
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
@@ -117,12 +120,19 @@ class DenseLanguageLitModule(LitModuleBase):
         for params in self.clip_encoder.parameters():
             params.requires_grad = False
 
+    def on_load_checkpoint(self, checkpoint):
+        if hasattr(self.hparams, "val_best_metric"):
+            value = checkpoint["hyper_parameters"].get("val_best_metric", None)
+            if value is not None:
+                self.val_best_metric.update(value.max_value)
+        super().on_load_checkpoint(checkpoint)
+
     def setup(self, stage: str) -> None:
         val_dataloaders = self.trainer.datamodule.val_dataloader()
         if not isinstance(val_dataloaders, list):
             val_dataloaders = [val_dataloaders]
 
-        for val_dataloader in val_dataloaders:
+        for i, val_dataloader in enumerate(val_dataloaders):
             dataset = val_dataloader.dataset
             class_names = dataset.CLASS_LABELS
             postfix = dataset.log_postfix
@@ -139,9 +149,6 @@ class DenseLanguageLitModule(LitModuleBase):
                         num_classes=len(class_names),
                         ignore_index=dataset.ignore_label,
                     ),
-                    "miou_all_best": MaxMetric(),
-                    "clip_text_score": MeanMetric(),
-                    "clip_image_score": MeanMetric(),
                 }
             )
             # instance segmentation metrics (optional)
@@ -165,14 +172,15 @@ class DenseLanguageLitModule(LitModuleBase):
                 instance_ignore_class_idx=dataset.instance_ignore_class_idx,
                 subset_mapper=dataset.subset_mapper if hasattr(dataset, "subset_mapper") else None,
             )
-            self.val_metrics.append(val_metric)
-            self.val_class_info.append(val_class_info)
+            self.val_metrics[postfix] = val_metric
+            self.val_class_info[postfix] = val_class_info
+            self.val_dataset_names[i] = postfix
 
-        self.clip_alignment_eval = nn.ModuleList(
-            [
-                CLIPAlignmentEval(**self.hparams.eval_cfg.seg_eval)
-                for _ in range(len(self.val_metrics))
-            ]
+        self.clip_alignment_eval = nn.ModuleDict(
+            {
+                postfix: CLIPAlignmentEval(**self.hparams.eval_cfg.seg_eval)
+                for postfix in self.val_metrics.keys()
+            }
         )
 
     def forward(self, batch: Any) -> Dict[str, Any]:
@@ -290,7 +298,9 @@ class DenseLanguageLitModule(LitModuleBase):
 
     def on_validation_epoch_start(self):
         self.clip_encoder = self.clip_encoder.to(self.device)
-        for class_info, eval_module in zip(self.val_class_info, self.clip_alignment_eval):
+        for postfix in self.val_class_info.keys():
+            class_info = self.val_class_info[postfix]
+            eval_module = self.clip_alignment_eval[postfix]
             class_names = class_info["class_names"]
 
             if eval_module.emb_target is None:
@@ -306,12 +316,18 @@ class DenseLanguageLitModule(LitModuleBase):
                 if eval_module.emb_target.device != self.device:
                     eval_module.emb_target = eval_module.emb_target.to(self.device)
 
+            # reset metrics
+            metrics = self.val_metrics[postfix]
+            for key in metrics.keys():
+                metrics[key].reset()
+
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        metrics = self.val_metrics[dataloader_idx]
-        class_info = self.val_class_info[dataloader_idx]
+        postfix = self.val_dataset_names[dataloader_idx]
+        metrics = self.val_metrics[postfix]
+        class_info = self.val_class_info[postfix]
 
         out_dict = self(batch)
-        logits = self.clip_alignment_eval[dataloader_idx].predict(
+        logits = self.clip_alignment_eval[postfix].predict(
             out_dict["clip_feat"], return_logit=True
         )
         if os.environ.get("SAVE_PRED", None) is not None:
@@ -365,29 +381,6 @@ class DenseLanguageLitModule(LitModuleBase):
         if "mAP_evaluator" in metrics:
             self._update_instance_segmentation_metrics(batch, logits, metrics, class_info)
 
-        # 3. CLIP image alignment (optional)
-        if self.eval_clip_image_alignment:
-            clip_scores = compute_clip_image_alignment(
-                clip_encoder=self.clip_encoder,
-                clip_processed_image=batch["clip_processed_image"],
-                point_feat=out_dict["clip_feat"],
-                clip_point_indices=batch["clip_point_indices"],
-                clip_indices_image_to_point=batch["clip_indices_image_to_point"],
-                is_loss=False,
-            )
-            clip_avg_score = clip_scores.mean().cpu().numpy()
-            metrics["clip_image_score"].update(clip_avg_score)
-
-        if self.eval_clip_text_alignment:
-            clip_avg_score = compute_clip_text_cosine_similarity(
-                clip_encoder=self.clip_encoder,
-                clip_tokenized_text=batch["clip_tokenized_text"],
-                point_feat=out_dict["clip_feat"],
-                offset=batch["offset"],
-                point_indices_to_caption=batch["caption_data"]["idx"],
-            )
-            metrics["clip_text_score"].update(clip_avg_score)
-
     def _update_instance_segmentation_metrics(self, batch, logits, metrics, class_info):
         offset = batch["offset"]
         batch_size = len(offset) - 1
@@ -434,10 +427,11 @@ class DenseLanguageLitModule(LitModuleBase):
 
             return class_ious, class_accs
 
-        for idx, metrics in enumerate(self.val_metrics):
-            class_info = self.val_class_info[idx]
+        log_metrics = {}
+        for postfix, metrics in self.val_metrics.items():
+            val_section = f"val_{postfix}"
+            class_info = self.val_class_info[postfix]
             class_names = class_info["class_names"]
-            postfix = class_info["postfix"]
 
             # 1. semantic segmentation
             class_ious, class_accs = compute_classwise_metrics(metrics["confmat"], class_names)
@@ -449,13 +443,10 @@ class DenseLanguageLitModule(LitModuleBase):
             macc = np.nanmean([class_accs[class_names[i]] for i in class_info["fg_class_idx"]])
             miou_all = np.nanmean([class_ious_all[c] for c in class_names])
             macc_all = np.nanmean([class_accs_all[c] for c in class_names])
-            metrics["miou_all_best"].update(miou_all)
 
-            val_section = f"val_{postfix}"
-            log_metrics = {f"{val_section}/iou_{k}": v for k, v in class_ious_all.items()}
+            log_metrics.update({f"{val_section}/iou_{k}": v for k, v in class_ious_all.items()})
             log_metrics.update(
                 {
-                    f"{val_section}/best_miou_all": metrics["miou_all_best"].compute(),
                     f"{val_section}/miou": miou,
                     f"{val_section}/macc": macc,
                     f"{val_section}/miou_all": miou_all,
@@ -524,28 +515,13 @@ class DenseLanguageLitModule(LitModuleBase):
                 instance_metrics.pop("classes")
                 log_metrics.update({f"{val_section}/{k}": v for k, v in instance_metrics.items()})
 
-            # 3. CLIP alignment (optional)
-            if self.eval_clip_text_alignment:
-                log_metrics.update(
-                    {f"{val_section}/clip_text_score": metrics["clip_text_score"].compute()}
-                )
-            if self.eval_clip_image_alignment:
-                log_metrics.update(
-                    {
-                        f"{val_section}/clip_image_score": metrics["clip_image_score"].compute(),
-                    }
-                )
+        # update best metric
+        self.val_best_metric.update(log_metrics[self.hparams.best_metric])
+        log_metrics.update({f"{self.hparams.best_metric}_best": self.val_best_metric.compute()})
 
-            # log metrics only if not sanity checking
-            if not self.trainer.sanity_checking:
-                self.log_dict(log_metrics, sync_dist=True, logger=True)
-
-            metrics["confmat"].reset()
-            metrics["confmat_all"].reset()
-            metrics["clip_text_score"].reset()
-            metrics["clip_image_score"].reset()
-            if "mAP_evaluator" in metrics:
-                metrics["mAP_evaluator"].reset()
+        # log metrics only if not sanity checking
+        if not self.trainer.sanity_checking:
+            self.log_dict(log_metrics, sync_dist=True, logger=True)
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
         self.validation_step(batch, batch_idx, dataloader_idx)
