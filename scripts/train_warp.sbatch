@@ -23,7 +23,7 @@
 GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
 
 # Set default TAG to "warp"
-TAG="warp"
+TAG="warpconvnet-v0.2"
 
 # Check if the next argument doesn't start with "--" or contains "=" (indicating it's a TAG)
 if [[ $# -gt 0 && ${1:0:2} != "--" && ! $1 =~ "=" ]]; then
@@ -99,7 +99,8 @@ export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 pip install flash-attn;
-cd warpconvnet; pip install -e .; cd ..;
+pip uninstall -y warpconvnet;
+pip install --force-reinstall --no-deps ./warpconvnet;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \

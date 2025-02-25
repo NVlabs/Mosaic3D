@@ -8,7 +8,7 @@ from copy import deepcopy
 import torch
 import torch.nn as nn
 import warp as wp
-from warpconvnet.utils.batch_index import batch_index_from_offset
+from warpconvnet.geometry.coords.ops.batch_index import batch_index_from_offset
 from warpconvnet.utils.unique import unique_inverse
 
 from src.models.networks.regionplc.sparse_convnet import SparseConvUNetTextSeg

@@ -67,20 +67,6 @@ python -m src.data.regionplc.download --download_dir [path/to/save/dataset]
 
 Use of docker is highly recommended.
 
-### Using Warp ConvNet (Not installed by default)
-
-```bash
-conda install pytorch==2.2.2 torchvision==0.17.2 pytorch-cuda=12.1 -c pytorch -c nvidia
-pip install torch-scatter -f https://data.pyg.org/whl/torch-2.2.0+cu121.html
-pip install warp-lang
-git clone https://gitlab-master.nvidia.com/3dmmllm/warp
-cd warp
-# If using conda, install libstdcxx (https://nvidia.github.io/warp/installation.html#conda-environments)
-# conda install -c conda-forge libstdcxx-ng=12.1
-python build_lib.py
-pip install -e .
-```
-
 #### On Local Machines
 
 ```bash
@@ -169,15 +155,13 @@ cd openvocab-3d
 git clone --recurse-submodules https://gitlab-master.nvidia.com/3dmmllm/warp.git warpconvnet
 ```
 
-2. When running SLURM jobs, make sure to add `cd warpconvnet; pip install -e .; cd ..;` before running the training script.
+2. When running SLURM jobs, make sure to add `pip install --force-reinstall --no-deps ./warpconvnet` before running the training script.
 
 ```bash
 # Your train.sbatch
 CMD="
 ...
-
-cd warpconvnet; pip install -e .; cd ..;
-
+pip install --force-reinstall --no-deps ./warpconvnet
 torchrun ...
 "
 ```

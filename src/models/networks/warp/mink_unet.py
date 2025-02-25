@@ -10,10 +10,10 @@ from torch import Tensor
 
 from src.models.networks.network_base import NetworkBaseDict
 from src.utils import RankedLogger
-from warpconvnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.types.points import Points
+from warpconvnet.geometry.types.voxels import Voxels
 from warpconvnet.models.backbones.mink_unet import MinkUNetBase
-from warpconvnet.geometry.spatially_sparse_tensor import SpatiallySparseTensor
-from warpconvnet.nn.pools import PointToSparseWrapper
+from warpconvnet.nn.modules.sparse_pool import PointToSparseWrapper
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -36,7 +36,7 @@ class ToFeatureAdapter(nn.Module):
             nn.Identity() if not last_norm else nn.LayerNorm(text_channel),
         )
 
-    def forward(self, x: SpatiallySparseTensor) -> Float[Tensor, "N C"]:  # noqa: F722, F821
+    def forward(self, x: Voxels) -> Float[Tensor, "N C"]:  # noqa: F722, F821
         feats = self.adapter(x.features)
         if self.normalize_output:
             feats = F.normalize(feats, p=2, dim=-1)
@@ -72,7 +72,7 @@ class MinkUNetToCLIP(NetworkBaseDict):
     @override
     def data_dict_to_input(self, data_dict: Dict) -> Dict:
         # Convert the dict to point collection
-        data_dict["pc"] = PointCollection(
+        data_dict["pc"] = Points(
             batched_features=data_dict["feat"],
             batched_coordinates=data_dict["coord"],
             offsets=data_dict["offset"],

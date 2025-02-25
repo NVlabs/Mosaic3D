@@ -103,7 +103,6 @@ if [ \"\${SLURM_PROCID:-0}\" -eq 0 ]; then
 fi;
 conda deactivate;
 cd /workspace;
-cd warpconvnet; pip install -e .; cd ..;
 export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;

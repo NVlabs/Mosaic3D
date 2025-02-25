@@ -15,11 +15,11 @@ from src.utils import RankedLogger
 from src.models.components.structure import mean_pooling
 from src.models.networks.warp.adapter import Adapter
 
-from warpconvnet.geometry.point_collection import PointCollection
-from warpconvnet.geometry.spatially_sparse_tensor import SpatiallySparseTensor
+from warpconvnet.geometry.types.points import Points
+from warpconvnet.geometry.types.voxels import Voxels
 from warpconvnet.models.backbones.sparse_conv_unet import SparseConvUNet
-from warpconvnet.nn.pools import PointToSparseWrapper
-from warpconvnet.utils.batch_index import (
+from warpconvnet.nn.modules.sparse_pool import PointToSparseWrapper
+from warpconvnet.geometry.coords.ops.batch_index import (
     batch_index_from_offset,
     offsets_from_batch_index,
 )
@@ -53,7 +53,7 @@ def to_warp_sparse_tensor(data_dict: Dict, hash_method: Literal["fnv", "ravel"] 
     data_dict["v2p_map"] = v2p_map
     offsets = offsets_from_batch_index(voxel_coords[:, 0])
 
-    sparse_conv_feat = SpatiallySparseTensor(
+    sparse_conv_feat = Voxels(
         batched_features=voxel_feats,
         batched_coordinates=voxel_coords[:, 1:],
         offsets=offsets,
@@ -92,7 +92,7 @@ class SparseConvUNetToCLIP(NetworkBaseDict):
         )
 
     def data_dict_to_input(self, data_dict: Dict):
-        pc = PointCollection(
+        pc = Points(
             batched_features=data_dict["feat"],
             batched_coordinates=data_dict["coord"],
             offsets=data_dict["offset"],

@@ -4,12 +4,12 @@ import torch
 import torch.nn as nn
 
 import warp as wp
-from warpconvnet.geometry.point_collection import PointCollection
-from src.models.components.structure import mean_pooling
+from warpconvnet.geometry.types.points import Points
 from warpconvnet.nn.functional.point_pool import point_pool
-from warpconvnet.nn.pools import PointToSparseWrapper
-from warpconvnet.utils.batch_index import batch_index_from_offset
-from warpconvnet.utils.unique import unique_inverse
+from warpconvnet.nn.modules.sparse_pool import PointToSparseWrapper
+from warpconvnet.geometry.coords.ops.batch_index import batch_index_from_offset
+
+from src.models.components.structure import mean_pooling
 
 
 class TestMeanPooling(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestMeanPooling(unittest.TestCase):
         self.Ns = torch.randint(min_N, max_N, (self.B,))
         self.coords = [torch.rand((N, 3)) for N in self.Ns]
         self.features = [torch.rand((N, self.C)) for N in self.Ns]
-        self.pc = PointCollection(self.coords, self.features).to(self.device)
+        self.pc = Points(self.coords, self.features).to(self.device)
         self.voxel_size = 0.01
 
     def test_mean_pooling(self):

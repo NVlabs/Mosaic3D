@@ -7,7 +7,7 @@ import warp as wp
 import yaml
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
-from warpconvnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.types.points import Points
 
 from src.models.components.clip_models import build_clip_model
 from src.models.losses.caption_loss import (
@@ -70,7 +70,7 @@ class TestCaptionLoss(unittest.TestCase):
             )
 
             rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
-            pc = PointCollection(
+            pc = Points(
                 batch_dict["coord"].cpu(),
                 rand_feats,
                 offsets=batch_dict["offset"].cpu(),
@@ -103,7 +103,7 @@ class TestCaptionLoss(unittest.TestCase):
             caption_embed = get_caption_batch(batch_dict["caption_data"]["caption"], text_encoder)
 
             rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
-            pc = PointCollection(
+            pc = Points(
                 batch_dict["coord"].cpu(),
                 rand_feats,
                 offsets=batch_dict["offset"].cpu(),
@@ -135,7 +135,7 @@ class TestCaptionLoss(unittest.TestCase):
             caption_embed = get_caption_batch(batch_dict["caption_data"]["caption"], text_encoder)
 
             rand_feats = torch.randn(batch_dict["coord"].shape[0], 512)
-            pc = PointCollection(
+            pc = Points(
                 batch_dict["coord"].cpu(),
                 rand_feats,
                 offsets=batch_dict["offset"].cpu(),
