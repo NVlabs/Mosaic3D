@@ -26,7 +26,7 @@ val_datasets:
     image_root_path: ${data.train_dataset.image_root_path}
     caption_dir: ${data.train_dataset.caption_dir}
     caption_subset: ${data.train_dataset.caption_subset}
-    object_sample_ratio: ${data.train_dataset.object_sample_ratio}
+    object_num_max: ${data.train_dataset.object_num_max}
     base_class_idx: ${data.train_dataset.base_class_idx}
     ignore_class_idx: ${data.train_dataset.ignore_class_idx}
     novel_class_idx: ${data.train_dataset.novel_class_idx}

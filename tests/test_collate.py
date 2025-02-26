@@ -5,7 +5,7 @@ import yaml
 from lightning import LightningDataModule
 from omegaconf import OmegaConf
 
-from warpconvnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.types.points import Points
 
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -26,9 +26,9 @@ def test_collate_fns(fn_name: str) -> None:
         assert isinstance(batch_dict, dict)
 
         print(batch_dict.keys())
-        pc = PointCollection(
-            batch_dict["coord"], batch_dict["feat"], offsets=batch_dict["offset"]
-        ).to(DEVICE)
+        pc = Points(batch_dict["coord"], batch_dict["feat"], offsets=batch_dict["offset"]).to(
+            DEVICE
+        )
         if i == 0:
             break
 

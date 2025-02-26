@@ -30,3 +30,6 @@ logger:
 callbacks:
   model_checkpoint:
     monitor: ${data.checkpoint_monitor}
+
+model:
+  best_metric: ${data.checkpoint_monitor}

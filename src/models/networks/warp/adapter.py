@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from warpconvnet.geometry.base_geometry import SpatialFeatures
+from warpconvnet.geometry.base.geometry import Geometry
 
 
 class MLP(nn.Sequential):
@@ -58,7 +58,7 @@ class Adapter(nn.Module):
             last_norm=last_norm,
         )
 
-    def forward(self, sf: SpatialFeatures) -> SpatialFeatures:
+    def forward(self, sf: Geometry) -> Geometry:
         feats = self.adapter(sf.features)
         sf = sf.replace(batched_features=feats)
         return sf

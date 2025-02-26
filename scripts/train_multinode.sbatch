@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=nvr_lpr_nvgptvision
-#SBATCH --partition=grizzly,polar,polar2,polar3,polar4
+#SBATCH --partition=grizzly,polar,polar3,polar4
 #SBATCH --time=04:00:00                  # Adjust time limit as needed
 #SBATCH --exclusive
 #SBATCH --cpus-per-task=31
@@ -103,7 +103,6 @@ if [ \"\${SLURM_PROCID:-0}\" -eq 0 ]; then
 fi;
 conda deactivate;
 cd /workspace;
-cd warpconvnet; pip install -e .; cd ..;
 export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;

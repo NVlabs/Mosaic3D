@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --account=nvr_lpr_nvgptvision
-#SBATCH --partition=batch_singlenode,grizzly,polar,polar2,polar3,polar4
+#SBATCH --partition=batch_singlenode,grizzly,polar,polar3,polar4
 #SBATCH --time=04:00:00                  # Adjust time limit as needed
 #SBATCH --exclusive
 #SBATCH --cpus-per-task=31               # number of cores
@@ -99,6 +99,7 @@ export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 pip install flash-attn;
+pip install -U lightning>=2.5.0;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \

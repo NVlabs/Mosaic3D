@@ -5,6 +5,9 @@ __pycache__/
 ckpt/
 huggingface_cache/
 
+# eval
+eval_*/
+
 # C extensions
 *.so
 
@@ -166,3 +169,4 @@ ckpts/
 samples/
 saved/
 visuals/
+mmscan_data

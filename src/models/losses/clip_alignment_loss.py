@@ -10,11 +10,10 @@ from jaxtyping import Float, Int
 from torch import Tensor
 
 try:
-    from warpconvnet.geometry.point_collection import PointCollection
+    from warpconvnet.geometry.types.points import Points
 except ImportError:
     from src.utils.misc import DummyClass
-
-    PointCollection = DummyClass
+    Points = DummyClass
 
 import src.utils.caption_utils as caption_utils
 from src.models.losses.loss_base import LossBase
@@ -66,8 +65,8 @@ class CLIPAlignmentLoss(LossBase):
     def set_target_embedding(self, text_embeddings: torch.Tensor):
         self.emb_target = text_embeddings.float()
 
-    def forward(self, x: Tensor | PointCollection) -> Tensor:
-        if isinstance(x, PointCollection):
+    def forward(self, x: Tensor | Points) -> Tensor:
+        if isinstance(x, Points):
             x = x.feature_tensor
         if self.normalize_input:
             return F.normalize(x, p=2, dim=1)
@@ -75,7 +74,7 @@ class CLIPAlignmentLoss(LossBase):
 
     def loss(
         self,
-        x: Tensor | PointCollection,
+        x: Tensor | Points,
         target: Int[Tensor, ("N")],  # noqa: F821, F722
     ) -> Tensor:
         logit = self.predict(x, return_logit=True)
@@ -125,8 +124,8 @@ class CLIPAlignmentEval(nn.Module):
     def set_target_embedding(self, text_embeddings: torch.Tensor):
         self.emb_target = text_embeddings.float()
 
-    def forward(self, x: Tensor | PointCollection) -> Tensor:
-        if isinstance(x, PointCollection):
+    def forward(self, x: Tensor | Points) -> Tensor:
+        if isinstance(x, Points):
             x = x.feature_tensor
         if self.normalize_input:
             return F.normalize(x, p=2, dim=1)

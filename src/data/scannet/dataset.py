@@ -108,7 +108,12 @@ class ScanNetDataset(DatasetBase):
                 and hasattr(self, "segment_dir")
                 and (self.segment_dir[i] / scene_name / "point_indices.npz").exists()
             ):
-                if "gathered" in str(caption_dir):
+                if "mosaic3d" in str(caption_dir):
+                    point_indices, captions = self._load_caption_mosaic3dpp(
+                        scene_name, caption_dir, self.segment_dir[i]
+                    )
+
+                elif "gathered" in str(caption_dir):
                     point_indices, captions = self._load_caption_gathered(
                         scene_name, caption_dir, self.segment_dir[i]
                     )
@@ -125,6 +130,28 @@ class ScanNetDataset(DatasetBase):
             all_captions.extend(captions)
 
         return all_point_indices, all_captions
+
+    def _load_caption_mosaic3dpp(self, scene_name, caption_dir, segment_dir):
+        indices_path = segment_dir / scene_name / "point_indices.npz"
+        caption_path = caption_dir / scene_name / "captions-gathered.npz"
+
+        if not indices_path.exists() or not caption_path.exists():
+            return [], []
+
+        point_indices_all = unpack_list_of_np_arrays(indices_path)
+        captions_all = unpack_list_of_np_arrays(caption_path)
+
+        num_captions_per_object = np.array([len(c) for c in captions_all])
+        idx_select_caption = np.cumsum(
+            np.insert(num_captions_per_object, 0, 0)[0:-1]
+        ) + np.random.randint(0, num_captions_per_object, len(num_captions_per_object))
+
+        # flatten the list of list
+        point_indices = [torch.from_numpy(indices).int() for indices in point_indices_all]
+        captions = [item for sublist in captions_all for item in sublist]
+        captions = [captions[i] for i in idx_select_caption]
+
+        return point_indices, captions
 
     def _load_caption_legacy(self, scene_name, caption_dir):
         filepath = os.path.join(caption_dir, f"{scene_name}.npz")
@@ -552,4 +579,19 @@ def convert_scannet200_gt_format(
 
 if __name__ == "__main__":
     # fire.Fire(check_scannet_data)
-    fire.Fire(convert_scannet200_gt_format)
+    # fire.Fire(convert_scannet200_gt_format)
+    dataset = ScanNetDataset(
+        data_dir="/datasets/scannet_hf",
+        split="train",
+        transforms=None,
+        caption_dir="/datasets/mosaic3d++",
+        caption_subset="caption-mc.osprey.scannet-125k",
+        segment_dir="/datasets/mosaic3d++",
+        segment_subset="mask_clustering.cropformer.scannet-125k",
+        object_num_max=300,
+        ignore_label=-100,
+    )
+
+    for i in range(dataset.__len__()):
+        print(i)
+        sample = dataset[i]

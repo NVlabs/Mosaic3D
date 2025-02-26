@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from src.data.regionplc.scannet_dataset import ScanNetDataset
 from src.models.losses.clip_alignment_loss import CLIPAlignmentLoss
-from warpconvnet.geometry.point_collection import PointCollection
+from warpconvnet.geometry.types.points import Points
 
 EMBED_PATH = "/datasets/regionplc/text_embed/scannet_clip-ViT-B16_id.pth"
 
@@ -40,8 +40,8 @@ class TestCLIPAlignmentLoss(unittest.TestCase):
             loss = alignment_head.loss(rand_feats, labels)
             print(loss)
 
-            # PointCollection test
-            pc = PointCollection(
+            # Points test
+            pc = Points(
                 data_dict["coord"],
                 rand_feats,
                 offsets=data_dict["offset"],

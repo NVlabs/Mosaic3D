@@ -5,7 +5,12 @@ import numpy as np
 import torch
 
 from src.data.dataset_base import DatasetBase
-from src.data.metadata.matterport3d import CLASS_LABELS_21
+from src.data.metadata.matterport3d import (
+    CLASS_LABELS_21,
+    CLASS_LABELS_40,
+    CLASS_LABELS_80,
+    CLASS_LABELS_160,
+)
 from src.utils import RankedLogger
 from src.utils.io import unpack_list_of_np_arrays
 
@@ -117,3 +122,15 @@ class Matterport3DDataset(DatasetBase):
 
         data_dict = self.transforms(data_dict)
         return data_dict
+
+
+class Matterport3D40Dataset(Matterport3DDataset):
+    CLASS_LABELS = CLASS_LABELS_40
+
+
+class Matterport3D80Dataset(Matterport3DDataset):
+    CLASS_LABELS = CLASS_LABELS_80
+
+
+class Matterport3D160Dataset(Matterport3DDataset):
+    CLASS_LABELS = CLASS_LABELS_160

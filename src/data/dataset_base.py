@@ -105,12 +105,15 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         ]
 
         # data transform
-        transforms_cfg = OmegaConf.to_container(transforms)
-        if mask_dir is not None:
-            for transform_cfg in transforms_cfg:
-                if transform_cfg["type"] == "Collect":
-                    transform_cfg["keys"].append("masks_binary")
-        self.transforms = Compose(transforms_cfg)
+        if transforms is not None:
+            transforms_cfg = OmegaConf.to_container(transforms)
+            if mask_dir is not None:
+                for transform_cfg in transforms_cfg:
+                    if transform_cfg["type"] == "Collect":
+                        transform_cfg["keys"].append("masks_binary")
+            self.transforms = Compose(transforms_cfg)
+        else:
+            self.transforms = lambda x: x
 
         log.info(f"Loaded {self.__len__()} samples in {self.split} set.")
 
