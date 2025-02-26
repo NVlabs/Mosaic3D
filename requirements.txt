@@ -34,7 +34,7 @@ jaxtyping
 torch-scatter
 
 # --------- RegionPLC --------- #
-numpy
+numpy<2
 spconv-cu120
 easydict
 pyyaml

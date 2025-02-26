@@ -42,7 +42,7 @@ train_transforms:
     std: 0.05
   - type: SphereCrop
     point_max: 250000
-    mode: random
+    mode: captioned
   - type: CenterShift
     apply_z: false
   - type: NormalizeColor

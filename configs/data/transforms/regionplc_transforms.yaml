@@ -17,7 +17,7 @@ train_transforms:
   - type: ElasticDistortion
   - type: SphereCrop
     point_max: 250000
-    mode: random
+    mode: captioned
   - type: NormalizeColor
   - type: ToTensor
   - type: Collect

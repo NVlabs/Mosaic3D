@@ -1,0 +1,6 @@
+defaults:
+  - scannet_125k_mask
+
+train_dataset:
+  caption_subset: caption.gt.scannet200
+  segment_subset: segment.gt.scannet200

@@ -8,7 +8,11 @@ import torch
 import torch.nn as nn
 from addict import Dict
 from torch_scatter import scatter
-from warpconvnet.utils.ravel import ravel_multi_index_auto_shape
+
+try:
+    from warpconvnet.utils.ravel import ravel_multi_index_auto_shape
+except ImportError:
+    from src.models.components.misc import ravel_multi_index_auto_shape
 
 from src.models.components.misc import batch2offset, offset2batch
 from src.models.networks.ptv3.serialization import encode

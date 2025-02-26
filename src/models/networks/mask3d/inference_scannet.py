@@ -1,7 +1,7 @@
 import os
 import glob
 import json
-
+from pathlib import Path
 import hydra
 from omegaconf import DictConfig
 import torch
@@ -16,6 +16,7 @@ from src.models.networks.mask3d.demo import CONFIG_DIR, parse_predictions, save_
 def main(cfg: DictConfig):
     os.chdir(hydra.utils.get_original_cwd())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    out_dir = Path(cfg.general.output_dir)
 
     # load model
     model = get_model(cfg)
@@ -55,12 +56,26 @@ def main(cfg: DictConfig):
             cfg, outputs, point2segment, point2segment_full, raw_coordinates, inverse_map
         )
 
-        # save masks with npz
+        # save
+        scene_out_dir = out_dir / scene_id
+        scene_out_dir.mkdir(parents=True, exist_ok=True)
+
+        point_indices_all = []
+        lengths_all = []
+        for mask in masks_binary:
+            point_indices = np.where(mask)[0].tolist()
+            point_indices_all.extend(point_indices)
+            lengths_all.append(len(point_indices))
+
+        point_indices_all = np.array(point_indices_all).astype(np.int32)
+        lengths_all = np.array(lengths_all).astype(np.int64)
+
         np.savez(
-            os.path.join(cfg.general.output_dir, f"{scene_id}.npz"),
+            scene_out_dir / "point_indices.npz",
+            packed=point_indices_all,
+            lengths=lengths_all,
             scores=scores.numpy(),
             classes=classes.numpy(),
-            masks_binary=masks_binary.numpy(),
         )
 
         # save visualization

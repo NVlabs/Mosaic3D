@@ -8,7 +8,12 @@ import torch.nn.functional as F
 from einops import repeat
 from jaxtyping import Float, Int
 from torch import Tensor
-from warpconvnet.geometry.types.points import Points
+
+try:
+    from warpconvnet.geometry.types.points import Points
+except ImportError:
+    from src.utils.misc import DummyClass
+    Points = DummyClass
 
 import src.utils.caption_utils as caption_utils
 from src.models.losses.loss_base import LossBase

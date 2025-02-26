@@ -507,18 +507,14 @@ def check_scannet_data(
     return erroneous_files
 
 
-def generate_oracle_masks(
+def convert_scannet200_gt_format(
     data_dir: str = "/datasets/scannet_hf",
-    output_dir: str = "/datasets/scannet_masks",
-    type: Literal["scannet20", "scannet200"] = "scannet200",
+    output_dir: str = "/datasets/openvocab-3d-captions",
 ):
     data_dir = Path(data_dir)
-    output_dir = Path(output_dir) / f"oracle_{type}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    if type == "scannet200":
-        ignore_idx = [0, 2]  # wall, floor
-    else:
-        ignore_idx = [0, 1, 19]  # wall, floor, otherfurniture
+    output_dir = Path(output_dir)
+    segment_dir = output_dir / "segment.gt.scannet200"
+    caption_dir = output_dir / "caption.gt.scannet200"  # w/o prompt engineering
 
     # Read scene names for all splits
     splits = ["train", "val"]
@@ -531,15 +527,12 @@ def generate_oracle_masks(
     for split, scene_name in tqdm(scene_names):
         scene_dir = data_dir / split / scene_name
         instance = np.load(scene_dir / "instance.npy")
-        segment = (
-            np.load(scene_dir / "segment200.npy")
-            if type == "scannet200"
-            else np.load(scene_dir / "segment20.npy")
-        )
-        num_points = len(instance)
+        segment = np.load(scene_dir / "segment200.npy")
 
         # Filter out invalid instance ids
-        valid_mask = instance != -1
+        valid_instance_mask = instance != -1
+        valid_segment_mask = segment != -1
+        valid_mask = valid_instance_mask & valid_segment_mask
         valid_instance = instance[valid_mask]
         valid_segment = segment[valid_mask]
 
@@ -547,26 +540,46 @@ def generate_oracle_masks(
         unique_instances, unique_idx = np.unique(valid_instance, return_index=True)
         unique_segment = valid_segment[unique_idx]
 
-        # Filter out ignored classes
-        valid_mask = ~np.isin(unique_segment, ignore_idx)
-        valid_unique_segment = unique_segment[valid_mask]
-        valid_unique_instances = unique_instances[valid_mask]
+        # Convert instance to point_indices (flattened)
+        point_indices_all = []
+        captions_all = []
+        inner_lengths_all = []
+        for unique_instance, unique_segment in zip(unique_instances, unique_segment):
+            point_indices = np.where(instance == unique_instance)[0].tolist()
+            point_indices_all.extend(point_indices)
+            inner_lengths_all.append(len(point_indices))
+            captions_all.append(CLASS_LABELS_200[unique_segment])
 
-        num_instances = len(valid_unique_segment)
-        # Convert instance to binary mask
-        masks_binary = np.zeros((num_instances, num_points), dtype=bool)
-        for i, inst_id in enumerate(valid_unique_instances):
-            mask = instance == inst_id
-            masks_binary[i, mask] = True
+        point_indices_all = np.array(point_indices_all).astype(np.int32)
+        inner_lengths_all = np.array(inner_lengths_all).astype(np.int64)
+        outer_lengths_all = np.array([len(inner_lengths_all)]).astype(
+            np.int64
+        )  # for compatibility with Mosaic3D
+        captions_all = np.array(captions_all).astype(np.str_)
 
-        scores = np.ones(num_instances)
+        # Save segment
+        segment_output_dir = segment_dir / f"{scene_name}"
+        segment_output_dir.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            segment_output_dir / "point_indices.npz",
+            packed=point_indices_all,
+            outer_lengths=outer_lengths_all,
+            inner_lengths=inner_lengths_all,
+        )
 
-        np.savez(output_dir / f"{scene_name}.npz", scores=scores, masks_binary=masks_binary)
+        # Save caption
+        caption_output_dir = caption_dir / f"{scene_name}"
+        caption_output_dir.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            caption_output_dir / "captions.npz",
+            packed=captions_all,
+            lengths=outer_lengths_all,
+        )
 
 
 if __name__ == "__main__":
     # fire.Fire(check_scannet_data)
-    # fire.Fire(generate_oracle_masks)
+    # fire.Fire(convert_scannet200_gt_format)
     dataset = ScanNetDataset(
         data_dir="/datasets/scannet_hf",
         split="train",

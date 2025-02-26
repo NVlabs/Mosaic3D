@@ -1,14 +1,13 @@
 import torch
-import hydra
 import torch.nn as nn
-import MinkowskiEngine.MinkowskiOps as me
+import MinkowskiEngine as ME
 from MinkowskiEngine.MinkowskiPooling import MinkowskiAvgPooling
 import numpy as np
 from torch.nn import functional as F
 from src.models.networks.segment3d.modules.position_embedding import PositionEmbeddingCoordsSine
 from src.models.networks.segment3d.modules.common import conv
 from src.models.networks.segment3d.modules.helpers_3detr import GenericMLP
-from torch_scatter import scatter_mean, scatter_max, scatter_min
+from torch_scatter import scatter_mean, scatter_max
 from torch.cuda.amp import autocast
 
 from src.models.networks.segment3d.utils.pointnet2_utils import furthest_point_sample
@@ -71,10 +70,24 @@ class Mask3D_no_aux(nn.Module):
 
         self.backbone = config.backbone
         self.num_levels = len(self.hlevels)
-        sizes = self.backbone.PLANES[-5:]
+
+        if hasattr(self.backbone, "PLANES"):  # minkowski
+            sizes = self.backbone.PLANES[-5:]
+            point_feature_dim = self.backbone.PLANES[7]
+        elif hasattr(self.backbone, "adapter"):  # regionplc
+            sizes = [self.backbone.adapter.text_channel]
+            point_feature_dim = self.backbone.adapter.text_channel
+        elif hasattr(self.backbone, "channels"):  # spinnet
+            sizes = [self.backbone.out_channels]
+            point_feature_dim = self.backbone.out_channels
+        elif hasattr(self.backbone, "backbone"):  # ppt
+            sizes = [self.backbone.backbone.final_out_channels]
+            point_feature_dim = self.backbone.backbone.final_out_channels
+        else:
+            raise ValueError("Backbone type not known")
 
         self.mask_features_head = conv(
-            self.backbone.PLANES[7],
+            point_feature_dim,
             self.mask_dim,
             kernel_size=1,
             stride=1,
@@ -224,13 +237,41 @@ class Mask3D_no_aux(nn.Module):
 
         return pos_encodings_pcd
 
-    def forward(self, x, point2segment=None, raw_coordinates=None, is_eval=False):
+    def to_tensor_field(self, batch_dict: dict) -> ME.TensorField:
+        assert batch_dict["feat"].dtype == torch.float32, "MinkowskiEngine only supports float32"
+
+        batch_size = len(batch_dict["offset"]) - 1
+
+        coord = batch_dict["coord"] / self.voxel_size
+        feat = batch_dict["feat"]
+        offset = batch_dict["offset"]
+        batch_feats = []
+        batch_coords = []
+        for i in range(batch_size):
+            batch_feats.append(feat[offset[i] : offset[i + 1]])
+            batch_coords.append(coord[offset[i] : offset[i + 1]])
+
+        batch_coords, batch_feats = ME.utils.sparse_collate(
+            batch_coords, batch_feats, dtype=batch_feats[0].dtype
+        )
+        tfield = ME.TensorField(
+            features=batch_feats,
+            coordinates=batch_coords,
+            quantization_mode=ME.SparseTensorQuantizationMode.UNWEIGHTED_AVERAGE,
+        )
+        return tfield
+
+    def forward(self, batch_dict: dict, is_eval: bool = False) -> dict:
+        x = batch_dict["sparse_tensor"]
+        point2segment = batch_dict["point2segment"]
+        raw_coordinates = batch_dict["coord"]
+
         pcd_features, aux = self.backbone(x)
 
         batch_size = len(x.decomposed_coordinates)
 
         with torch.no_grad():
-            coordinates = me.SparseTensor(
+            coordinates = ME.SparseTensor(
                 features=raw_coordinates,
                 coordinate_manager=aux[-1].coordinate_manager,
                 coordinate_map_key=aux[-1].coordinate_map_key,
@@ -459,9 +500,6 @@ class Mask3D_no_aux(nn.Module):
                 # FFN
                 queries = self.ffn_attention[decoder_counter][i](output).permute((1, 0, 2))
 
-                # predictions_class.append(output_class)
-                # predictions_mask.append(outputs_mask)
-
         if self.train_on_segments:
             output_class, outputs_mask = self.mask_module(
                 queries,
@@ -488,13 +526,7 @@ class Mask3D_no_aux(nn.Module):
         return {
             "pred_logits": predictions_class[-1],
             "pred_masks": predictions_mask[-1],
-            # "aux_outputs": self._set_aux_loss(
-            #     predictions_class, predictions_mask
-            # ),
-            "sampled_coords": sampled_coords.detach().cpu().numpy()
-            if sampled_coords is not None
-            else None,
-            # "backbone_features": pcd_features,
+            "sampled_coords": sampled_coords.detach() if sampled_coords is not None else None,
         }
 
     def mask_module(
@@ -522,7 +554,7 @@ class Mask3D_no_aux(nn.Module):
                 output_masks.append(mask_features.decomposed_features[i] @ mask_embed[i].T)
 
         output_masks = torch.cat(output_masks)
-        outputs_mask = me.SparseTensor(
+        outputs_mask = ME.SparseTensor(
             features=output_masks,
             coordinate_manager=mask_features.coordinate_manager,
             coordinate_map_key=mask_features.coordinate_map_key,
@@ -533,7 +565,7 @@ class Mask3D_no_aux(nn.Module):
             for _ in range(num_pooling_steps):
                 attn_mask = self.pooling(attn_mask.float())
 
-            attn_mask = me.SparseTensor(
+            attn_mask = ME.SparseTensor(
                 features=(attn_mask.F.detach().sigmoid() < 0.5),
                 coordinate_manager=attn_mask.coordinate_manager,
                 coordinate_map_key=attn_mask.coordinate_map_key,
@@ -552,16 +584,6 @@ class Mask3D_no_aux(nn.Module):
             return outputs_class, output_segments
         else:
             return outputs_class, outputs_mask.decomposed_features
-
-    @torch.jit.unused
-    def _set_aux_loss(self, outputs_class, outputs_seg_masks):
-        # this is a workaround to make torchscript happy, as torchscript
-        # doesn't support dictionary with non-homogeneous values, such
-        # as a dict having both a Tensor and a list.
-        return [
-            {"pred_logits": a, "pred_masks": b}
-            for a, b in zip(outputs_class[:-1], outputs_seg_masks[:-1])
-        ]
 
 
 class PositionalEncoding3D(nn.Module):

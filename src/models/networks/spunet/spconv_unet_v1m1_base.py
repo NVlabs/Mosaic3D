@@ -6,10 +6,11 @@ Please cite our work if the code is helpful to you.
 
 from collections import OrderedDict
 from functools import partial
+from typing import Literal, List
 
-import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
+import spconv.pytorch as spconv
 
 from src.models.components.structure import Custom1x1Subm3d, Point
 from src.models.networks.openscene.utils import trunc_normal_
@@ -163,11 +164,13 @@ class Bottleneck(spconv.SparseModule):
 class SpUNetBase(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        base_channels=32,
-        channels=(32, 64, 128, 256, 256, 128, 96, 96),
-        layers=(2, 3, 4, 6, 2, 2, 2, 2),
+        in_channels: int,
+        out_channels: int,
+        base_channels: int = 32,
+        channels: List[int] = [32, 64, 128, 256, 256, 128, 96, 96],
+        layers: List[int] = [2, 3, 4, 6, 2, 2, 2, 2],
+        out_fpn: bool = False,
+        hash_method: Literal["fnv", "ravel"] = "fnv",
         **kwargs,
     ):
         super().__init__()
@@ -179,6 +182,8 @@ class SpUNetBase(nn.Module):
         self.channels = channels
         self.layers = layers
         self.num_stages = len(layers) // 2
+        self.out_fpn = out_fpn
+        self.hash_method = hash_method
 
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         block = BasicBlock
@@ -306,17 +311,22 @@ class SpUNetBase(nn.Module):
 
     def forward(self, input_dict):
         point = Point(input_dict)
-        point.sparsify(pad=128)
+        point.sparsify(pad=128, hash_method=self.hash_method)
 
+        feature_maps = []
         x = point.sparse_conv_feat
         x = self.conv_input(x)
         skips = [x]
+
         # enc forward
         for s in range(self.num_stages):
             x = self.down[s](x)
             x = self.enc[s](x)
             skips.append(x)
+
         x = skips.pop(-1)
+        feature_maps.append(x)
+
         # dec forward
         for s in reversed(range(self.num_stages)):
             x = self.up[s](x)
@@ -324,10 +334,17 @@ class SpUNetBase(nn.Module):
             x = x.replace_feature(torch.cat((x.features, skip.features), dim=1))
             x = self.dec[s](x)
 
-        x = self.final(x)
+            if s != 0:
+                feature_maps.append(x)
 
+        x = self.final(x)
+        feature_maps.append(x)
         point.sparse_conv_feat = x
-        return point
+
+        if self.out_fpn:
+            return point, feature_maps
+        else:
+            return point
 
 
 class SpUNetBottleneck(SpUNetBase):
