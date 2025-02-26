@@ -1,7 +1,12 @@
+# TorchMetrics implementation of the ScanNet instance segmentation evaluation metric
+# https://github.com/Pointcept/Pointcept/blob/main/pointcept/engines/hooks/evaluator.py#L205
+
 from typing import Dict, List
+from uuid import uuid4
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from torchmetrics import Metric
 
 from src.utils import RankedLogger
@@ -25,289 +30,285 @@ class InstanceSegmentationEvaluator(Metric):
         self.instance_ignore_index = instance_ignore_index
         self.class_names = class_names
         self.num_classes = len(class_names)
+
         self.valid_class_names = [
             class_names[i] for i in range(self.num_classes) if i not in segment_ignore_index
         ]
-        # Multiple IoU thresholds (0.5~0.9, 0.25)
-        self.overlaps = [round(o, 2) for o in list(np.arange(0.5, 0.95, 0.05)) + [0.25]]
+        self.overlaps = np.append(np.arange(0.5, 0.95, 0.05), 0.25)
         self.min_region_size = min_region_size
         self.distance_thresh = distance_thresh
         self.distance_conf = distance_conf
         self.subset_mapper = subset_mapper
 
-        # Accumulated states: use flat lists for each class and threshold
-        self.add_state(
-            "num_scenes", default=torch.tensor(0, dtype=torch.int), dist_reduce_fx="sum"
-        )
-        for class_name in self.valid_class_names:
-            for ov in self.overlaps:
-                # For scores
-                self.add_state(f"scores_{class_name}_{ov}", default=[], dist_reduce_fx="cat")
-                # For labels (TP/FP)
-                self.add_state(f"labels_{class_name}_{ov}", default=[], dist_reduce_fx="cat")
-
-            # For GT counts
-            self.add_state(
-                f"gt_count_{class_name}",
-                default=torch.tensor(0, dtype=torch.int),
-                dist_reduce_fx="sum",
-            )
+        self.add_state("pred_classes", default=[])
+        self.add_state("pred_scores", default=[])
+        self.add_state("pred_masks", default=[])
+        self.add_state("gt_segment", default=[])
+        self.add_state("gt_instance", default=[])
 
     def update(
         self,
-        pred_classes: torch.Tensor,  # shape: [num_preds]
-        pred_scores: torch.Tensor,  # shape: [num_preds]
-        pred_masks: torch.Tensor,  # shape: [num_preds, num_vertices]
-        gt_segment: torch.Tensor,  # shape: [num_vertices]
-        gt_instance: torch.Tensor,  # shape: [num_vertices]
+        pred_classes: torch.Tensor,
+        pred_scores: torch.Tensor,
+        pred_masks: torch.Tensor,
+        gt_segment: torch.Tensor,
+        gt_instance: torch.Tensor,
     ):
-        """
-        For a single scene, extract GT/predicted instances and accumulate
-        (confidence, TP/FP) results and GT counts for each class.
-        """
-        device = gt_segment.device
-
-        # --- Process GT instances ---
-        # Extract unique GT instance ids with their indices and counts
-        np_instance = gt_instance.cpu().numpy()
-        np_instance_ids, np_indices, np_counts = np.unique(
-            np_instance, return_index=True, return_counts=True
-        )
-        instance_ids = torch.from_numpy(np_instance_ids).to(device)
-        indices = torch.from_numpy(np_indices).to(device)
-        counts = torch.from_numpy(np_counts).to(device)
-        gt_instance_info = []
-        for i, inst_id in enumerate(instance_ids):
-            if inst_id.item() == self.instance_ignore_index:
-                continue
-            seg_id = gt_segment[indices[i]].item()
-            if seg_id in self.segment_ignore_index:
-                continue
-            # Create binary mask for this instance
-            mask = gt_instance == inst_id
-            vert_count = counts[i].item()
-            if vert_count < self.min_region_size:
-                continue
-            # Distance-related conditions pass by default
-            gt_instance_info.append(
-                {
-                    "instance_id": inst_id.item(),
-                    "segment_id": seg_id,
-                    "mask": mask,  # boolean tensor
-                    "vert_count": vert_count,
-                }
-            )
-        # Group GT by class
-        gt_by_class = {c: [] for c in self.valid_class_names}
-        for gt in gt_instance_info:
-            class_name = self.class_names[gt["segment_id"]]
-            if class_name in gt_by_class:
-                gt_by_class[class_name].append(gt)
-
-        # Accumulate GT counts by class
-        for class_name in self.valid_class_names:
-            gt_count = len(gt_by_class[class_name])
-            gt_count_attr = getattr(self, f"gt_count_{class_name}")
-            gt_count_attr += torch.tensor(gt_count, device=device)
-            setattr(self, f"gt_count_{class_name}", gt_count_attr)
-
-        # --- Process predicted instances ---
-        pred_instance_info = []
-        num_preds = pred_classes.shape[0]
-        for i in range(num_preds):
-            cls = pred_classes[i].item()
-            if cls in self.segment_ignore_index:
-                continue
-            mask = pred_masks[i] != 0
-            vert_count = torch.count_nonzero(mask).item()
-            if vert_count < self.min_region_size:
-                continue
-            confidence = pred_scores[i].item()
-            pred_instance_info.append(
-                {
-                    "instance_id": i,
-                    "segment_id": cls,
-                    "mask": mask,  # boolean tensor
-                    "vert_count": vert_count,
-                    "confidence": confidence,
-                }
-            )
-        # Group predictions by class
-        preds_by_class = {c: [] for c in self.valid_class_names}
-        for pred in pred_instance_info:
-            class_name = self.class_names[pred["segment_id"]]
-            if class_name in preds_by_class:
-                preds_by_class[class_name].append(pred)
-
-        # --- Calculate IoU matrix for each class and perform greedy matching for each threshold ---
-        for class_name in self.valid_class_names:
-            gt_list = gt_by_class[class_name]
-            pred_list = preds_by_class[class_name]
-
-            # If there are no GTs for this class, all predictions are FPs
-            if len(gt_list) == 0:
-                for ov in self.overlaps:
-                    if len(pred_list) > 0:
-                        scores = torch.tensor(
-                            [pred["confidence"] for pred in pred_list], device=device
-                        )
-                        labels = torch.zeros(len(pred_list), dtype=torch.int, device=device)
-
-                        # Update state variables
-                        scores_attr = getattr(self, f"scores_{class_name}_{ov}")
-                        scores_attr.append(scores)
-                        setattr(self, f"scores_{class_name}_{ov}", scores_attr)
-
-                        labels_attr = getattr(self, f"labels_{class_name}_{ov}")
-                        labels_attr.append(labels)
-                        setattr(self, f"labels_{class_name}_{ov}", labels_attr)
-                continue
-
-            num_preds_cls = len(pred_list)
-            num_gt_cls = len(gt_list)
-            # IoU matrix: [num_preds, num_gt]
-            iou_matrix = torch.zeros((num_preds_cls, num_gt_cls), device=device)
-            for p_idx, pred in enumerate(pred_list):
-                pred_mask = pred["mask"]
-                for g_idx, gt in enumerate(gt_list):
-                    gt_mask = gt["mask"]
-                    intersection = torch.count_nonzero(pred_mask & gt_mask).float()
-                    union = torch.count_nonzero(pred_mask | gt_mask).float()
-                    iou = (intersection / union).item() if union > 0 else 0.0
-                    iou_matrix[p_idx, g_idx] = iou
-
-            # Perform matching for each overlap threshold
-            for ov in self.overlaps:
-                # Sort by confidence in descending order
-                sorted_indices = sorted(
-                    range(num_preds_cls), key=lambda i: pred_list[i]["confidence"], reverse=True
-                )
-                gt_matched = [False] * num_gt_cls
-
-                # Collect scores and labels for this class and threshold
-                scores_list = []
-                labels_list = []
-
-                for idx in sorted_indices:
-                    score = pred_list[idx]["confidence"]
-                    scores_list.append(score)
-
-                    # IoU values between this prediction and all GTs
-                    ious = iou_matrix[idx, :]
-                    max_iou, max_idx = torch.max(ious, dim=0)
-                    if max_iou >= ov and not gt_matched[max_idx]:
-                        # True Positive case
-                        labels_list.append(1)
-                        gt_matched[max_idx] = True
-                    else:
-                        # False Positive case
-                        labels_list.append(0)
-
-                # Convert to tensors and update state
-                if scores_list:
-                    scores = torch.tensor(scores_list, device=device)
-                    labels = torch.tensor(labels_list, dtype=torch.int, device=device)
-
-                    # Update state variables
-                    scores_attr = getattr(self, f"scores_{class_name}_{ov}")
-                    scores_attr.append(scores)
-                    setattr(self, f"scores_{class_name}_{ov}", scores_attr)
-
-                    labels_attr = getattr(self, f"labels_{class_name}_{ov}")
-                    labels_attr.append(labels)
-                    setattr(self, f"labels_{class_name}_{ov}", labels_attr)
-
-        self.num_scenes += torch.tensor(1, device=device)
+        self.pred_classes.append(pred_classes)
+        self.pred_scores.append(pred_scores)
+        self.pred_masks.append(pred_masks)
+        self.gt_segment.append(gt_segment)
+        self.gt_instance.append(gt_instance)
 
     def compute(self):
-        """
-        Calculate class-wise and overall AP (mAP) based on accumulated detection results.
-        (Using simple trapezoidal integration method)
-        """
-        log.info(f"Evaluating instance segmentation results for {self.num_scenes} scenes...")
-        ap_table = {class_name: {} for class_name in self.valid_class_names}
+        log.info(
+            f"Computing instance segmentation evaluation with {len(self.pred_classes)} predictions"
+        )
+        scenes = []
+        for i in range(len(self.pred_classes)):
+            gt_instances, pred_instances = self.associate_instances(
+                {
+                    "pred_classes": self.pred_classes[i].cpu().numpy(),
+                    "pred_scores": self.pred_scores[i].cpu().numpy(),
+                    "pred_masks": self.pred_masks[i].cpu().numpy(),
+                },
+                self.gt_segment[i].cpu().numpy(),
+                self.gt_instance[i].cpu().numpy(),
+            )
+            scenes.append({"gt": gt_instances, "pred": pred_instances})
+        return self.evaluate_matches(scenes)
 
-        for class_name in self.valid_class_names:
-            gt_count = getattr(self, f"gt_count_{class_name}").item()
+    def associate_instances(
+        self, pred: Dict[str, np.ndarray], segment: np.ndarray, instance: np.ndarray
+    ):
+        void_mask = np.isin(segment, self.segment_ignore_index)
 
-            for ov in self.overlaps:
-                scores = getattr(self, f"scores_{class_name}_{ov}")
-                labels = getattr(self, f"labels_{class_name}_{ov}")
+        assert (
+            pred["pred_classes"].shape[0]
+            == pred["pred_scores"].shape[0]
+            == pred["pred_masks"].shape[0]
+        )
+        assert pred["pred_masks"].shape[1] == segment.shape[0] == instance.shape[0]
 
-                if len(scores) == 0:
-                    ap = float("nan") if gt_count == 0 else 0.0
-                    ap_table[class_name][ov] = ap
-                    continue
+        gt_instances = {name: [] for name in self.valid_class_names}
+        instance_ids, idx, counts = np.unique(instance, return_index=True, return_counts=True)
+        segment_ids = segment[idx]
 
-                sorted_indices = torch.argsort(scores, descending=True)
-                labels_sorted = labels[sorted_indices]
+        for i in range(len(instance_ids)):
+            if (
+                instance_ids[i] == self.instance_ignore_index
+                or segment_ids[i] in self.segment_ignore_index
+            ):
+                continue
+            gt_inst = {
+                "instance_id": instance_ids[i],
+                "segment_id": segment_ids[i],
+                "dist_conf": 0.0,
+                "med_dist": -1.0,
+                "vert_count": counts[i],
+                "matched_pred": [],
+            }
+            gt_instances[self.class_names[segment_ids[i]]].append(gt_inst)
 
-                tp = torch.cumsum(labels_sorted, dim=0)
-                fp = torch.cumsum(1 - labels_sorted, dim=0)
-                precision = tp / (tp + fp + 1e-6)
-                recall = tp / (gt_count + 1e-6)
-
-                # Add sentinel values
-                precision = torch.cat(
-                    [
-                        torch.tensor([0.0], device=self.device),
-                        precision,
-                        torch.tensor([0.0], device=self.device),
-                    ]
+        pred_instances = {name: [] for name in self.valid_class_names}
+        for i in range(len(pred["pred_classes"])):
+            if pred["pred_classes"][i] in self.segment_ignore_index:
+                continue
+            pred_inst = {
+                "uuid": uuid4(),
+                "instance_id": i,
+                "segment_id": pred["pred_classes"][i],
+                "confidence": pred["pred_scores"][i],
+                "mask": pred["pred_masks"][i] != 0,
+                "vert_count": np.count_nonzero(pred["pred_masks"][i] != 0),
+                "void_intersection": np.count_nonzero(
+                    np.logical_and(void_mask, pred["pred_masks"][i] != 0)
+                ),
+            }
+            if pred_inst["vert_count"] < self.min_region_size:
+                continue
+            segment_name = self.class_names[pred_inst["segment_id"]]
+            matched_gt = []
+            for gt_inst in gt_instances[segment_name]:
+                intersection = np.count_nonzero(
+                    np.logical_and(instance == gt_inst["instance_id"], pred_inst["mask"])
                 )
-                recall = torch.cat(
-                    [
-                        torch.tensor([0.0], device=self.device),
-                        recall,
-                        torch.tensor([1.0], device=self.device),
-                    ]
-                )
+                if intersection > 0:
+                    gt_inst_ = gt_inst.copy()
+                    pred_inst_ = pred_inst.copy()
+                    gt_inst_["intersection"] = intersection
+                    pred_inst_["intersection"] = intersection
+                    matched_gt.append(gt_inst_)
+                    gt_inst["matched_pred"].append(pred_inst_)
+            pred_inst["matched_gt"] = matched_gt
+            pred_instances[segment_name].append(pred_inst)
 
-                # Make precision non-increasing
-                for i in range(len(precision) - 1, 0, -1):
-                    precision[i - 1] = max(precision[i - 1], precision[i])
+        return gt_instances, pred_instances
 
-                # Calculate AP (trapezoidal integration)
-                ap = 0.0
-                for i in range(len(precision) - 1):
-                    ap += (recall[i + 1] - recall[i]) * precision[i + 1]
-                ap_table[class_name][ov] = ap
+    def evaluate_matches(self, scenes):
+        overlaps = self.overlaps
+        min_region_sizes = [self.min_region_size]
+        dist_threshes = [self.distance_thresh]
+        dist_confs = [self.distance_conf]
 
-        # Class-wise AP (separating threshold 0.25 and 0.5, averaging the rest)
-        ap_values = []
-        ap50_values = []
-        ap25_values = []
-        class_ap = {}
-        for class_name in self.valid_class_names:
-            aps = []
-            aps50 = None
-            aps25 = None
-            for ov in self.overlaps:
-                if ov == 0.25:
-                    aps25 = ap_table[class_name][ov]
-                else:
-                    aps.append(ap_table[class_name][ov])
-                    if ov == 0.5:
-                        aps50 = ap_table[class_name][ov]
-            mean_ap = sum(aps) / len(aps) if len(aps) > 0 else float("nan")
-            ap_values.append(mean_ap)
-            ap50_values.append(aps50 if aps50 is not None else float("nan"))
-            ap25_values.append(aps25 if aps25 is not None else float("nan"))
-            class_ap[class_name] = {"ap": mean_ap, "ap50": aps50, "ap25": aps25}
+        ap_table = np.zeros(
+            (len(dist_threshes), len(self.valid_class_names), len(overlaps)), float
+        )
 
-        map_all = sum(ap_values) / len(ap_values) if len(ap_values) > 0 else float("nan")
-        map50_all = sum(ap50_values) / len(ap50_values) if len(ap50_values) > 0 else float("nan")
-        map25_all = sum(ap25_values) / len(ap25_values) if len(ap25_values) > 0 else float("nan")
-        result = {"map": map_all, "map50": map50_all, "map25": map25_all, "classes": class_ap}
+        for di, (min_region_size, distance_thresh, distance_conf) in enumerate(
+            zip(min_region_sizes, dist_threshes, dist_confs)
+        ):
+            for oi, overlap_th in enumerate(overlaps):
+                pred_visited = {
+                    p["uuid"]: False
+                    for scene in scenes
+                    for label in scene["pred"]
+                    for p in scene["pred"][label]
+                }
+
+                for li, label_name in enumerate(self.valid_class_names):
+                    y_true = []
+                    y_score = []
+                    hard_false_negatives = 0
+                    has_gt = has_pred = False
+
+                    for scene in scenes:
+                        pred_instances = scene["pred"][label_name]
+                        gt_instances = scene["gt"][label_name]
+
+                        gt_instances = [
+                            gt
+                            for gt in gt_instances
+                            if gt["vert_count"] >= min_region_size
+                            and gt["med_dist"] <= distance_thresh
+                            and gt["dist_conf"] >= distance_conf
+                        ]
+
+                        if gt_instances:
+                            has_gt = True
+                        if pred_instances:
+                            has_pred = True
+
+                        cur_true = np.ones(len(gt_instances))
+                        cur_score = np.ones(len(gt_instances)) * (-float("inf"))
+                        cur_match = np.zeros(len(gt_instances), dtype=bool)
+
+                        for gti, gt in enumerate(gt_instances):
+                            found_match = False
+                            for pred in gt["matched_pred"]:
+                                if pred_visited[pred["uuid"]]:
+                                    continue
+                                overlap = float(pred["intersection"]) / (
+                                    gt["vert_count"] + pred["vert_count"] - pred["intersection"]
+                                )
+                                if overlap > overlap_th:
+                                    confidence = pred["confidence"]
+                                    if cur_match[gti]:
+                                        max_score = max(cur_score[gti], confidence)
+                                        min_score = min(cur_score[gti], confidence)
+                                        cur_score[gti] = max_score
+                                        y_true.append(0)
+                                        y_score.append(min_score)
+                                    else:
+                                        found_match = True
+                                        cur_match[gti] = True
+                                        cur_score[gti] = confidence
+                                        pred_visited[pred["uuid"]] = True
+                            if not found_match:
+                                hard_false_negatives += 1
+
+                        y_true.extend(cur_true[cur_match])
+                        y_score.extend(cur_score[cur_match])
+
+                        for pred in pred_instances:
+                            found_gt = False
+                            for gt in pred["matched_gt"]:
+                                overlap = float(gt["intersection"]) / (
+                                    gt["vert_count"] + pred["vert_count"] - gt["intersection"]
+                                )
+                                if overlap > overlap_th:
+                                    found_gt = True
+                                    break
+                            if not found_gt:
+                                num_ignore = pred["void_intersection"]
+                                for gt in pred["matched_gt"]:
+                                    if gt["segment_id"] in self.segment_ignore_index:
+                                        num_ignore += gt["intersection"]
+                                    if (
+                                        gt["vert_count"] < min_region_size
+                                        or gt["med_dist"] > distance_thresh
+                                        or gt["dist_conf"] < distance_conf
+                                    ):
+                                        num_ignore += gt["intersection"]
+                                proportion_ignore = float(num_ignore) / pred["vert_count"]
+                                if proportion_ignore <= overlap_th:
+                                    y_true.append(0)
+                                    y_score.append(pred["confidence"])
+
+                    if has_gt and has_pred:
+                        y_true = np.array(y_true)
+                        y_score = np.array(y_score)
+                        sorted_indices = np.argsort(y_score)[::-1]
+                        y_true = y_true[sorted_indices]
+                        y_score = y_score[sorted_indices]
+
+                        tp = np.cumsum(y_true)
+                        fp = np.cumsum(1 - y_true)
+                        fn = np.sum(y_true) - tp
+
+                        precision = tp / (tp + fp)
+                        recall = tp / (tp + fn + hard_false_negatives)
+
+                        ap = self.compute_ap(precision, recall)
+                    elif has_gt:
+                        ap = 0.0
+                    else:
+                        ap = float("nan")
+
+                    ap_table[di, li, oi] = ap
+
+        d_inf = 0
+        o50 = np.where(np.isclose(self.overlaps, 0.5))
+        o25 = np.where(np.isclose(self.overlaps, 0.25))
+        oAllBut25 = np.where(np.logical_not(np.isclose(self.overlaps, 0.25)))
+
+        ap_scores = {
+            "map": np.nanmean(ap_table[d_inf, :, oAllBut25]),
+            "map50": np.nanmean(ap_table[d_inf, :, o50]),
+            "map25": np.nanmean(ap_table[d_inf, :, o25]),
+            "classes": {},
+        }
+
+        for li, label_name in enumerate(self.valid_class_names):
+            ap_scores["classes"][label_name] = {
+                "ap": np.average(ap_table[d_inf, li, oAllBut25]),
+                "ap50": np.average(ap_table[d_inf, li, o50]),
+                "ap25": np.average(ap_table[d_inf, li, o25]),
+            }
 
         if self.subset_mapper is not None:
             for subset_name in self.subset_mapper["subset_names"]:
-                result[f"map_{subset_name}"] = []
+                ap_scores[f"map_{subset_name}"] = []
+
             for class_name in self.valid_class_names:
                 subset_name = self.subset_mapper[class_name]
-                result[f"map_{subset_name}"].append(class_ap[class_name]["ap"])
+                ap_scores[f"map_{subset_name}"].append(ap_scores["classes"][class_name]["ap"])
+
             for subset_name in self.subset_mapper["subset_names"]:
-                result[f"map_{subset_name}"] = sum(result[f"map_{subset_name}"]) / len(
-                    result[f"map_{subset_name}"]
-                )
-        return result
+                ap_scores[f"map_{subset_name}"] = np.nanmean(ap_scores[f"map_{subset_name}"])
+
+        return ap_scores
+
+    @staticmethod
+    def compute_ap(precision, recall):
+        recall = np.concatenate([[0.0], recall, [1.0]])
+        precision = np.concatenate([[0.0], precision, [0.0]])
+
+        for i in range(precision.size - 1, 0, -1):
+            precision[i - 1] = max(precision[i - 1], precision[i])
+
+        ap = 0.0
+        for i in range(precision.size - 1):
+            ap += (recall[i + 1] - recall[i]) * precision[i + 1]
+
+        return ap
