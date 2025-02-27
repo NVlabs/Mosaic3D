@@ -243,14 +243,15 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         view1_batch = dict(
             origin_coord=view1_origin_coord,
             coord=view1_coord,
+            grid_coord=batch["view1_grid_coord"],
             feat=view1_feat,
             offset=view1_offset,
             grid_size=batch["grid_size"],
-
         )
         view2_batch = dict(
             origin_coord=view2_origin_coord,
             coord=view2_coord,
+            grid_coord=batch["view2_grid_coord"],
             feat=view2_feat,
             offset=view2_offset,
             grid_size=batch["grid_size"],

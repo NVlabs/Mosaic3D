@@ -123,7 +123,6 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
         batch["caption_data"] = batch["view1_caption_data"]
         batch["offset"] = batch["view1_offset"]
         batch.pop("view1_caption_data")
-        batch.pop("view2_caption_data")
 
     if "caption_data" in batch.keys():
         (

@@ -59,8 +59,19 @@ train_dataset:
             - type: ChromaticJitter
               p: 0.95
               std: 0.05
+            - type: GridSample
+              grid_size: ${data.collate_fn.grid_size}
+              hash_type: fnv
+              mode: train
+              keys:
+                [
+                  "coord",
+                  "color",
+                  "origin_coord",
+                ]
+              return_grid_coord: true
             - type: SphereCrop
-              point_max: 250000
+              sample_rate: 0.6
               mode: random
             - type: CenterShift
               apply_z: false
@@ -73,17 +84,14 @@ train_dataset:
           keys:
             [
               "view1_origin_coord",
+              "view1_grid_coord",
               "view1_coord",
               "view1_color",
               "view1_caption_data",
               "view2_origin_coord",
+              "view2_grid_coord",
               "view2_coord",
               "view2_color",
-              "view2_caption_data",
-              "segment",
-              "instance",
-              "binary",
-              "origin_idx",
               "condition",
             ]
           offset_keys_dict:
@@ -172,7 +180,7 @@ collate_fn:
   grid_size: 0.02
 
 in_channel: 3
-batch_size: 2
+batch_size: 4
 num_workers: 4
 
 checkpoint_monitor: "val_scannet200/miou"
