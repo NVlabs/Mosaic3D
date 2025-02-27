@@ -111,12 +111,6 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
         batch[0], Mapping
     )  # currently, only support input_dict, rather than input_list
     batch = collate_fn(batch)
-    if "offset" in batch.keys():
-        # Mix3d (https://arxiv.org/pdf/2110.02210.pdf)
-        if random.random() < mix_prob:
-            batch["offset"] = torch.cat(
-                [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
-            )
 
     if "view1_caption_data" in batch.keys():
         # caption loss on view1
@@ -155,6 +149,13 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
         ):
             clip_indices_image_to_point[idx_start:idx_end] += idx_batch
         batch["clip_indices_image_to_point"] = clip_indices_image_to_point
+
+    if "offset" in batch.keys():
+        # Mix3d (https://arxiv.org/pdf/2110.02210.pdf)
+        if random.random() < mix_prob:
+            batch["offset"] = torch.cat(
+                [batch["offset"][1:-1:2], batch["offset"][-1].unsqueeze(0)], dim=0
+            )
 
     if drop_feat:
         batch["feat"] = torch.ones_like(batch["feat"])
