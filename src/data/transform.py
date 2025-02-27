@@ -941,6 +941,8 @@ class SphereCrop:
             # Crop point clouds
             if "coord" in data_dict.keys():
                 data_dict["coord"] = data_dict["coord"][idx_crop]
+            if "origin_coord" in data_dict.keys():
+                data_dict["origin_coord"] = data_dict["origin_coord"][idx_crop]
             if "grid_coord" in data_dict.keys():
                 data_dict["grid_coord"] = data_dict["grid_coord"][idx_crop]
             if "color" in data_dict.keys():

@@ -171,6 +171,7 @@ class SpUNetBase(nn.Module):
         layers: List[int] = [2, 3, 4, 6, 2, 2, 2, 2],
         out_fpn: bool = False,
         hash_method: Literal["fnv", "ravel"] = "fnv",
+        pooling_method: Literal["mean", "random"] = "mean",
         **kwargs,
     ):
         super().__init__()
@@ -184,7 +185,8 @@ class SpUNetBase(nn.Module):
         self.num_stages = len(layers) // 2
         self.out_fpn = out_fpn
         self.hash_method = hash_method
-
+        self.pooling_method = pooling_method
+        
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         block = BasicBlock
 
@@ -311,7 +313,7 @@ class SpUNetBase(nn.Module):
 
     def forward(self, input_dict):
         point = Point(input_dict)
-        point.sparsify(pad=128, hash_method=self.hash_method)
+        point.sparsify(pad=128, hash_method=self.hash_method, pooling_method=self.pooling_method)
 
         feature_maps = []
         x = point.sparse_conv_feat
