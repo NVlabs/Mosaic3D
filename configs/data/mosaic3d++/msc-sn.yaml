@@ -50,12 +50,12 @@ train_dataset:
             - type: RandomJitter
               sigma: 0.005
               clip: 0.02
-            - type: ElasticDistortion
-            - type: ChromaticAutoContrast
-              p: 0.2
-            - type: ChromaticTranslation
-              p: 0.95
-              ratio: 0.05
+            - type: RandomColorJitter
+              brightness: 0.4
+              contrast: 0.4
+              saturation: 0.2
+              hue: 0.02
+              p: 0.8
             - type: ChromaticJitter
               p: 0.95
               std: 0.05
