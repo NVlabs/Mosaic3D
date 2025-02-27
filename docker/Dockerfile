@@ -92,7 +92,7 @@ RUN git clone https://github.com/NVIDIA/MinkowskiEngine.git /tmp/MinkowskiEngine
     && rm -rf /tmp/MinkowskiEngine
 
 # Install Segmentator and pointnet2 manually for Segment3D
-WORKDIR /tmp/Segment3D
+WORKDIR /tmp
 RUN git clone https://github.com/LeapLabTHU/Segment3D.git \
     && cd Segment3D/third_party/Segmentator \
     && make \
@@ -101,6 +101,14 @@ RUN git clone https://github.com/LeapLabTHU/Segment3D.git \
     && python3 setup.py install \
     && cd /tmp \
     && rm -rf /tmp/Segment3D
+
+# Install pointops manually for faster FPS sampling
+WORKDIR /tmp
+RUN git clone https://github.com/Pointcept/Pointcept.git \
+    && cd Pointcept/libs/pointops \
+    && python3 setup.py install \
+    && cd /tmp \
+    && rm -rf /tmp/Pointcept
 
 # Debugging tools
 RUN pip3 install ipdb

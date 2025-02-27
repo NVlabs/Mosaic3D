@@ -71,7 +71,7 @@ docker build \
     -f docker/Dockerfile .
 
 # Test docker
-if ! docker run --gpus all -it --rm "$TAG" python -c "import torch;print(torch.cuda.is_available());"; then
+if ! docker run --gpus all -it --rm "$TAG" python -c "import torch, MinkowskiEngine, pointnet2, pointops; print(f'CUDA available: {torch.cuda.is_available()}, MinkowskiEngine: {MinkowskiEngine.__version__}, pointnet2 and pointops imported successfully')"; then
     echo "Docker test failed"
     exit 1
 fi
