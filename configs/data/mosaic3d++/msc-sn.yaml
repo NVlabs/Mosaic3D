@@ -33,16 +33,16 @@ train_dataset:
           view_keys: ["coord", "color", "origin_coord", "caption_data"]
           view_trans_cfg:
             - type: RandomRotate
-              p: 0.5
+              p: 1
               angle: [-1, 1]
               center: [0, 0, 0]
               axis: "z"
             - type: RandomRotate
-              p: 0.5
+              p: 1
               angle: [-0.015625, 0.015625]
               axis: "x"
             - type: RandomRotate
-              p: 0.5
+              p: 1
               angle: [-0.015625, 0.015625]
               axis: "y"
             - type: RandomFlip
