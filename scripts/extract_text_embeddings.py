@@ -28,12 +28,13 @@ def load_caption_model(clip_cfg_path: str):
 @torch.cuda.amp.autocast(enabled=True, dtype=torch.float16)
 @torch.inference_mode()
 def extract_text_embeddings(
-    caption_dir: str, clip_cfg_path: str, caption_file: str = "captions.npz"
+    caption_dir: str, clip_cfg_path: str, caption_file: str = "captions.npz", max_num_captions: int = 2000
 ):
     CONSOLE.print(
         f"Extracting text embeddings from {caption_dir}, "
         f"clip_cfg_path: {clip_cfg_path}, "
-        f"caption_file: {caption_file}"
+        f"caption_file: {caption_file}, "
+        f"max_num_captions: {max_num_captions}"
     )
 
     clip_model = load_caption_model(clip_cfg_path)
@@ -47,6 +48,18 @@ def extract_text_embeddings(
         for scene_dir in scene_dirs:
             scene_name = scene_dir.stem
             caption_file_path = scene_dir / caption_file
+            
+            # Define output file path
+            output_file = scene_dir / caption_file.replace("captions", "embeddings").replace(
+                ".npz", f".{clip_model_name}.npz"
+            )
+            
+            # Skip if embeddings file already exists
+            if output_file.exists():
+                CONSOLE.print(f"Embeddings file already exists for {scene_name}, skipping")
+                progress.advance(task)
+                continue
+                
             if not caption_file_path.exists():
                 CONSOLE.print(f"Caption file not found for {scene_name}")
                 error_files.append(scene_name)
@@ -59,14 +72,22 @@ def extract_text_embeddings(
             num_captions = data["lengths"]
 
             CONSOLE.print(f"Extracting embeddings for {len(captions)} captions")
-            tokens = clip_model.text_tokenizer(captions).to(device)
-            embeddings = clip_model.encode_text(tokens)
-            embeddings = torch.nn.functional.normalize(embeddings, dim=-1)
-            embeddings = embeddings.half().cpu().numpy()
+            
+            # Process in batches to avoid OOM
+            all_embeddings = []
+            for i in range(0, len(captions), max_num_captions):
+                batch_captions = captions[i:i+max_num_captions]
+                CONSOLE.print(f"Processing batch {i//max_num_captions + 1} with {len(batch_captions)} captions")
+                
+                tokens = clip_model.text_tokenizer(batch_captions).to(device)
+                batch_embeddings = clip_model.encode_text(tokens)
+                batch_embeddings = torch.nn.functional.normalize(batch_embeddings, dim=-1)
+                batch_embeddings = batch_embeddings.half().cpu().numpy()
+                all_embeddings.append(batch_embeddings)
+            
+            # Concatenate all batches
+            embeddings = np.concatenate(all_embeddings, axis=0)
 
-            output_file = scene_dir / caption_file.replace("captions", "embeddings").replace(
-                ".npz", f".{clip_model_name}.npz"
-            )
             chunked_embeddings = np.split(embeddings, np.cumsum(num_captions)[:-1])
             packed = pack_list_of_np_arrays(chunked_embeddings)
             CONSOLE.print(f"Saving embeddings to {output_file}")
