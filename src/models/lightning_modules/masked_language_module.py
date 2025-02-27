@@ -352,6 +352,9 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         loss_time = time.time() - self._loss_start
         self.loss_time(loss_time)
 
+        lr = self.optimizers().param_groups[0]["lr"]
+        log_metrics["lr"] = lr
+
         # useful metadata
         bs = len(batch["view1_offset"]) - 1
         log_metrics["num_points"] = batch["view1_coord"].shape[0] / bs
