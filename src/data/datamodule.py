@@ -43,22 +43,14 @@ class DataModule(LightningDataModule):
         num_batches = len(self.data_train) // (self.hparams.batch_size * world_size)
         log.info(f"num_data: {num_data}, num_batches: {num_batches}")
         if isinstance(self.data_train, Dataset):
-            sampler = None
-            if self.trainer.max_epochs < 0:
-                sampler = RandomSampler(
-                    self.data_train,
-                    replacement=True,
-                    num_samples=self.trainer.max_steps * self.hparams.batch_size,
-                )
             return DataLoader(
                 dataset=self.data_train,
                 batch_size=self.hparams.batch_size,
                 num_workers=self.hparams.num_workers,
                 pin_memory=self.hparams.pin_memory,
-                shuffle=sampler is None,
+                shuffle=True,
                 drop_last=True,
                 collate_fn=self.hparams.collate_fn,
-                sampler=sampler,
             )
 
     def val_dataloader(self) -> List[DataLoader[Any]]:

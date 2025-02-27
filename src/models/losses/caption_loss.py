@@ -22,15 +22,30 @@ class CaptionLossBase(LossBase):
     def forward(self, pred_feats, batch_dict: Dict) -> Tensor:
         return pred_feats, batch_dict
 
-    def extract_text_features(self, captions: List[str], clip_encoder: nn.Module):
-        # extract text features
-        with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-            text_features, labels_per_segment, labels_per_caption = get_unique_caption_batch(
-                captions, clip_encoder
+    def extract_text_features(
+        self,
+        captions: List[str],
+        clip_encoder: nn.Module,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
+    ):
+        if embeddings is not None:
+            text_features = torch.stack([item for sublist in embeddings for item in sublist], 0)
+            device = text_features.device
+            _, labels_per_caption, labels_per_segment = np.unique(
+                text_features.cpu().numpy(), return_index=True, return_inverse=True, axis=0
             )
-        text_features = (
-            text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
-        )
+            text_features = text_features[labels_per_caption]
+            labels_per_segment = torch.from_numpy(labels_per_segment).to(device)
+            labels_per_caption = torch.from_numpy(labels_per_caption).to(device)
+        else:
+            # extract text features
+            with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
+                text_features, labels_per_segment, labels_per_caption = get_unique_caption_batch(
+                    captions, clip_encoder
+                )
+            text_features = (
+                text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
+            )
         return text_features, labels_per_segment, labels_per_caption
 
 
@@ -48,14 +63,15 @@ class CaptionAlignmentLoss(CaptionLossBase):
     def loss(
         self,
         point_features: Float[Tensor, "M D"],  # noqa: F722
-        captions: List[List[str]],
         point_indices: Int[Tensor, "L"],  # noqa: F821
         caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
         num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
         clip_encoder: nn.Module,
+        captions: Optional[List[List[str]]] = None,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
     ) -> Tensor:
         # extract text features
-        text_features, *_ = self.extract_text_features(captions, clip_encoder)
+        text_features, *_ = self.extract_text_features(captions, clip_encoder, embeddings)
 
         if self.normalize:
             point_features = nn.functional.normalize(point_features, dim=-1)
@@ -92,28 +108,38 @@ class DenseCaptionAlignmentLoss(CaptionLossBase):
         self.is_entity = is_entity
         self.interpolate = interpolate
 
-    def extract_text_features(self, captions: List[str], clip_encoder):
-        with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-            text_features = get_caption_batch(
-                captions, clip_encoder, is_entity=self.is_entity, interpolate=self.interpolate
+    def extract_text_features(
+        self,
+        captions: List[str],
+        clip_encoder: nn.Module,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
+    ):
+        if embeddings is not None:
+            text_features = torch.stack([item for sublist in embeddings for item in sublist], 0)
+        else:
+            with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
+                text_features = get_caption_batch(
+                    captions, clip_encoder, is_entity=self.is_entity, interpolate=self.interpolate
+                )
+            text_features = (
+                text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
             )
-        text_features = (
-            text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
-        )
         return text_features
 
     def loss(
         self,
         point_features: Float[Tensor, "M D"],  # noqa: F722
-        captions: List[List[str]],
         point_indices: Int[Tensor, "L"],  # noqa: F821
         caption_offests: Int[Tensor, "B + 1"],  # noqa: F821
         num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
         clip_encoder: nn.Module,
+        captions: Optional[List[List[str]]] = None,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
     ) -> Tensor:
         device, dtype = point_features.device, point_features.dtype
 
-        text_features = self.extract_text_features(captions, clip_encoder)
+        # extract text features
+        text_features, *_ = self.extract_text_features(captions, clip_encoder, embeddings)
 
         # Scatter and reduce caption embeddings
         flat_caption_embeddings = torch.cat(text_features, dim=0).to(dtype=dtype, device=device)
@@ -169,18 +195,18 @@ class CaptionLoss(CaptionLossBase):
     def loss(
         self,
         point_features: Float[Tensor, "M 512"],  # noqa: F722
-        captions: List[List[str]],
         point_indices: Int[Tensor, "L"],  # noqa: F821
         caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
         num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
         clip_encoder: nn.Module,
+        captions: Optional[List[List[str]]] = None,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
         **kwargs,
     ) -> Tensor:
         device = point_features.device
-
         # extract text features
         text_features, labels_per_segment, labels_per_caption = self.extract_text_features(
-            captions, clip_encoder
+            captions, clip_encoder, embeddings
         )
 
         # normalize point features
@@ -234,10 +260,11 @@ class CaptionCLIPLoss(CaptionLossBase):
     def loss(
         self,
         point_features: Float[Tensor, "M 512"],  # noqa: F722
-        captions: List[List[str]],
         point_indices: Int[Tensor, "L"],  # noqa: F821
         caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
         clip_encoder: nn.Module,
+        captions: Optional[List[List[str]]] = None,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
         **kwargs,
     ) -> Tensor:
         device = point_features.device
@@ -245,7 +272,7 @@ class CaptionCLIPLoss(CaptionLossBase):
 
         # extract text features
         text_features, labels_per_segment, labels_per_caption = self.extract_text_features(
-            captions, clip_encoder
+            captions, clip_encoder, embeddings
         )
 
         if world_size > 1 and self.all_gather:
@@ -372,18 +399,21 @@ class CaptionSigLIPLoss(CaptionCLIPLoss):
     def loss(
         self,
         point_features: Float[Tensor, "M 512"],  # noqa: F722
-        captions: List[List[str]],
         point_indices: Int[Tensor, "L"],  # noqa: F821
         caption_offsets: Int[Tensor, "B + 1"],  # noqa: F821
         num_points_per_caption: Int[Tensor, "B"],  # noqa: F821
         clip_encoder: nn.Module,
+        captions: Optional[List[List[str]]] = None,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
         **kwargs,
     ) -> Tensor:
         device = point_features.device
         world_size = dist.get_world_size() if dist.is_initialized() else 1
 
         # extract text features
-        text_features, labels_per_segment, _ = self.extract_text_features(captions, clip_encoder)
+        text_features, labels_per_segment, _ = self.extract_text_features(
+            captions, clip_encoder, embeddings
+        )
 
         # loss
         loss = self._loss(

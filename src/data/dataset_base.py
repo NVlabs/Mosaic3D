@@ -33,6 +33,7 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         repeat: int = 1,
         log_postfix: Optional[str] = None,
         mask_dir: Optional[str] = None,
+        load_embeddings: bool = False,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -48,6 +49,7 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
         self.repeat = repeat
         self.log_postfix = log_postfix
         self.mask_dir = mask_dir
+        self.load_embeddings = load_embeddings
 
         # read scene names for split
         self.dataset_name = dataset_name
@@ -174,3 +176,15 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
             log.error(f"Error loading caption for scene {scene_name}: {e}", stacklevel=2)
             point_indices, captions = [], []
         return point_indices, captions
+
+    @abstractmethod
+    def load_embedding(self, scene_name: str):
+        raise NotImplementedError
+
+    def load_embedding_and_sample(self, scene_name: str):
+        try:
+            point_indices, embeddings = self.load_embedding(scene_name)
+        except Exception as e:
+            log.error(f"Error loading embedding for scene {scene_name}: {e}", stacklevel=2)
+            point_indices, embeddings = [], []
+        return point_indices, embeddings

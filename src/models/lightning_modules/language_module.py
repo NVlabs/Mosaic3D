@@ -226,7 +226,8 @@ class DenseLanguageLitModule(LitModuleBase):
             )
 
         caption_loss_kargs = {
-            "captions": batch["caption_data"]["caption"],
+            "captions": batch["caption_data"].get("caption", None),
+            "embeddings": batch["caption_data"].get("embedding", None),
             "point_indices": batch["caption_data"]["point_indices"],
             "caption_offsets": batch["caption_data"]["caption_offsets"],
             "num_points_per_caption": batch["caption_data"]["num_points_per_caption"],
@@ -267,9 +268,7 @@ class DenseLanguageLitModule(LitModuleBase):
         # useful metadata
         bs = len(batch["offset"]) - 1
         log_metrics["num_points"] = batch["coord"].shape[0] / bs
-        log_metrics["num_objects"] = np.mean(
-            [len(captions) for captions in batch["caption_data"]["caption"]]
-        )
+        log_metrics["num_objects"] = (batch["caption_data"]["caption_offsets"].shape[0] - 1) / bs
 
         # Calculate training time and mark start of next data loading
         train_time = time.time() - self._train_start

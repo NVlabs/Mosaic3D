@@ -47,13 +47,16 @@ class ScanNetDataset(DatasetBase):
         ignore_class_idx: Optional[List[int]] = None,
         ignore_label: int = -100,
         repeat: int = 1,
+        log_postfix: Optional[str] = None,
+        mask_dir: Optional[str] = None,
+        load_embeddings: bool = False,
+        embedding_filename: Optional[str] = None,
+        use_location_augmentation: bool = False,
+        # unused
         image_root_path: Optional[str] = None,
         clip_text_alignment: bool = False,
         clip_image_alignment: bool = False,
         clip_input_resolution: int = 224,
-        mask_dir: Optional[str] = None,
-        log_postfix: Optional[str] = None,
-        use_location_augmentation: bool = False,
     ):
         super().__init__(
             dataset_name="scannetv2",
@@ -73,16 +76,9 @@ class ScanNetDataset(DatasetBase):
             repeat=repeat,
             log_postfix=log_postfix,
             mask_dir=mask_dir,
+            load_embeddings=load_embeddings,
         )
-
-        self.image_root_path = image_root_path
-        self.clip_text_alignment = clip_text_alignment
-        self.clip_image_alignment = clip_image_alignment
-
-        # load clip preprocessing/tokenizer
-        self.tokenize_text = clip.tokenize
-        self.preprocess_image = clip._transform(clip_input_resolution)
-
+        self.embedding_filename = embedding_filename
         self.use_location_augmentation = use_location_augmentation
 
     def load_point_cloud(self, scene_name: str):
@@ -92,6 +88,35 @@ class ScanNetDataset(DatasetBase):
         segment = np.load(scene_dir / "segment20.npy")
         instance = np.load(scene_dir / "instance.npy")
         return coord, color, segment, instance
+
+    def load_embedding(self, scene_name):
+        all_point_indices = []
+        all_embeddings = []
+
+        for i, caption_dir in enumerate(self.caption_dir):
+            segment_dir = self.segment_dir[i]
+            indices_path = segment_dir / scene_name / "point_indices.npz"
+            embeddings_path = caption_dir / scene_name / f"{self.embedding_filename}.npz"
+
+            if not indices_path.exists() or not embeddings_path.exists():
+                return [], []
+
+            point_indices_all = unpack_list_of_np_arrays(indices_path)
+            embeddings_all = unpack_list_of_np_arrays(embeddings_path)
+
+            num_embeddings_per_object = np.array([len(e) for e in embeddings_all])
+            idx_select_embedding = np.cumsum(
+                np.insert(num_embeddings_per_object, 0, 0)[0:-1]
+            ) + np.random.randint(0, num_embeddings_per_object, len(num_embeddings_per_object))
+
+            # flatten the list of list
+            point_indices = [torch.from_numpy(indices).int() for indices in point_indices_all]
+            embeddings = np.concatenate(embeddings_all, axis=0)
+            embeddings = torch.from_numpy(embeddings[idx_select_embedding]).float()
+            all_point_indices.extend(point_indices)
+            all_embeddings.extend(embeddings)
+
+        return all_point_indices, all_embeddings
 
     def load_caption(self, scene_name):
         all_point_indices = []
@@ -299,27 +324,15 @@ class ScanNetDataset(DatasetBase):
             data_dict["masks_binary"] = masks_binary
 
         # load captions
-        if self.split == "train" or self.clip_text_alignment:
-            point_indices, captions = self.load_caption_and_sample(scene_name)
-            data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
-
-            if self.clip_text_alignment:
-                # NOTE: huggingface tokenization issue
-                # ** is too long for context length.
-                captions = [caption[:50] for caption in captions]
-                data_dict["clip_tokenized_text"] = self.tokenize_text(captions)
-
-        # load CLIP processed single image and corresponding point indices
-        if self.clip_image_alignment:
-            data_dict["clip_processed_image"], image_path = self.load_clip_processed_image(
-                scene_name
-            )
-            data_dict["clip_point_indices"] = self.load_clip_point_indices(
-                scene_name, image_path, coord
-            )
+        if self.split == "train":
+            if self.load_embeddings:
+                point_indices, embeddings = self.load_embedding_and_sample(scene_name)
+                data_dict["caption_data"] = {"idx": point_indices, "embedding": embeddings}
+            else:
+                point_indices, captions = self.load_caption_and_sample(scene_name)
+                data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
         data_dict = self.transforms(data_dict)
-
         return data_dict
 
 

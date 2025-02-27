@@ -961,10 +961,12 @@ class SphereCrop:
                 data_dict["origin_idx"] = data_dict["origin_idx"][idx_crop]
             if "caption_data" in data_dict.keys():
                 caption_dict = data_dict["caption_data"]
-                captions = caption_dict["caption"]
+                target_key = "caption" if "caption" in caption_dict else "embedding"
+                assert target_key in caption_dict
+                captions_or_embeddings = caption_dict[target_key]
                 # List of point indices for each caption
                 caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
-                assert len(captions) == len(caption_point_indices)
+                assert len(captions_or_embeddings) == len(caption_point_indices)
                 # Filter point_indices that are not in idx_crop and replace it with the new index
                 new_index = np.arange(len(idx_crop))
                 to_new_index = np.ones(num_points_before, dtype=int) * -1
@@ -984,9 +986,9 @@ class SphereCrop:
                 ]
                 # Filter out empty arrays
                 new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
-                captions = [captions[i] for i in valid_caption_indices]
+                captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
                 data_dict["caption_data"] = {
-                    "caption": captions,
+                    target_key: captions_or_embeddings,
                     "idx": new_caption_index,
                 }
             if "clip_point_indices" in data_dict.keys():
@@ -1008,7 +1010,9 @@ class SphereCrop:
         # Filter out captions that have no points
         if "caption_data" in data_dict:
             caption_dict = data_dict["caption_data"]
-            captions = caption_dict["caption"]
+            target_key = "caption" if "caption" in caption_dict else "embedding"
+            assert target_key in caption_dict
+            captions_or_embeddings = caption_dict[target_key]
             # List of point indices for each caption
             caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
 
@@ -1019,13 +1023,13 @@ class SphereCrop:
                 if len(point_indices) > 0
             ]
             # Filter out captions that have no points
-            if len(valid_caption_indices) != len(captions):
+            if len(valid_caption_indices) != len(captions_or_embeddings):
                 caption_point_indices = [caption_point_indices[i] for i in valid_caption_indices]
-                captions = [captions[i] for i in valid_caption_indices]
+                captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
             # Assert that all captions have points
             assert all(len(point_indices) > 0 for point_indices in caption_point_indices)
             data_dict["caption_data"] = {
-                "caption": captions,
+                target_key: captions_or_embeddings,
                 "idx": caption_point_indices,
             }
 
