@@ -71,7 +71,7 @@ train_dataset:
                 ]
               return_grid_coord: true
             - type: SphereCrop
-              sample_rate: 0.6
+              point_max: 102400
               mode: random
             - type: CenterShift
               apply_z: false
