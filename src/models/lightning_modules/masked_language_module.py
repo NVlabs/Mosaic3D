@@ -43,8 +43,7 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         )
 
         msc_loss_cfg = loss_cfg["msc_loss"]
-        assert msc_loss_cfg.mask_rate <= 0.5
-        assert msc_loss_cfg.view1_mix_prob <= 0 and msc_loss_cfg.view2_mix_prob <= 0, "Currently, view mixing is not supported"        
+        assert msc_loss_cfg.mask_rate <= 0.5       
         self.nce_criteria = nn.CrossEntropyLoss()
 
     def configure_model(self) -> None:

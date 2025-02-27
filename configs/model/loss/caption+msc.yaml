@@ -6,7 +6,7 @@ loss_cfg:
   msc_loss:
     mask_grid_size: 0.1
     mask_rate: 0.4
-    view1_mix_prob: 0
+    view1_mix_prob: 0.8
     view2_mix_prob: 0
     matching_max_k: 8
     matching_max_radius: 0.03
