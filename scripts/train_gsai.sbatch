@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --partition=A100-80GB
-#SBATCH -q hpgpu
 #SBATCH --time=3-00:00:00                  # Adjust time limit as needed
 #SBATCH --cpus-per-task=32               # number of cores
+#SBATCH --mem=380000
 #SBATCH --output=slurm_outputs/%j.log
 #SBATCH --job-name=mosaic3d-training
 #SBATCH --signal=SIGUSR1@300             # Send SIGUSR1 300 seconds before time limit
@@ -14,6 +14,7 @@
 #      experiment=regionplc_openvocab \
 #      trainer=ddp \
 #      logger=auto_resume_wandb
+# NOTE: For A100, add -q hpgpu
 
 # Get the number of gpus from scontrol and strip all the white spaces and new lines
 # example output
@@ -43,11 +44,7 @@ DOCKER_IMAGE="chrockey/mosaic3d:$TAG"
 # Get the absolute current working directory
 CODE_ROOT=$(pwd)
 
-# HF_HOME for credentials and other Hugging Face data.
-# HF_HUB_CACHE for caching repositories from the Hub.
-# HF_ASSETS_CACHE for caching other assets.
 # Setting environment variables
-HF_HUB_CACHE="${USER_ROOT}/huggingface_cache"
 
 # Print tunneling instructions
 echo -e "
@@ -75,7 +72,9 @@ TZ=Asia/Seoul date;
 cd /workspace;
 conda deactivate;
 nvidia-smi;
-export HF_HUB_CACHE=${HF_HUB_CACHE};
+
+git config --global --add safe.directory /workspace;
+
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 pip install flash-attn;
@@ -101,9 +100,10 @@ set -x
 # Pass CMD with double quotes
 docker run \
     --rm \
+    --shm-size=32G \
     --name "${CONTAINER_NAME}" \
     --gpus ${GPULIST} \
-    -v "$HOME:$HOME" \
+    -v "$HOME:/root" \
     -v "${CODE_ROOT}:/workspace" \
     -v "${DATA_DIR}:/datasets" \
     ${DOCKER_IMAGE} \
