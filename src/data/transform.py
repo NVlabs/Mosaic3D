@@ -772,6 +772,38 @@ class GridSample:
                 mask = np.zeros_like(data_dict["segment"]).astype(bool)
                 mask[data_dict["sampled_index"]] = True
                 data_dict["sampled_index"] = np.where(mask[idx_unique])[0]
+            if "caption_data" in data_dict:
+                caption_dict = data_dict["caption_data"]
+                target_key = "caption" if "caption" in caption_dict else "embedding"
+                assert target_key in caption_dict
+                captions_or_embeddings = caption_dict[target_key]
+                # List of point indices for each caption
+                caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
+                assert len(captions_or_embeddings) == len(caption_point_indices)
+                # Filter point_indices that are not in idx_crop and replace it with the new index
+                new_index = np.arange(len(idx_unique))
+                to_new_index = np.ones(len(data_dict["coord"]), dtype=int) * -1
+                to_new_index[idx_unique] = new_index
+                new_caption_index = [
+                    to_new_index[point_indices] for point_indices in caption_point_indices
+                ]
+                # Remove -1 index
+                new_caption_index = [
+                    point_indices[point_indices != -1] for point_indices in new_caption_index
+                ]
+                # caption indices of non empty arrays
+                valid_caption_indices = [
+                    i
+                    for i, point_indices in enumerate(new_caption_index)
+                    if len(point_indices) > 0
+                ]
+                # Filter out empty arrays
+                new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
+                captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
+                data_dict["caption_data"] = {
+                    target_key: captions_or_embeddings,
+                    "idx": new_caption_index,
+                }
             if self.return_inverse:
                 data_dict["inverse"] = np.zeros_like(inverse)
                 data_dict["inverse"][idx_sort] = inverse
@@ -941,6 +973,8 @@ class SphereCrop:
             # Crop point clouds
             if "coord" in data_dict.keys():
                 data_dict["coord"] = data_dict["coord"][idx_crop]
+            if "origin_coord" in data_dict.keys():
+                data_dict["origin_coord"] = data_dict["origin_coord"][idx_crop]
             if "grid_coord" in data_dict.keys():
                 data_dict["grid_coord"] = data_dict["grid_coord"][idx_crop]
             if "color" in data_dict.keys():

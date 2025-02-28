@@ -1,5 +1,6 @@
 import os
 import time
+import random
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -49,6 +50,9 @@ class DenseLanguageLitModule(LitModuleBase):
         self.save_hyperparameters(logger=False)
 
         self.net = None
+
+        # Mix3D augmentations
+        self.mix_prob = loss_cfg.get("mix_prob", 0)
 
         # loss functions
         self.caption_loss_type = loss_cfg["caption_loss"].get("type", "contrastive")
@@ -193,6 +197,10 @@ class DenseLanguageLitModule(LitModuleBase):
 
     def training_step(self, batch, batch_idx):
         self._train_start = time.time()
+
+        if random.random() < self.mix_prob:
+            offset = batch["offset"]
+            batch["offset"] = torch.cat([offset[1:-1:2], offset[-1].unsqueeze(0)], dim=0)
 
         # Time forward pass
         self._forward_start = time.time()

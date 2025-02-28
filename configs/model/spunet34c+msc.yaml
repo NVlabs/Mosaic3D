@@ -1,0 +1,4 @@
+defaults:
+  - spunet34c
+
+_target_: src.models.networks.regionplc.litmodule.MaskedRegionPLCLitModule

@@ -66,6 +66,50 @@ def mean_pooling(
         return voxel_coords, voxel_feats, v2p_map
 
 
+def random_pooling(
+    coordinates,
+    features,
+    return_inverse: bool = True,
+    hash_method: Literal["fnv", "ravel"] = "fnv",
+):
+    device = features.device
+
+    if hash_method == "fnv":
+        key = fnv_hash_vec(coordinates.cpu().numpy())
+    elif hash_method == "ravel":
+        key = ravel_multi_index_auto_shape(coordinates)
+        key = key.cpu().numpy()
+    else:
+        raise ValueError(f"Unknown hash method: {hash_method}")
+
+    idx_sort = np.argsort(key)
+    key_sort = key[idx_sort]
+    _, index, inverse, count = np.unique(
+        key_sort, return_index=True, return_inverse=True, return_counts=True
+    )
+
+    # For each voxel, randomly select one point
+    random_indices = []
+    for i, c in enumerate(count):
+        start_idx = index[i]
+        # Randomly select one point from each voxel
+        random_idx = start_idx + np.random.randint(0, c)
+        random_indices.append(random_idx)
+
+    random_indices = np.array(random_indices)
+    voxel_coords = coordinates[idx_sort[random_indices]]
+    voxel_feats = features[idx_sort[random_indices]]
+
+    v2p_map = np.zeros_like(inverse)
+    v2p_map[idx_sort] = inverse
+    v2p_map = torch.from_numpy(v2p_map).to(device).long()
+
+    if not return_inverse:
+        return voxel_coords, voxel_feats
+    else:
+        return voxel_coords, voxel_feats, v2p_map
+
+
 class Point(Dict):
     """Point Structure of Pointcept.
 
@@ -150,7 +194,12 @@ class Point(Dict):
         self["serialized_order"] = order
         self["serialized_inverse"] = inverse
 
-    def sparsify(self, pad=96, hash_method: Literal["fnv", "ravel"] = "fnv"):
+    def sparsify(
+        self,
+        pad=96,
+        hash_method: Literal["fnv", "ravel"] = "fnv",
+        pooling_method: Literal["mean", "random"] = "mean",
+    ):
         """Point Cloud Serialization.
 
         Point cloud is sparse, here we use "sparsify" to specifically refer to
@@ -178,9 +227,17 @@ class Point(Dict):
             [self.batch.unsqueeze(-1).int(), self.grid_coord.int()], dim=1
         ).contiguous()
 
-        voxel_coords, voxel_feats, v2p_map = mean_pooling(
-            batched_coords, self.feat, return_inverse=True, hash_method=hash_method
-        )
+        if pooling_method == "mean":
+            voxel_coords, voxel_feats, v2p_map = mean_pooling(
+                batched_coords, self.feat, return_inverse=True, hash_method=hash_method
+            )
+        elif pooling_method == "random":
+            voxel_coords, voxel_feats, v2p_map = random_pooling(
+                batched_coords, self.feat, return_inverse=True, hash_method=hash_method
+            )
+        else:
+            raise ValueError(f"Unknown pooling method: {pooling_method}")
+
         self.v2p_map = v2p_map
 
         sparse_conv_feat = spconv.SparseConvTensor(

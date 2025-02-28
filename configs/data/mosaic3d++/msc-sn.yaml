@@ -22,46 +22,55 @@ train_dataset:
       ignore_label: -100
       repeat: 1
       transforms:
+        - type: CenterShift
+          apply_z: true
+        - type: RandomScale
+          scale: [0.9, 1.1]
         - type: Copy
           keys_dict:
             coord: origin_coord
-        - type: CenterShift
-          apply_z: true
-        - type: RandomRotate
-          p: 0.5
-          angle: [-1, 1]
-          center: [0, 0, 0]
-          axis: "z"
-        - type: RandomRotate
-          p: 0.5
-          angle: [-0.015625, 0.015625]
-          axis: "x"
-        - type: RandomRotate
-          p: 0.5
-          angle: [-0.015625, 0.015625]
-          axis: "y"
-        - type: RandomScale
-          scale: [0.9, 1.1]
-        - type: RandomFlip
-          p: 0.5
-        - type: RandomJitter
-          sigma: 0.005
-          clip: 0.02
-        - type: ElasticDistortion
-        - type: ChromaticAutoContrast
-          p: 0.2
-        - type: ChromaticTranslation
-          p: 0.95
-          ratio: 0.05
-        - type: ChromaticJitter
-          p: 0.95
-          std: 0.05
-        - type: SphereCrop
-          point_max: 250000
-          mode: random
-        - type: CenterShift
-          apply_z: false
-        - type: NormalizeColor
+        - type: ContrastiveViewsGenerator
+          view_keys: ["coord", "color", "origin_coord", "caption_data"]
+          view_trans_cfg:
+            - type: RandomRotate
+              p: 1
+              angle: [-1, 1]
+              center: [0, 0, 0]
+              axis: "z"
+            - type: RandomRotate
+              p: 1
+              angle: [-0.015625, 0.015625]
+              axis: "x"
+            - type: RandomRotate
+              p: 1
+              angle: [-0.015625, 0.015625]
+              axis: "y"
+            - type: RandomFlip
+              p: 0.5
+            - type: RandomJitter
+              sigma: 0.005
+              clip: 0.02
+            - type: RandomColorJitter
+              brightness: 0.4
+              contrast: 0.4
+              saturation: 0.2
+              hue: 0.02
+              p: 0.8
+            - type: ChromaticJitter
+              p: 0.95
+              std: 0.05
+            - type: GridSample
+              grid_size: ${data.collate_fn.grid_size}
+              hash_type: fnv
+              mode: train
+              keys: ["coord", "color", "origin_coord"]
+              return_grid_coord: true
+            - type: SphereCrop
+              point_max: 102400
+              mode: random
+            - type: CenterShift
+              apply_z: false
+            - type: NormalizeColor
         - type: Add
           keys_dict:
             condition: ScanNet
@@ -69,20 +78,23 @@ train_dataset:
         - type: Collect
           keys:
             [
-              "origin_coord",
-              "coord",
-              "color",
-              "segment",
-              "instance",
-              "binary",
-              "caption_data",
-              "origin_idx",
+              "view1_origin_coord",
+              "view1_grid_coord",
+              "view1_coord",
+              "view1_color",
+              "view1_caption_data",
+              "view2_origin_coord",
+              "view2_grid_coord",
+              "view2_coord",
+              "view2_color",
               "condition",
             ]
           offset_keys_dict:
-            offset: coord
+            view1_offset: view1_coord
+            view2_offset: view2_coord
             pc_count: origin_coord
-          feat_keys: ["color"]
+          view1_feat_keys: ["view1_color"]
+          view2_feat_keys: ["view2_color"]
 
 val_datasets:
   - _target_: src.data.scannet.dataset.ScanNetDataset
@@ -162,6 +174,7 @@ collate_fn:
   _partial_: true
   grid_size: 0.02
 
+in_channel: 3
 batch_size: 4
 num_workers: 4
 

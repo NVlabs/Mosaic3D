@@ -14,6 +14,7 @@ import spconv.pytorch as spconv
 
 from src.models.components.structure import Custom1x1Subm3d, Point
 from src.models.networks.openscene.utils import trunc_normal_
+from src.models.components.misc import offset2batch
 
 
 class BasicBlock(spconv.SparseModule):
@@ -171,6 +172,7 @@ class SpUNetBase(nn.Module):
         layers: List[int] = [2, 3, 4, 6, 2, 2, 2, 2],
         out_fpn: bool = False,
         hash_method: Literal["fnv", "ravel"] = "fnv",
+        pooling_method: Literal["mean", "random"] = "mean",
         **kwargs,
     ):
         super().__init__()
@@ -184,6 +186,7 @@ class SpUNetBase(nn.Module):
         self.num_stages = len(layers) // 2
         self.out_fpn = out_fpn
         self.hash_method = hash_method
+        self.pooling_method = pooling_method
 
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         block = BasicBlock
@@ -310,11 +313,28 @@ class SpUNetBase(nn.Module):
             nn.init.constant_(m.weight, 1.0)
 
     def forward(self, input_dict):
-        point = Point(input_dict)
-        point.sparsify(pad=128, hash_method=self.hash_method)
+        if "grid_coord" in input_dict:
+            grid_coord = input_dict["grid_coord"]
+            feat = input_dict["feat"]
+            offset = input_dict["offset"]
+            batch = offset2batch(offset)
+            sparse_shape = torch.add(torch.max(grid_coord, dim=0).values, 128).tolist()
+            x = spconv.SparseConvTensor(
+                features=feat,
+                indices=torch.cat(
+                    [batch.unsqueeze(-1).int(), grid_coord.int()], dim=1
+                ).contiguous(),
+                spatial_shape=sparse_shape,
+                batch_size=batch[-1].tolist() + 1,
+            )
+        else:
+            point = Point(input_dict)
+            point.sparsify(
+                pad=128, hash_method=self.hash_method, pooling_method=self.pooling_method
+            )
+            x = point.sparse_conv_feat
 
         feature_maps = []
-        x = point.sparse_conv_feat
         x = self.conv_input(x)
         skips = [x]
 
@@ -339,12 +359,12 @@ class SpUNetBase(nn.Module):
 
         x = self.final(x)
         feature_maps.append(x)
-        point.sparse_conv_feat = x
 
-        if self.out_fpn:
-            return point, feature_maps
+        if "grid_coord" in input_dict:
+            return (x, feature_maps) if self.out_fpn else x
         else:
-            return point
+            point.sparse_conv_feat = x
+            return (point, feature_maps) if self.out_fpn else point
 
 
 class SpUNetBottleneck(SpUNetBase):
