@@ -36,7 +36,7 @@ description = "Mosaic3D: open-vocabulary 3D neural network foundational models a
 requires-python = ">=3.8"
 dependencies = [
     # PyTorch ecosystem
-    "torch==2.2.2",
+    "torch==2.6.0",
     "torchvision>=0.15.0",
     "lightning==2.2",
     "torchmetrics>=0.11.4",
