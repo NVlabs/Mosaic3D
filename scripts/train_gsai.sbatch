@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --partition=A100-80GB
+#SBATCH --partition=A6000,RTX6000ADA,L40S
 #SBATCH --time=3-00:00:00                  # Adjust time limit as needed
 #SBATCH --cpus-per-task=32               # number of cores
-#SBATCH --mem=380000
+#SBATCH --mem=250000
 #SBATCH --output=slurm_outputs/%j.log
 #SBATCH --job-name=mosaic3d-training
 #SBATCH --signal=SIGUSR1@300             # Send SIGUSR1 300 seconds before time limit
