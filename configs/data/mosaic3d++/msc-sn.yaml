@@ -63,12 +63,7 @@ train_dataset:
               grid_size: ${data.collate_fn.grid_size}
               hash_type: fnv
               mode: train
-              keys:
-                [
-                  "coord",
-                  "color",
-                  "origin_coord",
-                ]
+              keys: ["coord", "color", "origin_coord"]
               return_grid_coord: true
             - type: SphereCrop
               point_max: 102400

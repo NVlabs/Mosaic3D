@@ -64,7 +64,7 @@ def mean_pooling(
         return voxel_coords, voxel_feats
     else:
         return voxel_coords, voxel_feats, v2p_map
-    
+
 
 def random_pooling(
     coordinates,
@@ -95,11 +95,11 @@ def random_pooling(
         # Randomly select one point from each voxel
         random_idx = start_idx + np.random.randint(0, c)
         random_indices.append(random_idx)
-    
+
     random_indices = np.array(random_indices)
     voxel_coords = coordinates[idx_sort[random_indices]]
     voxel_feats = features[idx_sort[random_indices]]
-    
+
     v2p_map = np.zeros_like(inverse)
     v2p_map[idx_sort] = inverse
     v2p_map = torch.from_numpy(v2p_map).to(device).long()
@@ -194,7 +194,12 @@ class Point(Dict):
         self["serialized_order"] = order
         self["serialized_inverse"] = inverse
 
-    def sparsify(self, pad=96, hash_method: Literal["fnv", "ravel"] = "fnv", pooling_method: Literal["mean", "random"] = "mean"):
+    def sparsify(
+        self,
+        pad=96,
+        hash_method: Literal["fnv", "ravel"] = "fnv",
+        pooling_method: Literal["mean", "random"] = "mean",
+    ):
         """Point Cloud Serialization.
 
         Point cloud is sparse, here we use "sparsify" to specifically refer to
@@ -232,7 +237,7 @@ class Point(Dict):
             )
         else:
             raise ValueError(f"Unknown pooling method: {pooling_method}")
-        
+
         self.v2p_map = v2p_map
 
         sparse_conv_feat = spconv.SparseConvTensor(

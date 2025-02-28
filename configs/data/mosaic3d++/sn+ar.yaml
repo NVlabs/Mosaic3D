@@ -158,7 +158,7 @@ train_dataset:
             offset: coord
             pc_count: origin_coord
           feat_keys: ["color"]
-          
+
 val_datasets:
   - _target_: src.data.scannet.dataset.ScanNetDataset
     _partial_: true

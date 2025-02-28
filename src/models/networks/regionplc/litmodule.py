@@ -32,4 +32,4 @@ class MaskedRegionPLCLitModule(MaskedDenseLanguageLitModule):
             out_dict = dict(clip_feat=clip_feat)
         else:
             raise ValueError(f"Unknown output type: {type(output)}")
-        return out_dict     
+        return out_dict

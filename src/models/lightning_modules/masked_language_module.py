@@ -43,7 +43,7 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         )
 
         msc_loss_cfg = loss_cfg["msc_loss"]
-        assert msc_loss_cfg.mask_rate <= 0.5       
+        assert msc_loss_cfg.mask_rate <= 0.5
         self.nce_criteria = nn.CrossEntropyLoss()
 
     def configure_model(self) -> None:
@@ -53,8 +53,12 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         msc_loss_cfg = self.hparams.loss_cfg.msc_loss
         self.mask_token = nn.Parameter(torch.zeros(1, self.net.in_channels))
         trunc_normal_(self.mask_token, mean=0, std=0.02)
-        self.color_head = nn.Linear(self.net.out_channels, 3) if msc_loss_cfg.reconstruct_color else None
-        self.normal_head = nn.Linear(self.net.out_channels, 3) if msc_loss_cfg.reconstruct_normal else None
+        self.color_head = (
+            nn.Linear(self.net.out_channels, 3) if msc_loss_cfg.reconstruct_color else None
+        )
+        self.normal_head = (
+            nn.Linear(self.net.out_channels, 3) if msc_loss_cfg.reconstruct_normal else None
+        )
 
     @torch.no_grad()
     def generate_cross_masks(
@@ -77,11 +81,7 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         view1_origin_coord_split = view1_origin_coord.split(list(view1_batch_count))
         view2_origin_coord_split = view2_origin_coord.split(list(view2_batch_count))
         union_origin_coord = torch.cat(
-            list(
-                chain.from_iterable(
-                    zip(view1_origin_coord_split, view2_origin_coord_split)
-                )
-            )
+            list(chain.from_iterable(zip(view1_origin_coord_split, view2_origin_coord_split)))
         )
         union_offset = torch.cat(
             [view1_offset.unsqueeze(-1), view2_offset.unsqueeze(-1)], dim=-1
@@ -115,12 +115,8 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         patch_mask[rand_perm[0:mask_patch_num]] = 1
         patch_mask[rand_perm[mask_patch_num : mask_patch_num * 2]] = 2
         point_mask = torch.zeros(union_origin_coord.shape[0], dtype=torch.int32, device=device)
-        point_mask[
-            patch2point_map[patch_mask == 1][patch2point_mask[patch_mask == 1]]
-        ] = 1
-        point_mask[
-            patch2point_map[patch_mask == 2][patch2point_mask[patch_mask == 2]]
-        ] = 2
+        point_mask[patch2point_map[patch_mask == 1][patch2point_mask[patch_mask == 1]]] = 1
+        point_mask[patch2point_map[patch_mask == 2][patch2point_mask[patch_mask == 2]]] = 2
 
         # separate mask to view1 and view2
         point_mask_split = point_mask.split(
@@ -146,7 +142,7 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         max_radius: float,
     ):
         msc_loss_cfg = self.hparams.loss_cfg.msc_loss
-        
+
         index, distance = pointops.knn_query(
             max_k,
             view2_coord.float(),
@@ -173,7 +169,7 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         if index.shape[0] > msc_loss_cfg.matching_max_pair:
             index = index[torch.randperm(index.shape[0])[: msc_loss_cfg.matching_max_pair]]
         return index
-    
+
     def compute_contrastive_loss(
         self,
         view1_feat: torch.Tensor,
@@ -183,17 +179,13 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         match_index: torch.Tensor,
     ):
         msc_loss_cfg = self.hparams.loss_cfg.msc_loss
-        
+
         assert view1_offset.shape == view2_offset.shape
 
         view1_feat = view1_feat[match_index[:, 0]]
         view2_feat = view2_feat[match_index[:, 1]]
-        view1_feat = view1_feat / (
-            torch.norm(view1_feat, p=2, dim=1, keepdim=True) + 1e-7
-        )
-        view2_feat = view2_feat / (
-            torch.norm(view2_feat, p=2, dim=1, keepdim=True) + 1e-7
-        )
+        view1_feat = view1_feat / (torch.norm(view1_feat, p=2, dim=1, keepdim=True) + 1e-7)
+        view2_feat = view2_feat / (torch.norm(view2_feat, p=2, dim=1, keepdim=True) + 1e-7)
         sim = torch.mm(view1_feat, view2_feat.transpose(1, 0))
 
         with torch.no_grad():
@@ -211,7 +203,7 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
             pos_sim / get_world_size(),
             neg_sim / get_world_size(),
         )
-    
+
     def training_step(self, batch, batch_idx):
         self._train_start = time.time()
         msc_loss_cfg = self.hparams.loss_cfg.msc_loss

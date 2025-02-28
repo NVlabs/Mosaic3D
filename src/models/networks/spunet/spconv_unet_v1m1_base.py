@@ -187,7 +187,7 @@ class SpUNetBase(nn.Module):
         self.out_fpn = out_fpn
         self.hash_method = hash_method
         self.pooling_method = pooling_method
-        
+
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
         block = BasicBlock
 
@@ -329,7 +329,9 @@ class SpUNetBase(nn.Module):
             )
         else:
             point = Point(input_dict)
-            point.sparsify(pad=128, hash_method=self.hash_method, pooling_method=self.pooling_method)
+            point.sparsify(
+                pad=128, hash_method=self.hash_method, pooling_method=self.pooling_method
+            )
             x = point.sparse_conv_feat
 
         feature_maps = []
