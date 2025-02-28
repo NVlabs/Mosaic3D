@@ -77,6 +77,8 @@ git config --global --add safe.directory /workspace;
 
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
+export SLURM_JOBID=${SLURM_JOBID};
+export CKPT_SLURM_JOBID=${CKPT_SLURM_JOBID:-${SLURM_JOBID}};
 pip install flash-attn;
 pip install -U lightning;
 torchrun \
