@@ -18,7 +18,7 @@
 # Get the number of gpus from scontrol and strip all the white spaces and new lines
 # example output
 # >    TresPerNode=gres:gpu:2
-GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
+GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep "TresPerNode" | grep -o "gres/gpu:[0-9]*" | cut -d: -f2 | tr -d '[:space:]')
 
 # Set default TAG to "warp"
 TAG="latest"
@@ -36,11 +36,10 @@ NODE=$(hostname -s)
 USER=$(whoami)
 
 # Project specific variables
-USER_ROOT="/home/${USER}"
-DATA_DIR="${USER_ROOT}/datasets"
+DATA_DIR="$HOME/datasets"
 
 # Image and code root
-IMAGE_URL="chrockey/mosaic3d:$TAG"
+DOCKER_IMAGE="chrockey/mosaic3d:$TAG"
 # Get the absolute current working directory
 CODE_ROOT=$(pwd)
 
@@ -59,7 +58,7 @@ Running a GPU job on
     CKPT_JOB_ID ${CKPT_SLURM_JOBID:-${SLURM_JOBID}}
     Date: $(TZ=Asia/Seoul date)
     User: ${USER}
-    Image: ${IMAGE_URL}
+    Image: ${DOCKER_IMAGE}
     GPU_COUNT: ${GPU_COUNT}
     TRAINING_ARGS: ${TRAINING_ARGS[*]}
 "
@@ -91,7 +90,6 @@ torchrun \
 "
 
 # Docker
-DOCKER_IMAGE=${IMAGE_URL}
 CONTAINER_NAME="${USER}_mosaic3d_${SLURM_JOBID}"
 
 # UUID
@@ -105,7 +103,7 @@ docker run \
     --rm \
     --name "${CONTAINER_NAME}" \
     --gpus ${GPULIST} \
-    -v "$HOME:/root" \
+    -v "$HOME:$HOME" \
     -v "${CODE_ROOT}:/workspace" \
     -v "${DATA_DIR}:/datasets" \
     ${DOCKER_IMAGE} \
