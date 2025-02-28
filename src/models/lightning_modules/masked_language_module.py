@@ -195,9 +195,9 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         loss = self.nce_criteria(torch.div(sim, msc_loss_cfg.nce_t), labels)
 
         if get_world_size() > 1:
-            dist.nn.functional.all_reduce(loss)
-            dist.nn.functional.all_reduce(pos_sim)
-            dist.nn.functional.all_reduce(neg_sim)
+            dist.all_reduce(loss)
+            dist.all_reduce(pos_sim)
+            dist.all_reduce(neg_sim)
         return (
             loss / get_world_size(),
             pos_sim / get_world_size(),
