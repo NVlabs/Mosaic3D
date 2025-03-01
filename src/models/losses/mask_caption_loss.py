@@ -21,9 +21,10 @@ class MaskCaptionAlignmentLoss(CaptionAlignmentLoss):
         mask_features: Float[Tensor, "M C"],  # noqa: F722
         captions: List[List[str]],
         clip_encoder: nn.Module,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
     ) -> Tensor:
         # extract text features
-        text_features, *_ = self.extract_text_features(captions, clip_encoder)
+        text_features, *_ = self.extract_text_features(captions, clip_encoder, embeddings)
 
         # normalize mask features
         if self.normalize:
@@ -41,11 +42,14 @@ class MaskCaptionLoss(CaptionLoss):
         mask_features: Float[Tensor, "M C"],  # noqa: F722
         captions: List[List[str]],
         clip_encoder: nn.Module,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
     ) -> Tensor:
         device = mask_features[0].device
 
         # extract text features
-        text_features, labels_per_mask, _ = self.extract_text_features(captions, clip_encoder)
+        text_features, labels_per_mask, _ = self.extract_text_features(
+            captions, clip_encoder, embeddings
+        )
 
         # normalize mask features
         if self.normalize:
@@ -69,13 +73,14 @@ class MaskCaptionCLIPLoss(CaptionCLIPLoss):
         mask_features: Float[Tensor, "M C"],  # noqa: F722
         captions: List[List[str]],
         clip_encoder: nn.Module,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
     ) -> Tensor:
         device = mask_features[0].device
         world_size = dist.get_world_size() if dist.is_initialized() else 1
 
         # extract text features
         text_features, labels_per_mask, labels_per_caption = self.extract_text_features(
-            captions, clip_encoder
+            captions, clip_encoder, embeddings
         )
 
         if world_size > 1 and self.all_gather:
@@ -141,12 +146,15 @@ class MaskCaptionSigLIPLoss(CaptionSigLIPLoss):
         mask_features: Float[Tensor, "M C"],  # noqa: F722
         captions: List[List[str]],
         clip_encoder: nn.Module,
+        embeddings: Optional[List[List[Float[Tensor, "D"]]]] = None,  # noqa: F722,F821
     ) -> Tensor:
         device = mask_features[0].device
         world_size = dist.get_world_size() if dist.is_initialized() else 1
 
         # extract text features
-        text_features, labels_per_mask, _ = self.extract_text_features(captions, clip_encoder)
+        text_features, labels_per_mask, _ = self.extract_text_features(
+            captions, clip_encoder, embeddings
+        )
 
         # loss
         loss = self._loss(mask_features, text_features, labels_per_mask)

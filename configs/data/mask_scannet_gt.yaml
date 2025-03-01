@@ -1,5 +1,5 @@
 defaults:
-  - scannet_125k_mask
+  - mask_scannet_125k
 
 train_dataset:
   caption_subset: caption.gt.scannet200
