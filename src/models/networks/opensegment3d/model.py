@@ -250,7 +250,7 @@ class OpenSegment3D(nn.Module):
             )
         attn_masks = attn_masks < 0
 
-        return attn_masks
+        return attn_masks.detach()
 
     def get_batch_splits(self, stensors: List[spconv.SparseConvTensor], batch_size: int):
         batch_splits_all = []

@@ -4,6 +4,7 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 from torchmetrics import MaxMetric, MeanMetric
 
 import src.utils.caption_utils as caption_utils
@@ -294,11 +295,18 @@ class MaskLanguageLitModule(LitModuleBase):
             mask_probs = mask_scores_per_image * mask_probs  # [Q, C]
             scores, classes = mask_probs.max(1)  # [Q]
 
-            gathered_classes = all_gather(classes)
-            gathered_scores = all_gather(scores)
-            gathered_masks = all_gather_different_shapes(masks)
-            gathered_gt_classes = all_gather_different_shapes(gt_classes)
-            gathered_gt_instances = all_gather_different_shapes(gt_instances)
+            if dist.is_initialized() and dist.get_world_size() > 1:
+                gathered_classes = all_gather(classes)
+                gathered_scores = all_gather(scores)
+                gathered_masks = all_gather_different_shapes(masks)
+                gathered_gt_classes = all_gather_different_shapes(gt_classes)
+                gathered_gt_instances = all_gather_different_shapes(gt_instances)
+            else:
+                gathered_classes = [classes]
+                gathered_scores = [scores]
+                gathered_masks = [masks]
+                gathered_gt_classes = [gt_classes]
+                gathered_gt_instances = [gt_instances]
 
             if not self.trainer.is_global_zero:
                 continue
