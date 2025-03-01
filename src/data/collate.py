@@ -185,7 +185,12 @@ def point_collate_fn_with_captioned_masks(batch, grid_size, mix_prob=0, drop_fea
             )
             for i, idx in enumerate(caption_data["idx"]):
                 masks[i, idx] = True
-            collated_masks.append({"mask": masks, "caption": caption_data["caption"]})
+
+            collated_mask = dict(mask=masks, caption=caption_data["caption"])
+            if "embedding" in caption_data:
+                collated_mask["embedding"] = caption_data["embedding"]
+
+            collated_masks.append(collated_mask)
 
         batch["caption_data"] = collated_masks
 

@@ -175,16 +175,22 @@ class MaskLanguageLitModule(LitModuleBase):
         # caption loss
         matched_mask_features = []
         matched_captions = []
+        matched_embeddings = [] if "embedding" in caption_data[0] else None
+
         for mask_features, caption_datum, indices in zip(
             out_dict["clip_feat"], caption_data, mapping
         ):
-            captions = caption_datum["caption"]
             src_idx, trg_idx = indices
             matched_mask_features.append(mask_features[src_idx])
-            matched_captions.append([captions[i] for i in trg_idx])
+            matched_captions.append([caption_datum["caption"][i] for i in trg_idx])
+            if matched_embeddings is not None:
+                matched_embeddings.append([caption_datum["embedding"][i] for i in trg_idx])
+
         matched_mask_features = torch.cat(matched_mask_features)
         caption_loss = (
-            self.caption_loss.loss(matched_mask_features, matched_captions, self.clip_encoder)
+            self.caption_loss.loss(
+                matched_mask_features, matched_captions, self.clip_encoder, matched_embeddings
+            )
             * self.hparams.loss_cfg.weights.caption_loss
         )
 
@@ -267,8 +273,6 @@ class MaskLanguageLitModule(LitModuleBase):
             mask_probs = mask_binary_probs * mask_probs  # [Q, C]
             masks = batch_masks[i]  # [N, Q]
 
-            # TODO: add post-processing
-
             heatmap = masks.sigmoid()  # [N, Q]
             masks = (masks.T > 0).float()  # [Q, N]
             mask_scores_per_image = (heatmap.T * masks).sum(1, keepdim=True) / (
@@ -309,6 +313,7 @@ class MaskLanguageLitModule(LitModuleBase):
             metrics["map_evaluator"].reset()
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
+        # TODO: add post-processing
         self.validation_step(batch, batch_idx, dataloader_idx)
 
     def children(self):
