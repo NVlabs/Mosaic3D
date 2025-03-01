@@ -1,10 +1,10 @@
 defaults:
-  - scannet_125k_mask
+  - mask_scannet_125k
 
 train_dataset:
   caption_subset:
     - caption.osprey.scannet-125k
-    - caption.seem-osprey.scannet-125k
+    - caption.seem-panoptic-osprey.scannet-125k
   segment_subset:
     - segment.sam2.scannet-125k
-    - segment.seem.scannet-125k
+    - segment.seem-panoptic.scannet-125k

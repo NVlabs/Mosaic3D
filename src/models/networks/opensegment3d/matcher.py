@@ -101,7 +101,7 @@ class HungarianMatcher(nn.Module):
             target = targets[b]
             out_prob = outputs["logit"][b].sigmoid()  # [num_queries, 1]
             tgt_ids = torch.zeros(
-                len(target["caption"]), device=out_prob.device, dtype=torch.long
+                target["num_captions"], device=out_prob.device, dtype=torch.long
             )  # [num_targets,]
 
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,

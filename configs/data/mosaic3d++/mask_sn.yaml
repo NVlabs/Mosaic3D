@@ -1,0 +1,21 @@
+defaults:
+  - mosaic3d++/sn
+
+val_datasets:
+  - _target_: src.data.scannet.dataset.ScanNet200Dataset
+    _partial_: true
+    data_dir: ${data.train_dataset.datasets[0].data_dir}
+    split: val
+    log_postfix: scannet200
+    ignore_label: ${data.train_dataset.ignore_label}
+    transforms: ${data.val_transforms}
+
+collate_fn:
+  _target_: src.data.collate.point_collate_fn_with_captioned_masks
+  _partial_: true
+  grid_size: 0.02
+
+batch_size: 4
+num_workers: 2
+
+checkpoint_monitor: "val_scannet200/map"

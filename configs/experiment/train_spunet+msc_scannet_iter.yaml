@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: mosaic3d++/msc-sn
+  - override /data: mosaic3d++/msc_sn
   - override /data/transforms: null
   - override /model: spunet34c+msc
   - override /model/clip: recap_clip

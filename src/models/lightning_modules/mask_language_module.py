@@ -174,7 +174,7 @@ class MaskLanguageLitModule(LitModuleBase):
 
         # caption loss
         matched_mask_features = []
-        matched_captions = []
+        matched_captions = [] if "caption" in caption_data[0] else None
         matched_embeddings = [] if "embedding" in caption_data[0] else None
 
         for mask_features, caption_datum, indices in zip(
@@ -182,8 +182,9 @@ class MaskLanguageLitModule(LitModuleBase):
         ):
             src_idx, trg_idx = indices
             matched_mask_features.append(mask_features[src_idx])
-            matched_captions.append([caption_datum["caption"][i] for i in trg_idx])
-            if matched_embeddings is not None:
+            if "caption" in caption_datum:
+                matched_captions.append([caption_datum["caption"][i] for i in trg_idx])
+            if "embedding" in caption_datum:
                 matched_embeddings.append([caption_datum["embedding"][i] for i in trg_idx])
 
         matched_mask_features = torch.cat(matched_mask_features)
@@ -205,7 +206,7 @@ class MaskLanguageLitModule(LitModuleBase):
         # useful metadata
         bs = len(batch["offset"]) - 1
         log_metrics["num_points"] = batch["coord"].shape[0] / bs
-        log_metrics["num_objects"] = np.mean([len(x["caption"]) for x in caption_data])
+        log_metrics["num_objects"] = np.mean([x["num_captions"] for x in caption_data])
 
         # Calculate training time and mark start of next data loading
         train_time = time.time() - self._train_start
