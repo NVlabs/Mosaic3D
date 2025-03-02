@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 import torch.distributed as dist
 
@@ -60,6 +62,24 @@ def all_gather_different_shapes(tensor):
         result.append(gathered_tensors[i][slices].clone())
 
     return result
+
+
+def all_gather(tensor):
+    world_size = dist.get_world_size()
+    gathered_tensors = [torch.zeros_like(tensor) for _ in range(world_size)]
+    dist.all_gather(gathered_tensors, tensor)
+    return gathered_tensors
+
+
+def all_gather_list_tensor(local_list: List[torch.Tensor]) -> List[torch.Tensor]:
+    world_size = dist.get_world_size()
+
+    gathered_lists = [None] * world_size
+    dist.all_gather(gathered_lists, local_list)
+
+    flattened = [x for rank_list in gathered_lists for x in rank_list]
+
+    return flattened
 
 
 def neighbour_exchange(from_rank, to_rank, tensor, group=None):

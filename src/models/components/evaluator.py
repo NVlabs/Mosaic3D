@@ -6,7 +6,6 @@ from uuid import uuid4
 
 import numpy as np
 import torch
-import torch.distributed as dist
 from torchmetrics import Metric
 
 from src.utils import RankedLogger
@@ -24,8 +23,9 @@ class InstanceSegmentationEvaluator(Metric):
         distance_thresh: float = float("inf"),
         distance_conf: float = -float("inf"),
         subset_mapper: Dict[str, str] = None,
+        sync_on_compute: bool = True,
     ):
-        super().__init__()
+        super().__init__(sync_on_compute=sync_on_compute)
         self.segment_ignore_index = segment_ignore_index
         self.instance_ignore_index = instance_ignore_index
         self.class_names = class_names
@@ -76,7 +76,9 @@ class InstanceSegmentationEvaluator(Metric):
                 self.gt_instance[i].cpu().numpy(),
             )
             scenes.append({"gt": gt_instances, "pred": pred_instances})
-        return self.evaluate_matches(scenes)
+        results = self.evaluate_matches(scenes)
+        log.info(f">>> mAP: {results['map']}")
+        return results
 
     def associate_instances(
         self, pred: Dict[str, np.ndarray], segment: np.ndarray, instance: np.ndarray

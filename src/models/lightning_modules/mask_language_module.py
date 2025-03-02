@@ -4,9 +4,11 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.distributed as dist
 from torchmetrics import MaxMetric, MeanMetric
 
 import src.utils.caption_utils as caption_utils
+from src.utils.dist_utils import all_gather, all_gather_different_shapes
 from src.models.components.clip_models import build_clip_model, download_clip_model
 from src.models.components.evaluator import InstanceSegmentationEvaluator
 from src.models.lightning_modules.module_base import LitModuleBase
@@ -34,6 +36,7 @@ class MaskLanguageLitModule(LitModuleBase):
         clip_encoder: Dict,
         compile: bool,
         loss_cfg: Dict,
+        best_metric: str,
         eval_cfg: Optional[Dict] = None,
         use_prompt: bool = False,
     ):
@@ -70,8 +73,10 @@ class MaskLanguageLitModule(LitModuleBase):
         self.train_loss = MeanMetric()
 
         # for tracking best so far validation accuracy
-        self.val_metrics = nn.ModuleList()
-        self.val_class_info = []
+        self.val_metrics = nn.ModuleDict()
+        self.val_class_info = dict()
+        self.val_dataset_names = dict()
+        self.val_best_metric = MaxMetric()
 
         # Sync distributed metrics
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
@@ -103,7 +108,7 @@ class MaskLanguageLitModule(LitModuleBase):
         if not isinstance(val_dataloaders, list):
             val_dataloaders = [val_dataloaders]
 
-        for val_dataloader in val_dataloaders:
+        for i, val_dataloader in enumerate(val_dataloaders):
             dataset = val_dataloader.dataset
             dataset_name = dataset.dataset_name
             class_names = dataset.CLASS_LABELS
@@ -118,13 +123,12 @@ class MaskLanguageLitModule(LitModuleBase):
                         + [dataset.ignore_label],
                         instance_ignore_index=dataset.ignore_label,
                         subset_mapper=dataset.subset_mapper,
+                        sync_on_compute=False,
                     ),
-                    "map_best": MaxMetric(),
                 }
             )
 
             class_info = dict(
-                dataset_name=dataset_name,
                 postfix=postfix,
                 class_names=class_names,
                 fg_class_idx=dataset.fg_class_idx,
@@ -133,14 +137,15 @@ class MaskLanguageLitModule(LitModuleBase):
                 instance_ignore_class_idx=dataset.instance_ignore_class_idx,
                 subset_mapper=dataset.subset_mapper if hasattr(dataset, "subset_mapper") else None,
             )
-            self.val_metrics.append(metric)
-            self.val_class_info.append(class_info)
+            self.val_metrics[postfix] = metric
+            self.val_class_info[postfix] = class_info
+            self.val_dataset_names[i] = postfix
 
-        self.clip_alignment_eval = nn.ModuleList(
-            [
-                CLIPAlignmentEval(**self.hparams.eval_cfg.seg_eval)
-                for _ in range(len(self.val_metrics))
-            ]
+        self.clip_alignment_eval = nn.ModuleDict(
+            {
+                postfix: CLIPAlignmentEval(**self.hparams.eval_cfg.seg_eval)
+                for postfix in self.val_metrics.keys()
+            }
         )
 
     def forward(self, batch: Any) -> Dict[str, Any]:
@@ -235,14 +240,16 @@ class MaskLanguageLitModule(LitModuleBase):
 
     def on_validation_epoch_start(self):
         self.clip_encoder = self.clip_encoder.to(self.device)
-        for class_info, eval_module in zip(self.val_class_info, self.clip_alignment_eval):
+        for postfix in self.val_class_info.keys():
+            class_info = self.val_class_info[postfix]
+            eval_module = self.clip_alignment_eval[postfix]
             class_names = class_info["class_names"]
 
             if eval_module.emb_target is None:
                 if self.hparams.use_prompt:
                     class_names = [
                         f"a {c} in a scene" if "other" not in c else "other" for c in class_names
-                    ]
+                    ]  # OpenScene setting
                 text_embedding = caption_utils.forward_text_encoder(
                     class_names, self.clip_encoder, normalize=True, device=self.device
                 )
@@ -251,9 +258,15 @@ class MaskLanguageLitModule(LitModuleBase):
                 if eval_module.emb_target.device != self.device:
                     eval_module.emb_target = eval_module.emb_target.to(self.device)
 
+            # reset metrics
+            metrics = self.val_metrics[postfix]
+            for key in metrics.keys():
+                metrics[key].reset()
+
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        metrics = self.val_metrics[dataloader_idx]
-        clip_evaluator = self.clip_alignment_eval[dataloader_idx]
+        postfix = self.val_dataset_names[dataloader_idx]
+        metrics = self.val_metrics[postfix]
+        clip_evaluator = self.clip_alignment_eval[postfix]
 
         # Inference
         out_dict = self(batch)
@@ -282,36 +295,63 @@ class MaskLanguageLitModule(LitModuleBase):
             mask_probs = mask_scores_per_image * mask_probs  # [Q, C]
             scores, classes = mask_probs.max(1)  # [Q]
 
-            metrics["map_evaluator"].update(
-                pred_classes=classes,
-                pred_scores=scores,
-                pred_masks=masks,
-                gt_segment=gt_classes,
-                gt_instance=gt_instances,
-            )
+            if dist.is_initialized() and dist.get_world_size() > 1:
+                gathered_classes = all_gather(classes)
+                gathered_scores = all_gather(scores)
+                gathered_masks = all_gather_different_shapes(masks)
+                gathered_gt_classes = all_gather_different_shapes(gt_classes)
+                gathered_gt_instances = all_gather_different_shapes(gt_instances)
+            else:
+                gathered_classes = [classes]
+                gathered_scores = [scores]
+                gathered_masks = [masks]
+                gathered_gt_classes = [gt_classes]
+                gathered_gt_instances = [gt_instances]
+
+            if not self.trainer.is_global_zero:
+                continue
+
+            for classes, scores, masks, gt_classes, gt_instances in zip(
+                gathered_classes,
+                gathered_scores,
+                gathered_masks,
+                gathered_gt_classes,
+                gathered_gt_instances,
+            ):
+                metrics["map_evaluator"].update(
+                    pred_classes=classes.cpu(),
+                    pred_scores=scores.cpu(),
+                    pred_masks=masks.cpu(),
+                    gt_segment=gt_classes.cpu(),
+                    gt_instance=gt_instances.cpu(),
+                )
 
     def on_validation_epoch_end(self) -> None:
-        for class_info, metrics in zip(self.val_class_info, self.val_metrics):
-            postfix = class_info["postfix"]
+        log_metrics = {}
+        for postfix, metrics in self.val_metrics.items():
             val_section = f"val_{postfix}"
 
-            ap_results = metrics["map_evaluator"].compute()
+            if self.trainer.is_global_zero:
+                ap_results = metrics["map_evaluator"].compute()
+                # Log class-wise metrics
+                for class_name, class_metrics in ap_results["classes"].items():
+                    log_metrics.update(
+                        {f"{val_section}/{k}_{class_name}": v for k, v in class_metrics.items()}
+                    )
 
-            # class-wise metrics
-            log_metrics = {}
-            for class_name, class_metrics in ap_results["classes"].items():
-                for k, v in class_metrics.items():
-                    log_metrics[f"{val_section}/{k}_{class_name}"] = v
+                # Log overall metrics
+                ap_results.pop("classes")
+                log_metrics.update({f"{val_section}/{k}": v for k, v in ap_results.items()})
+            else:
+                log_metrics.update({f"{val_section}/map": 0})
 
-            # overall metrics
-            ap_results.pop("classes")
-            log_metrics.update({f"{val_section}/{k}": v for k, v in ap_results.items()})
+        # Update best metric
+        self.val_best_metric.update(log_metrics[self.hparams.best_metric])
+        log_metrics[f"{self.hparams.best_metric}_best"] = self.val_best_metric.compute()
 
-            # log metrics only if not sanity checking
-            if not self.trainer.sanity_checking:
-                self.log_dict(log_metrics, sync_dist=True, logger=True)
-
-            metrics["map_evaluator"].reset()
+        # Log metrics if not in sanity check
+        if not self.trainer.sanity_checking:
+            self.log_dict(log_metrics, logger=True, rank_zero_only=True)
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
         # TODO: add post-processing
