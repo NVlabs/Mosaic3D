@@ -170,3 +170,4 @@ samples/
 saved/
 visuals/
 mmscan_data
+scripts/fix_permissions.sbatch
