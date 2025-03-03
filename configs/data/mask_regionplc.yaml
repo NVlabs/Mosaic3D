@@ -1,0 +1,6 @@
+defaults:
+  - mask_scannet_125k
+
+train_dataset:
+  caption_dir: /datasets/regionplc_converted
+  caption_subset: detic-template_and_kosmos_125k_iou0.2
