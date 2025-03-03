@@ -1329,12 +1329,20 @@ class ClassNameAnonymizer:
         dataset (str): Name of the dataset ('scannet', 'scannetpp', 'matterport', 'structured3d')
         replacement (str): Word to replace class names with (default: 'object')
         case_sensitive (bool): Whether to match class names case-sensitively (default: False)
+        handle_plurals (bool): Whether to handle plural forms of class names (default: True)
     """
 
-    def __init__(self, dataset: str, replacement: str = "object", case_sensitive: bool = False):
+    def __init__(
+        self,
+        dataset: str,
+        replacement: str = "object",
+        case_sensitive: bool = False,
+        handle_plurals: bool = True,
+    ):
         self.dataset = dataset
         self.replacement = replacement
         self.case_sensitive = case_sensitive
+        self.handle_plurals = handle_plurals
 
         # Get class names from metadata based on dataset name
         self.class_names = self._get_class_names_from_dataset(dataset)
@@ -1344,10 +1352,24 @@ class ClassNameAnonymizer:
         for class_name in self.class_names:
             # Create word boundary pattern to match whole words only
             pattern = r"\b" + re.escape(class_name) + r"\b"
+
+            # Add pattern for plural form if enabled
+            if self.handle_plurals:
+                # Handle special plural cases
+                if class_name.endswith("y"):
+                    plural_pattern = r"\b" + re.escape(class_name[:-1]) + r"ies\b"
+                elif class_name.endswith(("s", "x", "z", "ch", "sh")):
+                    plural_pattern = r"\b" + re.escape(class_name) + r"es\b"
+                else:
+                    plural_pattern = r"\b" + re.escape(class_name) + r"s\b"
+
+                # Combine singular and plural patterns
+                pattern = f"({pattern}|{plural_pattern})"
+
             if not case_sensitive:
-                self.patterns.append(re.compile(pattern, re.IGNORECASE))
+                self.patterns.append((re.compile(pattern, re.IGNORECASE), class_name))
             else:
-                self.patterns.append(re.compile(pattern))
+                self.patterns.append((re.compile(pattern), class_name))
 
     def _get_class_names_from_dataset(self, dataset: str):
         """Get class names from the appropriate metadata based on dataset name."""
@@ -1382,8 +1404,17 @@ class ClassNameAnonymizer:
         for caption in captions:
             # Apply all patterns to the caption
             anonymized_caption = caption
-            for pattern in self.patterns:
-                anonymized_caption = pattern.sub(self.replacement, anonymized_caption)
+            for pattern, class_name in self.patterns:
+                # Use a function to determine if replacement should be singular or plural
+                def replace_with_proper_form(match):
+                    matched_text = match.group(0)
+                    # If the matched text is plural form, use plural replacement
+                    if self.handle_plurals and matched_text.lower() != class_name.lower():
+                        return self.replacement + "s"
+                    return self.replacement
+
+                anonymized_caption = pattern.sub(replace_with_proper_form, anonymized_caption)
+
             anonymized_captions.append(anonymized_caption)
 
         # Update the caption data
@@ -1391,7 +1422,7 @@ class ClassNameAnonymizer:
         return data_dict
 
     def __repr__(self):
-        return f"ClassNameAnonymizer(dataset='{self.dataset}', num_classes={len(self.class_names)}, replacement='{self.replacement}')"
+        return f"ClassNameAnonymizer(dataset='{self.dataset}', num_classes={len(self.class_names)}, replacement='{self.replacement}', handle_plurals={self.handle_plurals})"
 
 
 class Compose:
@@ -1405,3 +1436,40 @@ class Compose:
         for t in self.transforms:
             data_dict = t(data_dict)
         return data_dict
+
+
+if __name__ == "__main__":
+    # Test ClassNameAnonymizer
+    print("Testing ClassNameAnonymizer...")
+
+    # Create test data
+    original_captions = [
+        "There is a chair next to the table.",
+        "A sofa and two chairs are in the living room.",
+        "The kitchen has a refrigerator and an oven.",
+        "A bed with a nightstand is in the bedroom.",
+    ]
+
+    # Test with ScanNet dataset
+    dataset = "scannet"
+    print(f"\nTesting with {dataset} dataset:")
+    anonymizer = ClassNameAnonymizer(dataset=dataset)
+    print(f"Loaded {len(anonymizer.class_names)} class names")
+
+    # Create test data
+    test_data = {
+        "caption_data": {
+            "caption": original_captions.copy(),
+            "idx": [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]],
+        }
+    }
+
+    # Process the data
+    result = anonymizer(test_data)
+
+    # Print original vs anonymized captions
+    print("Original vs Anonymized:")
+    for orig, anon in zip(original_captions, result["caption_data"]["caption"]):
+        print(f"Original: {orig}")
+        print(f"Anonymized: {anon}")
+        print("-" * 50)
