@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: mosaic3d++/msc_sn
-  - override /data/transforms: null
+  - override /data/transforms: ptv3_transforms
   - override /model: spunet34c+msc
   - override /model/clip: recap_clip
   - override /model/loss: caption+msc
