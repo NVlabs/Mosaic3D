@@ -1,8 +1,8 @@
 from typing import List, Optional, Dict
+from contextlib import nullcontext
 
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast
 from torch_scatter import scatter
 from spconv.pytorch.core import ImplicitGemmIndiceData
 import spconv.pytorch as spconv
@@ -15,6 +15,9 @@ from src.models.networks.segment3d.modules.position_embedding import PositionEmb
 from src.models.networks.mask3d.mask3d import CrossAttentionLayer, FFNLayer, SelfAttentionLayer
 from src.models.components.structure import Point
 from src.models.components.misc import batch2offset
+from src.utils import RankedLogger
+
+log = RankedLogger(__file__, rank_zero_only=True)
 
 
 class OpenSegment3D(nn.Module):
@@ -29,6 +32,8 @@ class OpenSegment3D(nn.Module):
         decoder_iterations: int,
         max_sample_sizes: List[int],
         hlevels: List[int],
+        backbone_ckpt: Optional[str] = None,
+        freeze_backbone: bool = False,
     ):
         super().__init__()
         self.backbone = backbone
@@ -43,8 +48,18 @@ class OpenSegment3D(nn.Module):
         self.max_sample_sizes = max_sample_sizes
         self.hlevels = hlevels
         self.num_hlevels = len(hlevels)
+        self.num_backbone_levels = self.backbone.num_stages + 1
 
-        backbone_decoder_channels = self.backbone.channels[-5:]
+        if backbone_ckpt is not None:
+            self.load_pretrained_backbone(backbone_ckpt)
+
+        self.backbone_frozen = False
+        if freeze_backbone:
+            self.freeze_backbone()
+            self.backbone_frozen = True
+
+        backbone_decoder_channels = self.backbone.channels[-self.num_backbone_levels :]
+        backbone_decoder_channels[-1] = self.backbone.out_channels
         self.decoder_proj = nn.Linear(self.backbone.out_channels, hidden_dim)
         self.query_proj = GenericMLP(
             input_dim=self.hidden_dim,
@@ -89,8 +104,11 @@ class OpenSegment3D(nn.Module):
         num_queries = num_queries or self.num_queries
 
         # backbone
-        point, fpn_stensors = self.backbone(input_dict)
-        max_hlevel = len(fpn_stensors)
+        with torch.no_grad() if self.backbone_frozen else nullcontext():
+            if self.backbone_frozen and self.backbone.training:
+                self.backbone.eval()
+            point, fpn_stensors = self.backbone(input_dict)
+
         voxel_indices = point.sparse_conv_feat.indices
         batch_size = point.sparse_conv_feat.batch_size
         dtype = point.sparse_conv_feat.features.dtype
@@ -98,7 +116,7 @@ class OpenSegment3D(nn.Module):
         batch_splits_all = self.get_batch_splits(fpn_stensors, batch_size)
 
         # positional encodings
-        centroids_all = self.get_centroids(point, max_hlevel)
+        centroids_all = self.get_centroids(point, self.num_backbone_levels)
         pos_encs_all = self.get_positional_encodings(
             batch_splits_all, centroids_all, dtype, device
         )
@@ -133,7 +151,7 @@ class OpenSegment3D(nn.Module):
                     queries,
                     decomposed_pfeats,
                     point.sparse_conv_feat.indice_dict,
-                    max_hlevel - hlevel - 1,
+                    self.num_backbone_levels - hlevel - 1,
                 )
 
                 # (2) query refinement
@@ -234,8 +252,6 @@ class OpenSegment3D(nn.Module):
         indice_dict: Dict[str, ImplicitGemmIndiceData],
         num_pooling_steps: int,
     ):
-        assert num_pooling_steps > 0
-
         queries = self.decoder_norm(queries)
         mask_embeds = self.mask_head(queries)
         pred_masks = [
@@ -258,8 +274,8 @@ class OpenSegment3D(nn.Module):
             indices = stensor.indices
             batch_splits = []
             for i in range(batch_size):
-                mask = indices[:, 0] == i
-                batch_splits.append(mask)
+                indices_i = torch.where(indices[:, 0] == i)[0]
+                batch_splits.append(indices_i)
             batch_splits_all.append(batch_splits)
 
         return batch_splits_all
@@ -308,6 +324,21 @@ class OpenSegment3D(nn.Module):
 
         return pos_encs_all
 
+    def load_pretrained_backbone(self, ckpt_path: str):
+        state_dict = torch.load(ckpt_path)["state_dict"]
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("net."):
+                new_state_dict[k[len("net.") :]] = v
+
+        self.backbone.load_state_dict(new_state_dict)
+        log.info(f"Loaded pretrained backbone from {ckpt_path}")
+
+    def freeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        log.info("Backbone frozen")
+
 
 if __name__ == "__main__":
     from src.models.networks.spunet.spconv_unet_v1m1_base import SpUNetBase
@@ -332,7 +363,7 @@ if __name__ == "__main__":
         num_heads=8,
         decoder_iterations=3,
         max_sample_sizes=[200, 800, 3200, 12800, 51200],
-        hlevels=[0, 1, 2, 3],
+        hlevels=[4],
     ).to(device)
     print(">>> OpenSegment3D initialized")
 

@@ -9,8 +9,8 @@ net:
     in_channels: ${data.in_channel}
     out_channels: 96
     base_channels: 32
-    channels: [32, 64, 128, 256, 128, 128, 96, 96]
-    layers: [2, 2, 2, 2, 2, 2, 2, 2]
+    channels: [32, 64, 128, 256, 256, 128, 96, 96]
+    layers: [2, 3, 4, 6, 2, 2, 2, 2]
     out_fpn: true
     hash_method: ravel
 
