@@ -1,0 +1,10 @@
+defaults:
+  - opensegment3d_spunet34c
+
+net:
+  backbone:
+    out_channels: ${model.clip_encoder.text_dim}
+
+  hlevels: [4]
+  backbone_ckpt: results/550723/checkpoints/epoch_684-step_0068500.ckpt
+  freeze_backbone: true
