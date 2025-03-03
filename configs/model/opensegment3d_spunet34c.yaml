@@ -17,7 +17,7 @@ net:
   hidden_dim: 128
   feedforward_dim: 1024
   clip_dim: ${model.clip_encoder.text_dim}
-  num_queries: 100
+  num_queries: 150
   num_heads: 8
   decoder_iterations: 3
   max_sample_sizes: [200, 800, 3200, 12800, 51200]
