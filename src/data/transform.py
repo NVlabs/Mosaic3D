@@ -4,6 +4,7 @@ import random
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import List, Optional
+import re
 
 import numpy as np
 import scipy
@@ -1318,6 +1319,79 @@ class AugmentCaption:
                 new_idx.append(idx)
         data_dict["caption_data"] = {"caption": new_captions, "idx": new_idx}
         return data_dict
+
+
+@TRANSFORMS.register_module()
+class ClassNameAnonymizer:
+    """Replace class names in captions with 'object' to prevent label leakage.
+
+    Args:
+        dataset (str): Name of the dataset ('scannet', 'scannetpp', 'matterport', 'structured3d')
+        replacement (str): Word to replace class names with (default: 'object')
+        case_sensitive (bool): Whether to match class names case-sensitively (default: False)
+    """
+
+    def __init__(self, dataset: str, replacement: str = "object", case_sensitive: bool = False):
+        self.dataset = dataset
+        self.replacement = replacement
+        self.case_sensitive = case_sensitive
+
+        # Get class names from metadata based on dataset name
+        self.class_names = self._get_class_names_from_dataset(dataset)
+
+        # Prepare regex patterns for each class name
+        self.patterns = []
+        for class_name in self.class_names:
+            # Create word boundary pattern to match whole words only
+            pattern = r"\b" + re.escape(class_name) + r"\b"
+            if not case_sensitive:
+                self.patterns.append(re.compile(pattern, re.IGNORECASE))
+            else:
+                self.patterns.append(re.compile(pattern))
+
+    def _get_class_names_from_dataset(self, dataset: str):
+        """Get class names from the appropriate metadata based on dataset name."""
+        if dataset.lower() == "scannet":
+            from src.data.metadata.scannet import CLASS_LABELS_200
+
+            return CLASS_LABELS_200
+        elif dataset.lower() == "scannetpp":
+            from src.data.metadata.scannetpp import CLASS_LABELS
+
+            return CLASS_LABELS
+        elif dataset.lower() == "matterport":
+            from src.data.metadata.matterport3d import CLASS_LABELS_160
+
+            return CLASS_LABELS_160
+        elif dataset.lower() == "structured3d":
+            from src.data.metadata.structured3d import CLASS_LABELS_25
+
+            return CLASS_LABELS_25
+        else:
+            raise ValueError(f"Unsupported dataset: {dataset}")
+
+    def __call__(self, data_dict):
+        if "caption_data" not in data_dict:
+            return data_dict
+
+        caption_dict = data_dict["caption_data"]
+        captions = caption_dict["caption"]
+
+        # Process each caption
+        anonymized_captions = []
+        for caption in captions:
+            # Apply all patterns to the caption
+            anonymized_caption = caption
+            for pattern in self.patterns:
+                anonymized_caption = pattern.sub(self.replacement, anonymized_caption)
+            anonymized_captions.append(anonymized_caption)
+
+        # Update the caption data
+        data_dict["caption_data"]["caption"] = anonymized_captions
+        return data_dict
+
+    def __repr__(self):
+        return f"ClassNameAnonymizer(dataset='{self.dataset}', num_classes={len(self.class_names)}, replacement='{self.replacement}')"
 
 
 class Compose:
