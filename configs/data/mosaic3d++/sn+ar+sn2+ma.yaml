@@ -21,6 +21,9 @@ train_dataset:
       ignore_label: ${data.train_dataset.ignore_label}
       repeat: 1
       transforms:
+        - type: Add
+          keys_dict:
+            condition: ScanNet
         - type: Copy
           keys_dict:
             coord: origin_coord
@@ -61,9 +64,6 @@ train_dataset:
         - type: CenterShift
           apply_z: false
         - type: NormalizeColor
-        - type: Add
-          keys_dict:
-            condition: ScanNet
         - type: ToTensor
         - type: Collect
           keys:
@@ -89,19 +89,16 @@ train_dataset:
       caption_dir: /datasets/mosaic3d++
       caption_subset: caption-mc.osprey.arkitscenes
       segment_dir: /datasets/mosaic3d++
-      segment_subset: mask_clustering.cropformer.arkitscenes
+      segment_subset: mask_clustering.cropformer.arkitscenes+combined
       load_embeddings: true
       embedding_filename: embeddings-gathered.recap_clip
       object_num_max: 300
       ignore_label: -100
       repeat: 1
       transforms:
-        - type: FilterCaption
-          min_words: 1
-          max_words: 50
-          min_letter_ratio: 0.5
-          max_repetition_ratio: 0.4
-          max_consecutive: 3
+        - type: Add
+          keys_dict:
+            condition: ARKitScenes
         - type: Copy
           keys_dict:
             coord: origin_coord
@@ -143,9 +140,6 @@ train_dataset:
           point_max: 120000
           mode: captioned
         - type: NormalizeColor
-        - type: Add
-          keys_dict:
-            condition: ARKitScenes
         - type: ToTensor
         - type: Collect
           keys:
@@ -171,13 +165,16 @@ train_dataset:
       caption_dir: /datasets/mosaic3d++
       caption_subset: caption-mc.osprey.scannetpp
       segment_dir: /datasets/mosaic3d++
-      segment_subset: mask_clustering.cropformer.scannetpp
+      segment_subset: mask_clustering.cropformer.scannetpp+combined
       load_embeddings: true
       embedding_filename: embeddings-gathered.recap_clip
       object_num_max: 300
       ignore_label: -100
       repeat: 1
       transforms:
+        - type: Add
+          keys_dict:
+            condition: ScanNetPP
         - type: Copy
           keys_dict:
             coord: origin_coord
@@ -219,9 +216,6 @@ train_dataset:
           point_max: 120000
           mode: captioned
         - type: NormalizeColor
-        - type: Add
-          keys_dict:
-            condition: ScanNetPP
         - type: ToTensor
         - type: Collect
           keys:
@@ -247,7 +241,7 @@ train_dataset:
       caption_dir: /datasets/mosaic3d++
       caption_subset: caption-mc.osprey.matterport3d
       segment_dir: /datasets/mosaic3d++
-      segment_subset: mask_clustering.cropformer.matterport3d
+      segment_subset: mask_clustering.cropformer.matterport3d+combined
       load_embeddings: true
       embedding_filename: embeddings-gathered.recap_clip
       object_num_max: 300
@@ -257,6 +251,9 @@ train_dataset:
       ignore_label: ${data.train_dataset.ignore_label}
       repeat: 1
       transforms:
+        - type: Add
+          keys_dict:
+            condition: Matterport3D
         - type: Copy
           keys_dict:
             coord: origin_coord
@@ -297,9 +294,6 @@ train_dataset:
         - type: CenterShift
           apply_z: false
         - type: NormalizeColor
-        - type: Add
-          keys_dict:
-            condition: Matterport3D
         - type: ToTensor
         - type: Collect
           keys:

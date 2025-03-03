@@ -28,6 +28,8 @@ class ScanNetPPDataset(DatasetBase):
         ignore_label: int = -100,
         repeat: int = 1,
         log_postfix: Optional[str] = None,
+        load_embeddings: bool = False,
+        embedding_filename: Optional[str] = None,
     ):
         super().__init__(
             dataset_name="scannetpp",
@@ -43,7 +45,9 @@ class ScanNetPPDataset(DatasetBase):
             ignore_label=ignore_label,
             repeat=repeat,
             log_postfix=log_postfix,
+            load_embeddings=load_embeddings,
         )
+        self.embedding_filename = embedding_filename
 
     def load_point_cloud(self, scene_name: str):
         scene_dir = self.data_dir / scene_name
@@ -75,6 +79,35 @@ class ScanNetPPDataset(DatasetBase):
 
         return all_point_indices, all_captions
 
+    def load_embedding(self, scene_name):
+        all_point_indices = []
+        all_embeddings = []
+
+        for i, caption_dir in enumerate(self.caption_dir):
+            segment_dir = self.segment_dir[i]
+            indices_path = segment_dir / scene_name / "point_indices.npz"
+            embeddings_path = caption_dir / scene_name / f"{self.embedding_filename}.npz"
+
+            if not indices_path.exists() or not embeddings_path.exists():
+                return [], []
+
+            point_indices_all = unpack_list_of_np_arrays(indices_path)
+            embeddings_all = unpack_list_of_np_arrays(embeddings_path)
+
+            num_embeddings_per_object = np.array([len(e) for e in embeddings_all])
+            idx_select_embedding = np.cumsum(
+                np.insert(num_embeddings_per_object, 0, 0)[0:-1]
+            ) + np.random.randint(0, num_embeddings_per_object, len(num_embeddings_per_object))
+
+            # flatten the list of list
+            point_indices = [torch.from_numpy(indices).int() for indices in point_indices_all]
+            embeddings = np.concatenate(embeddings_all, axis=0)
+            embeddings = torch.from_numpy(embeddings[idx_select_embedding]).float()
+            all_point_indices.extend(point_indices)
+            all_embeddings.extend(embeddings)
+
+        return all_point_indices, all_embeddings
+
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)
         scene_name = self.scene_names[idx]
@@ -95,8 +128,12 @@ class ScanNetPPDataset(DatasetBase):
 
         # load captions
         if self.split == "train":
-            point_indices, captions = self.load_caption_and_sample(scene_name)
-            data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
+            if self.load_embeddings:
+                point_indices, embeddings = self.load_embedding_and_sample(scene_name)
+                data_dict["caption_data"] = {"idx": point_indices, "embedding": embeddings}
+            else:
+                point_indices, captions = self.load_caption_and_sample(scene_name)
+                data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
         data_dict = self.transforms(data_dict)
         return data_dict
