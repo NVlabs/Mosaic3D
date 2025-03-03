@@ -299,9 +299,8 @@ class OpenSegment3D(nn.Module):
                     masked_centroids.max(dim=0, keepdim=True).values,
                 ]
 
-                with autocast(enabled=True):
-                    pos_enc = self.pos_enc(masked_centroids[None, ...], input_range=scene_bounds)
-
+                pos_enc = self.pos_enc(masked_centroids[None, ...], input_range=scene_bounds)
+                pos_enc = pos_enc.to(dtype)
                 pos_enc = rearrange(pos_enc, "1 d n -> n d")
                 pos_encs[batch_split] = pos_enc
 
