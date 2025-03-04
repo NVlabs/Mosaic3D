@@ -99,7 +99,7 @@ export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 pip install flash-attn;
-pip install -U lightning;
+pip install -U lightning 'open_clip_torch>=2.31.0' 'timm>=1.0.15';
 pip uninstall -y warpconvnet;
 pip install --force-reinstall --no-deps ./warpconvnet;
 torchrun \
