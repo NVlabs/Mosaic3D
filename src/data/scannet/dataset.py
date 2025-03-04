@@ -105,6 +105,18 @@ class ScanNetDataset(DatasetBase):
             embeddings_all = unpack_list_of_np_arrays(embeddings_path)
 
             num_embeddings_per_object = np.array([len(e) for e in embeddings_all])
+            # filter out empty embeddings
+            point_indices_all = [
+                indices
+                for indices, num_embeddings in zip(point_indices_all, num_embeddings_per_object)
+                if num_embeddings > 0
+            ]
+            embeddings_all = [
+                embeddings
+                for embeddings, num_embeddings in zip(embeddings_all, num_embeddings_per_object)
+                if num_embeddings > 0
+            ]
+            num_embeddings_per_object = np.array([len(e) for e in embeddings_all])
             idx_select_embedding = np.cumsum(
                 np.insert(num_embeddings_per_object, 0, 0)[0:-1]
             ) + np.random.randint(0, num_embeddings_per_object, len(num_embeddings_per_object))

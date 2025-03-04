@@ -28,6 +28,8 @@ class ARKitScenesDataset(DatasetBase):
         ignore_label: int = -100,
         repeat: int = 1,
         log_postfix: Optional[str] = None,
+        load_embeddings: bool = False,
+        embedding_filename: Optional[str] = None,
     ):
         super().__init__(
             dataset_name="arkitscenes",
@@ -43,7 +45,9 @@ class ARKitScenesDataset(DatasetBase):
             ignore_label=ignore_label,
             repeat=repeat,
             log_postfix=log_postfix,
+            load_embeddings=load_embeddings,
         )
+        self.embedding_filename = embedding_filename
 
     def load_point_cloud(self, scene_name: str):
         split = "Training" if self.split == "train" else "Validation"
@@ -76,6 +80,35 @@ class ARKitScenesDataset(DatasetBase):
 
         return all_point_indices, all_captions
 
+    def load_embedding(self, scene_name):
+        all_point_indices = []
+        all_embeddings = []
+
+        for i, caption_dir in enumerate(self.caption_dir):
+            segment_dir = self.segment_dir[i]
+            indices_path = segment_dir / scene_name / "point_indices.npz"
+            embeddings_path = caption_dir / scene_name / f"{self.embedding_filename}.npz"
+
+            if not indices_path.exists() or not embeddings_path.exists():
+                return [], []
+
+            point_indices_all = unpack_list_of_np_arrays(indices_path)
+            embeddings_all = unpack_list_of_np_arrays(embeddings_path)
+
+            num_embeddings_per_object = np.array([len(e) for e in embeddings_all])
+            idx_select_embedding = np.cumsum(
+                np.insert(num_embeddings_per_object, 0, 0)[0:-1]
+            ) + np.random.randint(0, num_embeddings_per_object, len(num_embeddings_per_object))
+
+            # flatten the list of list
+            point_indices = [torch.from_numpy(indices).int() for indices in point_indices_all]
+            embeddings = np.concatenate(embeddings_all, axis=0)
+            embeddings = torch.from_numpy(embeddings[idx_select_embedding]).float()
+            all_point_indices.extend(point_indices)
+            all_embeddings.extend(embeddings)
+
+        return all_point_indices, all_embeddings
+
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)
         scene_name = self.scene_names[idx]
@@ -96,8 +129,12 @@ class ARKitScenesDataset(DatasetBase):
 
         # load captions
         if self.split == "train":
-            point_indices, captions = self.load_caption_and_sample(scene_name)
-            data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
+            if self.load_embeddings:
+                point_indices, embeddings = self.load_embedding_and_sample(scene_name)
+                data_dict["caption_data"] = {"idx": point_indices, "embedding": embeddings}
+            else:
+                point_indices, captions = self.load_caption_and_sample(scene_name)
+                data_dict["caption_data"] = {"idx": point_indices, "caption": captions}
 
         data_dict = self.transforms(data_dict)
         return data_dict
@@ -107,29 +144,44 @@ if __name__ == "__main__":
     import os
 
     from natsort import natsorted
+    from rich.progress import Progress
 
     datadir = "/datasets/arkitscenes/3dod"
-    segment_dir = "/datasets/openvocab-3d-captions/segment.sam2.arkitscenes"
-    caption_dir = "/datasets/openvocab-3d-captions/caption.osprey.arkitscenes"
+    segment_dir = "/datasets/mosaic3d++/mask_clustering.cropformer.arkitscenes+combined"
+    caption_dir = "/datasets/mosaic3d++/caption-mc.osprey.arkitscenes"
 
-    all_train = os.listdir(os.path.join(datadir, "Training"))
-    all_val = os.listdir(os.path.join(datadir, "Validation"))
+    scenes = os.listdir(segment_dir)
 
-    segments = os.listdir(segment_dir)
-    captions = os.listdir(caption_dir)
+    bad_scenes = []
+    with Progress() as progress:
+        task = progress.add_task("Processing scenes", total=len(scenes))
+        for scene in scenes:
+            try:
+                point_indices = unpack_list_of_np_arrays(
+                    os.path.join(segment_dir, scene, "point_indices.npz")
+                )
+                num_point_indices = len(point_indices)
+            except Exception as e:
+                num_point_indices = 0
+                bad_scenes.append((scene, "no point indices"))
+            try:
+                captions = unpack_list_of_np_arrays(
+                    os.path.join(caption_dir, scene, "captions-gathered.npz")
+                )
+                num_captions = len(captions)
+            except Exception as e:
+                num_captions = 0
+                bad_scenes.append((scene, "no captions"))
 
-    missing_captions = list(set(segments) - set(captions))
-    print(len(missing_captions))
+            if num_point_indices == 0:
+                progress.console.print(
+                    f"[red]scene: {scene}, len(point_indices): {num_point_indices:4d}, len(captions): {num_captions:4d}, match? {num_point_indices == num_captions}"
+                )
+            else:
+                progress.console.print(
+                    f"scene: {scene}, len(point_indices): {num_point_indices:4d}, len(captions): {num_captions:4d}, match? {num_point_indices == num_captions}"
+                )
+            progress.update(task, advance=1)
 
-    missing_train = list(set(all_train) - set(segments))
-    print(len(missing_train))
-
-    missing_val = list(set(all_val) - set(segments))
-    print(len(missing_val))
-    with open("src/data/metadata/split_files/arkitscenes_train.txt", "w") as f:
-        for scene in natsorted(all_train):
-            f.write(f"{scene}\n")
-
-    with open("src/data/metadata/split_files/arkitscenes_val.txt", "w") as f:
-        for scene in natsorted(all_val):
-            f.write(f"{scene}\n")
+    for scene, reason in bad_scenes:
+        print(f"{scene}: {reason}")

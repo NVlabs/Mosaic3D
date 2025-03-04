@@ -10,6 +10,8 @@ from omegaconf import DictConfig
 
 try:
     import warp
+
+    WARP_AVAILABLE = True
 except ImportError:
     WARP_AVAILABLE = False
 

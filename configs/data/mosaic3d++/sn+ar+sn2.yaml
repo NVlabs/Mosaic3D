@@ -89,7 +89,7 @@ train_dataset:
       caption_dir: /datasets/mosaic3d++
       caption_subset: caption-mc.osprey.arkitscenes
       segment_dir: /datasets/mosaic3d++
-      segment_subset: mask_clustering.cropformer.arkitscenes
+      segment_subset: mask_clustering.cropformer.arkitscenes+combined
       load_embeddings: true
       embedding_filename: embeddings-gathered.recap_clip
       object_num_max: 300
@@ -165,7 +165,7 @@ train_dataset:
       caption_dir: /datasets/mosaic3d++
       caption_subset: caption-mc.osprey.scannetpp
       segment_dir: /datasets/mosaic3d++
-      segment_subset: mask_clustering.cropformer.scannetpp
+      segment_subset: mask_clustering.cropformer.scannetpp+combined
       load_embeddings: true
       embedding_filename: embeddings-gathered.recap_clip
       object_num_max: 300

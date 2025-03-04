@@ -60,7 +60,9 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
             / f"{self.dataset_name}_{self.split}.txt"
         )
         with open(split_file_path) as f:
-            self.scene_names = natsorted([line.strip() for line in f.readlines()])
+            self.scene_names = natsorted(
+                [line.strip() for line in f.readlines() if not line.startswith("#")]
+            )
 
         # set caption dir for train dataset
         if self.split == "train":

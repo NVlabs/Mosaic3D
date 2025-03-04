@@ -102,6 +102,12 @@ pip install flash-attn;
 pip install -U lightning 'open_clip_torch>=2.31.0' 'timm>=1.0.15';
 pip uninstall -y warpconvnet;
 pip install --force-reinstall --no-deps ./warpconvnet;
+pip install -r requirements.txt;
+cd /tmp && git clone https://github.com/Pointcept/Pointcept.git \
+    && cd Pointcept/libs/pointops \
+    && python3 setup.py install \
+    && cd /tmp \
+    && rm -rf /tmp/Pointcept && cd /workspace;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \
