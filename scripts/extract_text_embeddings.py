@@ -44,7 +44,12 @@ def extract_text_embeddings(
     clip_model_name = Path(clip_cfg_path).stem
 
     caption_dir = Path(caption_dir)
-    scene_dirs = natsorted(list(caption_dir.iterdir()))
+    if "dl3dv" in str(caption_dir):
+        scene_dirs = [list(subset_dir.iterdir()) for subset_dir in caption_dir.iterdir()]
+        scene_dirs = [item for subset in scene_dirs for item in subset]
+        scene_dirs = natsorted(scene_dirs)
+    else:
+        scene_dirs = natsorted(list(caption_dir.iterdir()))
     error_files = []
     with Progress(console=CONSOLE) as progress:
         task = progress.add_task("Extracting text embeddings", total=len(scene_dirs))

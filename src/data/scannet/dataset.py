@@ -3,10 +3,8 @@ from glob import glob
 from pathlib import Path
 from typing import List, Literal, Optional, Union
 
-import fire
 import numpy as np
 import torch
-from clip import clip
 from PIL import Image
 from tqdm import tqdm
 
