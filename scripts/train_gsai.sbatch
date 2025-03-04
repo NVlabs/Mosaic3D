@@ -98,6 +98,18 @@ UUIDLIST=$(nvidia-smi -L | cut -d '(' -f 2 | awk '{print$2}' | tr -d ")" | paste
 GPULIST=\"device=${UUIDLIST}\"
 echo "Using GPUs with UUID: ${UUIDLIST}"
 
+# Check for and stop any running containers with username prefix
+echo "Checking for existing containers with prefix ${USER}_..."
+EXISTING_CONTAINERS=$(docker ps -q --filter "name=${USER}_")
+if [ -n "$EXISTING_CONTAINERS" ]; then
+    echo "Found existing containers. Stopping and removing them..."
+    docker stop $EXISTING_CONTAINERS
+    docker rm $EXISTING_CONTAINERS
+    echo "Existing containers removed."
+else
+    echo "No existing containers found with prefix ${USER}_."
+fi
+
 set -x
 # Pass CMD with double quotes
 docker run \
