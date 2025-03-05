@@ -141,7 +141,10 @@ class ScanNetDataset(DatasetBase):
                 point_indices, captions = self._load_caption_legacy(scene_name, caption_dir)
             elif (
                 (caption_dir / scene_name).is_dir()
-                and (caption_dir / scene_name / "captions.npz").exists()
+                and (
+                    (caption_dir / scene_name / "captions.npz").exists()
+                    or (caption_dir / scene_name / "captions-gathered.npz").exists()
+                )
                 and hasattr(self, "segment_dir")
                 and (self.segment_dir[i] / scene_name / "point_indices.npz").exists()
             ):
@@ -178,6 +181,18 @@ class ScanNetDataset(DatasetBase):
         point_indices_all = unpack_list_of_np_arrays(indices_path)
         captions_all = unpack_list_of_np_arrays(caption_path)
 
+        num_captions_per_object = np.array([len(c) for c in captions_all])
+        # filter out empty captions
+        point_indices_all = [
+            indices
+            for indices, num_captions in zip(point_indices_all, num_captions_per_object)
+            if num_captions > 0
+        ]
+        captions_all = [
+            captions
+            for captions, num_captions in zip(captions_all, num_captions_per_object)
+            if num_captions > 0
+        ]
         num_captions_per_object = np.array([len(c) for c in captions_all])
         idx_select_caption = np.cumsum(
             np.insert(num_captions_per_object, 0, 0)[0:-1]
@@ -610,11 +625,12 @@ if __name__ == "__main__":
         split="train",
         transforms=None,
         caption_dir="/datasets/mosaic3d++",
-        caption_subset="caption-mc.osprey.scannet-125k",
+        caption_subset="caption-mc.osprey.scannet-125k.cyclic-check",
         segment_dir="/datasets/mosaic3d++",
         segment_subset="mask_clustering.cropformer.scannet-125k",
         object_num_max=300,
         ignore_label=-100,
+        load_embeddings=False,
     )
 
     for i in range(dataset.__len__()):
