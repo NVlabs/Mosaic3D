@@ -110,11 +110,10 @@ stop_and_remove_container() {
 
 # Clean up existing containers with username prefix
 echo "Checking for existing containers with prefix ${USER}_..."
-EXISTING_CONTAINERS=$(docker ps -q --filter "name=${USER}_")
+EXISTING_CONTAINERS=$(docker ps --filter "name=${USER}_" --format "{{.Names}}")
 if [ -n "$EXISTING_CONTAINERS" ]; then
     echo "Found existing containers. Stopping and removing them..."
-    for container in $EXISTING_CONTAINERS; do
-        container_name=$(docker ps --format "{{.Names}}" -f "id=$container")
+    for container_name in $EXISTING_CONTAINERS; do
         stop_and_remove_container "$container_name"
     done
     echo "Existing containers removed."
