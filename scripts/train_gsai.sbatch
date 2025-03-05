@@ -98,20 +98,32 @@ UUIDLIST=$(nvidia-smi -L | cut -d '(' -f 2 | awk '{print$2}' | tr -d ")" | paste
 GPULIST=\"device=${UUIDLIST}\"
 echo "Using GPUs with UUID: ${UUIDLIST}"
 
-# Check for and stop any running containers with username prefix
+# Define function to stop and remove containers
+stop_and_remove_container() {
+    local container_name=$1
+    if docker ps -q --filter "name=${container_name}" | grep -q .; then
+        echo "Stopping and removing container ${container_name}..."
+        docker stop "${container_name}" && docker rm "${container_name}"
+        echo "Container ${container_name} removed."
+    fi
+}
+
+# Clean up existing containers with username prefix
 echo "Checking for existing containers with prefix ${USER}_..."
 EXISTING_CONTAINERS=$(docker ps -q --filter "name=${USER}_")
 if [ -n "$EXISTING_CONTAINERS" ]; then
     echo "Found existing containers. Stopping and removing them..."
-    docker stop $EXISTING_CONTAINERS
-    docker rm $EXISTING_CONTAINERS
+    for container in $EXISTING_CONTAINERS; do
+        container_name=$(docker ps --format "{{.Names}}" -f "id=$container")
+        stop_and_remove_container "$container_name"
+    done
     echo "Existing containers removed."
 else
     echo "No existing containers found with prefix ${USER}_."
 fi
 
 set -x
-# Pass CMD with double quotes
+# Run the container
 docker run \
     --rm \
     --shm-size=32G \
@@ -122,6 +134,9 @@ docker run \
     -v "${DATA_DIR}:/datasets" \
     ${DOCKER_IMAGE} \
     bash -c "$CMD"
+
+# Ensure container is removed if still running
+stop_and_remove_container "${CONTAINER_NAME}"
 
 # Get the status from $OUTPUT_FOLDER/status.txt
 STATUS_FILE="results/${CKPT_SLURM_JOBID:-${SLURM_JOBID}}/status.txt"
