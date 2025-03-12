@@ -34,10 +34,16 @@ def patch_ckpt(ckpt_path):
             for before, after in MODULE_MAPPING.items():
                 k = k.replace(before, after)
 
+                if k.startswith("decoder_proj"):
+                    v = v.squeeze(0)
+
+                if k.startswith("query_proj"):
+                    v = v.squeeze(-1)
+
             new_state_dict[k] = v
 
     new_ckpt_path = ckpt_path.replace(".ckpt", "_patched.ckpt")
-    torch.save(ckpt, new_ckpt_path)
+    torch.save(new_state_dict, new_ckpt_path)
 
 
 if __name__ == "__main__":
