@@ -270,7 +270,7 @@ class MaskLanguageLitModule(LitModuleBase):
 
         # Inference
         out_dict = self(batch)
-        batch_binary_logits = out_dict["logit"]  # [B, Q, 1]
+        batch_binary_logits = out_dict["logit"]  # [B, Q, 2]
         batch_masks = out_dict["mask"]  # List[Tensor[N, Q]]
         batch_clip_feats = out_dict["clip_feat"]  # [B, Q, D]
 
@@ -281,7 +281,7 @@ class MaskLanguageLitModule(LitModuleBase):
             gt_instances = batch["instance"][offset[i] : offset[i + 1]]  # [N]
 
             clip_feats = batch_clip_feats[i]  # [Q, D]
-            mask_binary_probs = batch_binary_logits[i].sigmoid()  # [Q, 1]
+            mask_binary_probs = batch_binary_logits[i].softmax(dim=-1)[:, :1]  # [Q, 1]
             mask_logits = clip_evaluator.predict(clip_feats, return_logit=True)  # [Q, C]
             mask_probs = nn.functional.softmax(mask_logits, dim=-1)  # [Q, C]
             mask_probs = mask_binary_probs * mask_probs  # [Q, C]
