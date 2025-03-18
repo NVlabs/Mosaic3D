@@ -1,4 +1,10 @@
+import json
+import os
+
 import numpy as np
+from rich.console import Console
+
+CONSOLE = Console()
 
 
 def pack_list_of_np_arrays(array_list):
@@ -45,3 +51,33 @@ def unpack_list_of_np_arrays(filename):
             # Unpack list of 1D numpy arrays
             lengths = data["lengths"]
             return [np.array(arr) for arr in np.split(packed, np.cumsum(lengths)[:-1])]
+
+
+def save_result_to_file(filename, save_dir, payload):
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+
+    if isinstance(payload, (dict, list)) and len(payload) == 0:
+        CONSOLE.print("[bold red]Empty prediction detected![/bold red]")
+    elif isinstance(payload, np.ndarray):
+        np.save(os.path.join(save_dir, filename), payload)
+    # handle list of numpy arrays or list of list of numpy arrays
+    elif isinstance(payload, list) and (
+        isinstance(payload[0], np.ndarray)
+        or (isinstance(payload[0], list) and isinstance(payload[0][0], np.ndarray))
+    ):
+        data = pack_list_of_np_arrays(payload)
+        np.savez_compressed(os.path.join(save_dir, filename), **data)
+    # handle dictionary of numpy arrays
+    elif isinstance(payload, dict) and any(isinstance(v, np.ndarray) for v in payload.values()):
+        np.savez_compressed(os.path.join(save_dir, filename), **payload)
+    elif isinstance(payload, dict) and all(
+        isinstance(v, str, int, float, bool) for v in payload.values()
+    ):
+        with open(os.path.join(save_dir, f"{filename}.json"), "w") as f:
+            json.dump(payload, f)
+    elif isinstance(payload, list) and isinstance(payload[0], str):
+        with open(os.path.join(save_dir, f"{filename}.txt"), "w") as f:
+            f.write("\n".join([line.strip() for line in payload]))
+    else:
+        raise ValueError("Results must be a numpy array or a dictionary with numpy arrays")
