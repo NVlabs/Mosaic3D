@@ -99,7 +99,7 @@ class HungarianMatcher(nn.Module):
         # Iterate through batch size
         for b in range(bs):
             target = targets[b]
-            out_prob = outputs["logit"][b].sigmoid()  # [num_queries, 1]
+            out_prob = outputs["logit"][b].softmax(-1)  # [num_queries, 2]
             tgt_ids = torch.zeros(
                 target["num_captions"], device=out_prob.device, dtype=torch.long
             )  # [num_targets,]

@@ -1,0 +1,6 @@
+defaults:
+  - mask_scannet_125k
+
+train_dataset:
+  caption_subset: caption.segment3d-osprey.scannet-125k-gathered
+  segment_subset: caption.segment3d-osprey.scannet-125k-gathered

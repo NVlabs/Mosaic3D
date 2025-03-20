@@ -7,4 +7,5 @@ net:
 
   hlevels: [4]
   backbone_ckpt: results/550723/checkpoints/epoch_684-step_0068500.ckpt
+  decoder_ckpt: null
   freeze_backbone: true

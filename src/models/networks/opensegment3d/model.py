@@ -33,6 +33,7 @@ class OpenSegment3D(nn.Module):
         max_sample_sizes: List[int],
         hlevels: List[int],
         backbone_ckpt: Optional[str] = None,
+        decoder_ckpt: Optional[str] = None,
         freeze_backbone: bool = False,
     ):
         super().__init__()
@@ -49,14 +50,6 @@ class OpenSegment3D(nn.Module):
         self.hlevels = hlevels
         self.num_hlevels = len(hlevels)
         self.num_backbone_levels = self.backbone.num_stages + 1
-
-        if backbone_ckpt is not None:
-            self.load_pretrained_backbone(backbone_ckpt)
-
-        self.backbone_frozen = False
-        if freeze_backbone:
-            self.freeze_backbone()
-            self.backbone_frozen = True
 
         backbone_decoder_channels = self.backbone.channels[-self.num_backbone_levels :]
         backbone_decoder_channels[-1] = self.backbone.out_channels
@@ -90,7 +83,7 @@ class OpenSegment3D(nn.Module):
             self.ffn.append(FFNLayer(d_model=hidden_dim, dim_feedforward=feedforward_dim))
 
         # Prediction heads
-        self.class_head = nn.Linear(hidden_dim, 1)
+        self.class_head = nn.Linear(hidden_dim, 2)  # for Segment3D ckpt compatibility
         self.mask_head = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)
         )
@@ -99,6 +92,17 @@ class OpenSegment3D(nn.Module):
         # rearrange layers
         self.b2q = Rearrange("b q d -> q b d")
         self.q2b = Rearrange("q b d -> b q d")
+
+        if backbone_ckpt is not None:
+            self.load_pretrained_backbone(backbone_ckpt)
+
+        self.backbone_frozen = False
+        if freeze_backbone:
+            self.freeze_backbone()
+            self.backbone_frozen = True
+
+        if decoder_ckpt is not None:
+            self.load_pretrained_decoder(decoder_ckpt)
 
     def forward(self, input_dict: dict, num_queries: Optional[int] = None):
         num_queries = num_queries or self.num_queries
@@ -334,6 +338,17 @@ class OpenSegment3D(nn.Module):
         self.backbone.load_state_dict(new_state_dict)
         log.info(f"Loaded pretrained backbone from {ckpt_path}")
 
+    def load_pretrained_decoder(self, ckpt_path: str):
+        state_dict = torch.load(ckpt_path)
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith("backbone."):
+                continue
+            new_state_dict[k] = v
+
+        self.load_state_dict(new_state_dict, strict=False)
+        log.info(f"Loaded pretrained decoder from {ckpt_path}")
+
     def freeze_backbone(self):
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -347,10 +362,10 @@ if __name__ == "__main__":
 
     backbone = SpUNetBase(
         in_channels=3,
-        out_channels=512,
+        out_channels=768,  # recap-clip
         base_channels=32,
         channels=[32, 64, 128, 256, 256, 128, 96, 96],
-        layers=[2, 2, 2, 2, 2, 2, 2, 2],
+        layers=[2, 3, 4, 6, 2, 2, 2, 2],
         out_fpn=True,
         hash_method="ravel",
     )
@@ -359,11 +374,13 @@ if __name__ == "__main__":
         hidden_dim=128,
         feedforward_dim=1024,
         clip_dim=512,
-        num_queries=400,
+        num_queries=150,
         num_heads=8,
         decoder_iterations=3,
         max_sample_sizes=[200, 800, 3200, 12800, 51200],
         hlevels=[4],
+        backbone_ckpt="results/550723/checkpoints/epoch_684-step_0068500.ckpt",
+        decoder_ckpt="ckpts/segment3d_patched.ckpt",
     ).to(device)
     print(">>> OpenSegment3D initialized")
 

@@ -23,6 +23,9 @@ model:
   optimizer:
     lr: 1e-4
     weight_decay: 1e-2
+  scheduler:
+    pct_start: 0.3
+    div_factor: 25.0
   best_metric: ${data.checkpoint_monitor}
 
 trainer:

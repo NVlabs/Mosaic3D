@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 from torchmetrics import MaxMetric, MeanMetric
+from cuml.cluster import DBSCAN
 
 import src.utils.caption_utils as caption_utils
 from src.utils.dist_utils import all_gather, all_gather_different_shapes
@@ -148,8 +149,8 @@ class MaskLanguageLitModule(LitModuleBase):
             }
         )
 
-    def forward(self, batch: Any) -> Dict[str, Any]:
-        output = self.net(batch)
+    def forward(self, batch: Any, num_queries: Optional[int] = None) -> Dict[str, Any]:
+        output = self.net(batch, num_queries)
         out_dict = self._output_to_dict(output, batch)
         return out_dict
 
@@ -270,7 +271,7 @@ class MaskLanguageLitModule(LitModuleBase):
 
         # Inference
         out_dict = self(batch)
-        batch_binary_logits = out_dict["logit"]  # [B, Q, 1]
+        batch_binary_logits = out_dict["logit"]  # [B, Q, 2]
         batch_masks = out_dict["mask"]  # List[Tensor[N, Q]]
         batch_clip_feats = out_dict["clip_feat"]  # [B, Q, D]
 
@@ -281,7 +282,7 @@ class MaskLanguageLitModule(LitModuleBase):
             gt_instances = batch["instance"][offset[i] : offset[i + 1]]  # [N]
 
             clip_feats = batch_clip_feats[i]  # [Q, D]
-            mask_binary_probs = batch_binary_logits[i].sigmoid()  # [Q, 1]
+            mask_binary_probs = batch_binary_logits[i].softmax(dim=-1)[:, :1]  # [Q, 1]
             mask_logits = clip_evaluator.predict(clip_feats, return_logit=True)  # [Q, C]
             mask_probs = nn.functional.softmax(mask_logits, dim=-1)  # [Q, C]
             mask_probs = mask_binary_probs * mask_probs  # [Q, C]
@@ -353,9 +354,119 @@ class MaskLanguageLitModule(LitModuleBase):
         if not self.trainer.sanity_checking:
             self.log_dict(log_metrics, logger=True, rank_zero_only=True)
 
+    def _apply_dbscan(self, mask_probs: torch.Tensor, masks: torch.Tensor, coord: torch.Tensor):
+        # DBSCAN parameters
+        eps = self.hparams.eval_cfg.post_processing.dbscan_eps
+        min_points = self.hparams.eval_cfg.post_processing.dbscan_min_points
+        remove_small_group = self.hparams.eval_cfg.post_processing.remove_small_group
+
+        new_mask_probs = []
+        new_masks = []
+        for query_idx in range(masks.shape[1]):
+            mask = masks[:, query_idx]  # [N]
+            binary_mask = mask > 0
+            points = coord[binary_mask]
+
+            if len(points) == 0:
+                continue
+
+            # Run DBSCAN clustering on points
+            clusters = DBSCAN(eps=eps, min_samples=min_points, verbose=2).fit(points).labels_
+            clusters = torch.tensor(clusters.get(), dtype=torch.long, device=masks.device)
+
+            # Map clusters back to original point indices
+            cluster_map = torch.zeros_like(binary_mask, dtype=torch.long)
+            cluster_map[binary_mask] = clusters + 1
+
+            # Process each cluster
+            for cluster_id in torch.unique(clusters):
+                if cluster_id == -1:
+                    continue
+
+                cluster_mask = cluster_map == cluster_id + 1
+                if cluster_mask.sum() > remove_small_group:
+                    new_mask_probs.append(mask_probs[query_idx])
+                    new_masks.append(mask * cluster_mask)
+
+        if not new_masks:
+            return mask_probs, masks
+
+        return torch.stack(new_mask_probs), torch.stack(new_masks, dim=1)
+
     def test_step(self, batch, batch_idx, dataloader_idx=0):
-        # TODO: add post-processing
-        self.validation_step(batch, batch_idx, dataloader_idx)
+        postfix = self.val_dataset_names[dataloader_idx]
+        metrics = self.val_metrics[postfix]
+        clip_evaluator = self.clip_alignment_eval[postfix]
+
+        # Inference
+        out_dict = self(batch, self.hparams.eval_cfg.num_queries)
+        batch_binary_logits = out_dict["logit"]  # [B, Q, 2]
+        batch_masks = out_dict["mask"]  # List[Tensor[N, Q]]
+        batch_clip_feats = out_dict["clip_feat"]  # [B, Q, D]
+
+        offset = batch["offset"]
+        coord = batch["coord"]
+        batch_size = len(offset) - 1
+        for i in range(batch_size):
+            gt_classes = batch["segment"][offset[i] : offset[i + 1]]  # [N]
+            gt_instances = batch["instance"][offset[i] : offset[i + 1]]  # [N]
+
+            clip_feats = batch_clip_feats[i]  # [Q, D]
+            masks = batch_masks[i]  # [N, Q]
+            mask_binary_probs = batch_binary_logits[i].softmax(dim=-1)[:, :1]  # [Q, 1]
+            mask_logits = clip_evaluator.predict(clip_feats, return_logit=True)  # [Q, C]
+            mask_probs = nn.functional.softmax(mask_logits, dim=-1)  # [Q, C]
+            mask_probs = mask_binary_probs * mask_probs  # [Q, C]
+
+            # DBSCAN post-processing
+            if self.hparams.eval_cfg.post_processing.use_dbscan:
+                mask_probs, masks = self._apply_dbscan(
+                    mask_probs, masks, coord[offset[i] : offset[i + 1]]
+                )
+
+            # top-k sampling
+            if self.hparams.eval_cfg.post_processing.topk_per_image > 0:
+                num_classes = mask_probs.shape[1]
+                mask_probs, topk_indices = mask_probs.flatten().topk(
+                    self.hparams.eval_cfg.post_processing.topk_per_image, sorted=True
+                )
+                topk_indices = topk_indices // num_classes
+                masks = masks[:, topk_indices]
+
+            heatmap = masks.sigmoid()  # [N, Q]
+            masks = (masks.T > 0).float()  # [Q, N]
+            mask_scores_per_image = (heatmap.T * masks).sum(1, keepdim=True) / (
+                masks.sum(1, keepdim=True) + 1e-6
+            )  # [Q, 1]
+            mask_probs = mask_scores_per_image * mask_probs  # [Q, C]
+            scores, classes = mask_probs.max(1)  # [Q]
+
+            metrics["map_evaluator"].update(
+                pred_classes=classes.cpu(),
+                pred_scores=scores.cpu(),
+                pred_masks=masks.cpu(),
+                gt_segment=gt_classes.cpu(),
+                gt_instance=gt_instances.cpu(),
+            )
+
+    def on_test_epoch_end(self) -> None:
+        log_metrics = {}
+        for postfix, metrics in self.val_metrics.items():
+            test_section = f"test_{postfix}"
+            ap_results = metrics["map_evaluator"].compute()
+            # Log class-wise metrics
+            for class_name, class_metrics in ap_results["classes"].items():
+                log_metrics.update(
+                    {f"{test_section}/{k}_{class_name}": v for k, v in class_metrics.items()}
+                )
+
+            # Log overall metrics
+            ap_results.pop("classes")
+            log_metrics.update({f"{test_section}/{k}": v for k, v in ap_results.items()})
+
+        # Log metrics if not in sanity check
+        if not self.trainer.sanity_checking:
+            self.log_dict(log_metrics, logger=True)
 
     def children(self):
         for name, module in self.named_children():

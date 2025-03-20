@@ -91,18 +91,19 @@ class BinarySegmentationLoss(nn.Module):
     def loss_labels(self, outputs, targets, indices):
         """Binary classification loss"""
         assert "logit" in outputs
-        src_logits = outputs["logit"]  # [B, Q, 1]
+        src_logits = outputs["logit"]  # [B, Q, 2]
 
         idx = self._get_src_permutation_idx(indices)
-        target_classes = torch.zeros(
+        target_classes = torch.full(
             src_logits.shape[:2],
-            dtype=src_logits.dtype,
+            1,
+            dtype=torch.int64,
             device=src_logits.device,
         )
-        target_classes[idx] = 1  # if the query is matched to a target, set the target class to 1
+        target_classes[idx] = 0  # if the query is matched to a target, set the target class to 0
 
-        loss_ce = F.binary_cross_entropy_with_logits(
-            src_logits.squeeze(-1),
+        loss_ce = F.cross_entropy(
+            src_logits.transpose(1, 2),
             target_classes,
         )
         losses = {"loss_ce": loss_ce}
