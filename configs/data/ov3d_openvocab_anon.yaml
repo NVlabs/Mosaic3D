@@ -1,0 +1,85 @@
+defaults:
+  - ov3d_openvocab
+
+train_dataset:
+  transforms:
+    - type: ClassNameAnonymizer
+      dataset: scannet
+    - type: Copy
+      keys_dict:
+        coord: origin_coord
+    - type: CenterShift
+      apply_z: true
+    - type: RandomRotate
+      p: 0.5
+      angle: [-1, 1]
+      center: [0, 0, 0]
+      axis: "z"
+    - type: RandomRotate
+      p: 0.5
+      angle: [-0.015625, 0.015625]
+      axis: "x"
+    - type: RandomRotate
+      p: 0.5
+      angle: [-0.015625, 0.015625]
+      axis: "y"
+    - type: RandomScale
+      scale: [0.9, 1.1]
+    - type: RandomFlip
+      p: 0.5
+    - type: RandomJitter
+      sigma: 0.005
+      clip: 0.02
+    - type: ElasticDistortion
+    - type: ChromaticAutoContrast
+      p: 0.2
+    - type: ChromaticTranslation
+      p: 0.95
+      ratio: 0.05
+    - type: ChromaticJitter
+      p: 0.95
+      std: 0.05
+    - type: SphereCrop
+      point_max: 250000
+      mode: captioned
+    - type: CenterShift
+      apply_z: false
+    - type: NormalizeColor
+    - type: ToTensor
+    - type: Collect
+      keys:
+        [
+          "origin_coord",
+          "coord",
+          "color",
+          "segment",
+          "instance",
+          "binary",
+          "caption_data",
+          "origin_idx",
+        ]
+      offset_keys_dict:
+        offset: coord
+        pc_count: origin_coord
+      feat_keys: ["color"]
+
+val_datasets:
+  - _target_: src.data.scannet.dataset.ScanNetDataset
+    _partial_: true
+    data_dir: ${data.train_dataset.data_dir}
+    ignore_class_idx: [19] # otherfurniture
+    ignore_label: ${data.train_dataset.ignore_label}
+    split: val
+    log_postfix: scannet20
+    transforms: ${data.val_transforms}
+
+  - _target_: src.data.scannet.dataset.ScanNet200Dataset
+    _partial_: true
+    data_dir: ${data.train_dataset.data_dir}
+    split: val
+    log_postfix: scannet200
+    mask_dir: /datasets/scannet_masks/mask3d_scannet200_openins3d
+    ignore_label: ${data.train_dataset.ignore_label}
+    transforms: ${data.val_transforms}
+
+checkpoint_monitor: "val_scannet200/miou"
