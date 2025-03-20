@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+from einops import repeat
 from torchmetrics import MaxMetric, MeanMetric
 from cuml.cluster import DBSCAN
 
@@ -424,22 +425,27 @@ class MaskLanguageLitModule(LitModuleBase):
                     mask_probs, masks, coord[offset[i] : offset[i + 1]]
                 )
 
-            # top-k sampling
+            heatmap = masks.sigmoid()
+            masks = (masks.T > 0).float()
+            mask_scores_per_image = (heatmap.T * masks).sum(1) / (masks.sum(1) + 1e-6)  # [Q]
+
             if self.hparams.eval_cfg.post_processing.topk_per_image > 0:
-                num_classes = mask_probs.shape[1]
-                mask_probs, topk_indices = mask_probs.flatten().topk(
+                num_queries, num_classes = mask_probs.shape
+                classes = repeat(
+                    torch.arange(num_classes, device=mask_probs.device),
+                    "c -> (q c)",
+                    q=num_queries,
+                )
+                scores, topk_indices = mask_probs.flatten().topk(
                     self.hparams.eval_cfg.post_processing.topk_per_image, sorted=True
                 )
                 topk_indices = topk_indices // num_classes
-                masks = masks[:, topk_indices]
-
-            heatmap = masks.sigmoid()  # [N, Q]
-            masks = (masks.T > 0).float()  # [Q, N]
-            mask_scores_per_image = (heatmap.T * masks).sum(1, keepdim=True) / (
-                masks.sum(1, keepdim=True) + 1e-6
-            )  # [Q, 1]
-            mask_probs = mask_scores_per_image * mask_probs  # [Q, C]
-            scores, classes = mask_probs.max(1)  # [Q]
+                masks = masks[topk_indices]
+                classes = classes[topk_indices]
+                scores = mask_scores_per_image[topk_indices] * scores
+            else:
+                scores, classes = mask_probs.max(1)
+                scores = mask_scores_per_image * scores
 
             metrics["map_evaluator"].update(
                 pred_classes=classes.cpu(),
