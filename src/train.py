@@ -111,6 +111,10 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         # Create a new trainer and model with a single GPU
         torch.distributed.destroy_process_group()
         if trainer.is_global_zero:
+            # Empty CUDA cache before testing
+            torch.cuda.empty_cache()
+            log.info("Cleared CUDA cache before testing")
+
             test_trainer = Trainer(devices=1, callbacks=callbacks, logger=logger)
             test_model: LightningModule = hydra.utils.instantiate(cfg.model)
             test_trainer.test(model=test_model, datamodule=datamodule, ckpt_path=ckpt_path)

@@ -452,17 +452,17 @@ class MaskLanguageLitModule(LitModuleBase):
     def on_test_epoch_end(self) -> None:
         log_metrics = {}
         for postfix, metrics in self.val_metrics.items():
-            val_section = f"test_{postfix}"
+            test_section = f"test_{postfix}"
             ap_results = metrics["map_evaluator"].compute()
             # Log class-wise metrics
             for class_name, class_metrics in ap_results["classes"].items():
                 log_metrics.update(
-                    {f"{val_section}/{k}_{class_name}": v for k, v in class_metrics.items()}
+                    {f"{test_section}/{k}_{class_name}": v for k, v in class_metrics.items()}
                 )
 
             # Log overall metrics
             ap_results.pop("classes")
-            log_metrics.update({f"{val_section}/{k}": v for k, v in ap_results.items()})
+            log_metrics.update({f"{test_section}/{k}": v for k, v in ap_results.items()})
 
         # Log metrics if not in sanity check
         if not self.trainer.sanity_checking:

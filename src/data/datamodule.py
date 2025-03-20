@@ -19,6 +19,8 @@ class DataModule(LightningDataModule):
         num_workers: int,
         collate_fn: Callable,
         pin_memory: bool = False,
+        test_datasets: Optional[List[Callable]] = None,
+        test_batch_size: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
@@ -27,6 +29,7 @@ class DataModule(LightningDataModule):
 
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[List[Dataset]] = None
+        self.data_test: Optional[List[Dataset]] = None
 
     def setup(self, stage: Optional[str] = None) -> None:
         if stage in ["fit"] and not self.data_train:
@@ -34,6 +37,10 @@ class DataModule(LightningDataModule):
 
         if self.data_val is None:
             self.data_val = [dataset() for dataset in self.hparams.val_datasets]
+
+        if self.data_test is None and self.hparams.test_datasets is not None:
+            assert self.hparams.test_batch_size is not None, "test_batch_size must be provided"
+            self.data_test = [dataset() for dataset in self.hparams.test_datasets]
 
     def train_dataloader(self) -> DataLoader[Any]:
         if self.data_train is None:
@@ -67,7 +74,20 @@ class DataModule(LightningDataModule):
         ]
 
     def test_dataloader(self) -> List[DataLoader[Any]]:
-        return self.val_dataloader()
+        if self.data_test is None:
+            return self.val_dataloader()
+
+        return [
+            DataLoader(
+                dataset=dataset,
+                batch_size=self.hparams.test_batch_size,
+                num_workers=self.hparams.num_workers,
+                pin_memory=self.hparams.pin_memory,
+                shuffle=False,
+                collate_fn=self.hparams.collate_fn,
+            )
+            for dataset in self.data_test
+        ]
 
 
 class MultiDataModule(DataModule):
