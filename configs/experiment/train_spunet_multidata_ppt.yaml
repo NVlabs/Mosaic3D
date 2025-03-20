@@ -20,7 +20,6 @@ defaults:
 seed: 12345
 
 trainer:
-  strategy: ddp_find_unused_parameters_true
   max_epochs: 128
 
 logger:
