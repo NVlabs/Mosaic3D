@@ -332,20 +332,22 @@ class MaskLanguageLitModule(LitModuleBase):
         log_metrics = {}
         for postfix, metrics in self.val_metrics.items():
             val_section = f"val_{postfix}"
+            logging_keys = ["map", "map50", "map25", "map_head", "map_common", "map_tail"]
 
+            # Only compute metrics on rank 0
+            ap_tensor = torch.zeros(len(logging_keys), device=self.device)
             if self.trainer.is_global_zero:
                 ap_results = metrics["map_evaluator"].compute()
-                # Log class-wise metrics
-                for class_name, class_metrics in ap_results["classes"].items():
-                    log_metrics.update(
-                        {f"{val_section}/{k}_{class_name}": v for k, v in class_metrics.items()}
-                    )
+                for i, key in enumerate(logging_keys):
+                    ap_tensor[i] = ap_results.get(key, 0.0)
 
-                # Log overall metrics
-                ap_results.pop("classes")
-                log_metrics.update({f"{val_section}/{k}": v for k, v in ap_results.items()})
-            else:
-                log_metrics.update({f"{val_section}/map": 0})
+            # Broadcast ap_results to all other ranks
+            if dist.is_initialized() and dist.get_world_size() > 1:
+                dist.broadcast(ap_tensor, src=0)
+
+            log_metrics.update(
+                {f"{val_section}/{key}": ap_tensor[i].item() for i, key in enumerate(logging_keys)}
+            )
 
         # Update best metric
         self.val_best_metric.update(log_metrics[self.hparams.best_metric])
@@ -353,7 +355,7 @@ class MaskLanguageLitModule(LitModuleBase):
 
         # Log metrics if not in sanity check
         if not self.trainer.sanity_checking:
-            self.log_dict(log_metrics, logger=True, rank_zero_only=True)
+            self.log_dict(log_metrics, logger=True)
 
     def _apply_dbscan(self, mask_probs: torch.Tensor, masks: torch.Tensor, coord: torch.Tensor):
         # DBSCAN parameters
