@@ -355,7 +355,7 @@ class MaskLanguageLitModule(LitModuleBase):
 
         # Log metrics if not in sanity check
         if not self.trainer.sanity_checking:
-            self.log_dict(log_metrics, logger=True)
+            self.log_dict(log_metrics, sync_dist=True, logger=True)
 
     def _apply_dbscan(self, mask_probs: torch.Tensor, masks: torch.Tensor, coord: torch.Tensor):
         # DBSCAN parameters
