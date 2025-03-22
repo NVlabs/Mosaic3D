@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.distributed as dist
+from einops import repeat
 from torchmetrics import MaxMetric, MeanMetric
 from cuml.cluster import DBSCAN
 
@@ -331,20 +332,22 @@ class MaskLanguageLitModule(LitModuleBase):
         log_metrics = {}
         for postfix, metrics in self.val_metrics.items():
             val_section = f"val_{postfix}"
+            logging_keys = ["map", "map50", "map25", "map_head", "map_common", "map_tail"]
 
+            # Only compute metrics on rank 0
+            ap_tensor = torch.zeros(len(logging_keys), device=self.device)
             if self.trainer.is_global_zero:
                 ap_results = metrics["map_evaluator"].compute()
-                # Log class-wise metrics
-                for class_name, class_metrics in ap_results["classes"].items():
-                    log_metrics.update(
-                        {f"{val_section}/{k}_{class_name}": v for k, v in class_metrics.items()}
-                    )
+                for i, key in enumerate(logging_keys):
+                    ap_tensor[i] = ap_results.get(key, 0.0)
 
-                # Log overall metrics
-                ap_results.pop("classes")
-                log_metrics.update({f"{val_section}/{k}": v for k, v in ap_results.items()})
-            else:
-                log_metrics.update({f"{val_section}/map": 0})
+            # Broadcast ap_results to all other ranks
+            if dist.is_initialized() and dist.get_world_size() > 1:
+                dist.broadcast(ap_tensor, src=0)
+
+            log_metrics.update(
+                {f"{val_section}/{key}": ap_tensor[i].item() for i, key in enumerate(logging_keys)}
+            )
 
         # Update best metric
         self.val_best_metric.update(log_metrics[self.hparams.best_metric])
@@ -352,7 +355,7 @@ class MaskLanguageLitModule(LitModuleBase):
 
         # Log metrics if not in sanity check
         if not self.trainer.sanity_checking:
-            self.log_dict(log_metrics, logger=True, rank_zero_only=True)
+            self.log_dict(log_metrics, sync_dist=True, logger=True)
 
     def _apply_dbscan(self, mask_probs: torch.Tensor, masks: torch.Tensor, coord: torch.Tensor):
         # DBSCAN parameters
@@ -424,22 +427,27 @@ class MaskLanguageLitModule(LitModuleBase):
                     mask_probs, masks, coord[offset[i] : offset[i + 1]]
                 )
 
-            # top-k sampling
+            heatmap = masks.sigmoid()
+            masks = (masks.T > 0).float()
+            mask_scores_per_image = (heatmap.T * masks).sum(1) / (masks.sum(1) + 1e-6)  # [Q]
+
             if self.hparams.eval_cfg.post_processing.topk_per_image > 0:
-                num_classes = mask_probs.shape[1]
-                mask_probs, topk_indices = mask_probs.flatten().topk(
+                num_queries, num_classes = mask_probs.shape
+                classes = repeat(
+                    torch.arange(num_classes, device=mask_probs.device),
+                    "c -> (q c)",
+                    q=num_queries,
+                )
+                scores, topk_indices = mask_probs.flatten().topk(
                     self.hparams.eval_cfg.post_processing.topk_per_image, sorted=True
                 )
                 topk_indices = topk_indices // num_classes
-                masks = masks[:, topk_indices]
-
-            heatmap = masks.sigmoid()  # [N, Q]
-            masks = (masks.T > 0).float()  # [Q, N]
-            mask_scores_per_image = (heatmap.T * masks).sum(1, keepdim=True) / (
-                masks.sum(1, keepdim=True) + 1e-6
-            )  # [Q, 1]
-            mask_probs = mask_scores_per_image * mask_probs  # [Q, C]
-            scores, classes = mask_probs.max(1)  # [Q]
+                masks = masks[topk_indices]
+                classes = classes[topk_indices]
+                scores = mask_scores_per_image[topk_indices] * scores
+            else:
+                scores, classes = mask_probs.max(1)
+                scores = mask_scores_per_image * scores
 
             metrics["map_evaluator"].update(
                 pred_classes=classes.cpu(),
