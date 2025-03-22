@@ -80,7 +80,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 export SLURM_JOBID=${SLURM_JOBID};
 export CKPT_SLURM_JOBID=${CKPT_SLURM_JOBID:-${SLURM_JOBID}};
 pip install flash-attn;
-pip install -U 'lightning==2.2.0' 'open_clip_torch>=2.31.0' 'timm>=1.0.15';
+pip install -U 'lightning<2.5.1' 'open_clip_torch>=2.31.0' 'timm>=1.0.15';
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \
