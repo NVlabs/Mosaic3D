@@ -1,262 +1,585 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Permissions-Policy" content="private-state-token-redemption=()" />
-    <title>Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D Segmentation</title>
-    <!-- Add Bulma CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css" />
-    <!-- Add Font Awesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
-    <!-- Add PhotoSwipe -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/photoswipe@5.3.5/dist/photoswipe.css" />
-    <script src="https://cdn.jsdelivr.net/npm/photoswipe@5.3.5/dist/photoswipe.min.js"></script>
-    <style>
-      .hero {
-        background: #f6f8fa;
-      }
+<!DOCTYPE html>
+<html>
 
-      .publication-title {
-        font-family: 'Google Sans', sans-serif;
-      }
+<head>
+  <meta charset="utf-8">
+  <meta name="description" content="Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D Segmentation">
+  <meta name="keywords" content="Mosaic3D">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D Segmentation</title>
 
-      .publication-authors {
-        color: #4a4a4a;
-      }
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-PYVRSFMDRL"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
 
-      .publication-banner {
-        max-height: 300px;
-        width: 100%;
-        object-fit: cover;
-      }
+    function gtag() {
+      dataLayer.push(arguments);
+    }
 
-      .publication-header .hero-body {
-        padding-bottom: 3rem;
-        padding-top: 3rem;
-      }
+    gtag('js', new Date());
 
-      .button.is-rounded {
-        border-radius: 4px;
-      }
+    gtag('config', 'G-PYVRSFMDRL');
+  </script>
 
-      .gallery {
-        scrollbar-width: thin;
-        scrollbar-color: #888 #f1f1f1;
-      }
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
 
-      .gallery::-webkit-scrollbar {
-        height: 8px;
-      }
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
 
-      .gallery::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 4px;
-      }
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+</head>
 
-      .gallery::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 4px;
-      }
-
-      .gallery::-webkit-scrollbar-thumb:hover {
-        background: #555;
-      }
-    </style>
-  </head>
-
-  <body>
-    <!-- Hero -->
-    <section class="hero">
-      <div class="hero-body">
-        <div class="container has-text-centered">
-          <div class="level">
-            <div class="level-item">
-              <figure class="image is-64x64 mr-4">
-                <img
-                  src="./static/images/logo-64.png"
-                  srcset="./static/images/logo-64.png 64w, ./static/images/logo-128.png 128w"
-                  sizes="(max-width: 768px) 64px,
-                                        128px"
-                  alt="Mosaic3D Logo"
-                />
-              </figure>
-              <h1 class="title publication-title is-1 has-text-black">Mosaic3D</h1>
-            </div>
-          </div>
-          <h2 class="title publication-title is-2 has-text-black">
-            Foundation Dataset and Model for Open-Vocabulary 3D Segmentation
-          </h2>
-
-          <div class="publication-authors">
-            <span class="author-block"> Junha Lee<sup>1,2</sup>, </span>
-            <span class="author-block"> Chunghyun Park<sup>1,2</sup>, </span>
-            <span class="author-block"> Jaesung Choe<sup>1</sup>, </span>
-            <span class="author-block"> Frank Wang<sup>1</sup>, </span>
-            <span class="author-block"> Jan Kautz<sup>1</sup>, </span>
-            <span class="author-block"> Minsu Cho<sup>2</sup>, </span>
-            <span class="author-block"> Chris Choy<sup>1</sup> </span>
-          </div>
-
-          <div class="is-size-5 publication-authors">
-            <span class="author-block"><sup>1</sup>NVIDIA</span>
-            <span class="author-block"><sup>2</sup>POSTECH</span>
-          </div>
-
+<body>
+  <nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-brand">
+      <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </a>
+    </div>
+  </nav>
+  <section class="hero">
+    <div class="hero-body teaser">
+      <div class="container is-max-desktop">
+        <div class="column has-text-centered">
+          <img src="static/images/logo.jpeg" alt="Mosaic3D Logo" class="mosaic3d-logo" width="20%">
+        </div>
+        <div class="columns">
           <div class="column has-text-centered">
-            <div class="publication-links">
-              <span class="link-block">
-                <a href="http://arxiv.org/abs/2502.02548" class="button is-medium is-primary">
-                  <span class="icon">
-                    <i class="fas fa-file-alt"></i>
-                  </span>
-                  <span>Paper</span>
-                </a>
+            <div class="columns">
+              <h1 class="title is-1 publication-title">Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D
+                Segmentation</h1>
+            </div>
+            <div class="is-size-5 publication-authors">
+              <span class="author-block">
+                <a href="https://junha-l.github.io">Junha Lee</a><sup>1,2,*</sup>,</span>
+              <span class="author-block">
+                <a href="https://chrockey.github.io">Chunghyun Park</a><sup>1,2,*</sup>,</span>
+              <span class="author-block">
+                <a href="https://jaesung-choe.github.io/">Jaesung Choe</a><sup>1</sup>,
               </span>
-              <span class="link-block">
-                <a href="#" class="button is-medium is-info">
-                  <span class="icon">
-                    <i class="fab fa-github"></i>
-                  </span>
-                  <span>Code (Coming Soon)</span>
-                </a>
+              <span class="author-block">
+                <a href="https://vllab.ee.ntu.edu.tw/ycwang.html">Yu-Chiang Frank Wang</a><sup>1</sup>,
               </span>
-              <span class="link-block">
-                <a href="#" class="button is-medium is-success">
-                  <span class="icon">
-                    <i class="fas fa-database"></i>
-                  </span>
-                  <span>Data (Coming Soon)</span>
-                </a>
+              <span class="author-block">
+                <a href="https://research.nvidia.com/person/jan-kautz">Jan Kautz</a><sup>1</sup>,
               </span>
+              <span class="author-block">
+                <a href="https://cvlab.postech.ac.kr/~mcho/">Minsu Cho</a><sup>2</sup>,
+              </span>
+              <span class="author-block">
+                <a href="https://chrischoy.github.io/">Chris Choy</a><sup>1</sup>
+              </span>
+            </div>
+
+            <div class="is-size-5 publication-authors">
+              <span class="author-block"><sup>1</sup>NVIDIA,</span>
+              <span class="author-block"><sup>2</sup>POSTECH</span>
+            </div>
+
+            <div class="is-size-6 publication-authors">
+              <span class="author-block">* indicates equal contribution</span>
+            </div>
+
+            <div class="column has-text-centered">
+              <div class="publication-links">
+                <!-- PDF Link. -->
+                <span class="link-block">
+                  <a href="https://arxiv.org/abs/2502.02548" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                    </span>
+                    <span>Paper</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://arxiv.org/abs/2502.02548" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                    </span>
+                    <span>arXiv</span>
+                  </a>
+                </span>
+                <!-- Code Link. -->
+                <span class="link-block">
+                  <a href="#" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="fab fa-github"></i>
+                    </span>
+                    <span>Code (Coming Soon)</span>
+                  </a>
+                </span>
+                <!-- Dataset Link. -->
+                <span class="link-block">
+                  <a href="#" class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon">
+                      <i class="far fa-images"></i>
+                    </span>
+                    <span>Data (Coming Soon)</span>
+                  </a>
+              </div>
+
             </div>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- Content -->
-    <section class="section">
-      <div class="container">
-        <!-- TLDR -->
-        <div class="columns is-centered has-text-centered">
-          <div class="column is-four-fifths">
-            <h2 class="title is-3">TLDR</h2>
-            <div class="content has-text-justified">
-              <ul>
-                <li>Propose a large-scale dataset of open vocabulary 3D mask-text pairs.</li>
-                <li>Propose a foundation model for open-vocabulary 3D segmentation.</li>
-              </ul>
-            </div>
+  <section class="section">
+    <div class="container is-max-desktop">
+      <!-- Abstract. -->
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3">Abstract</h2>
+          <div class="content has-text-justified">
+            <p>
+              We tackle open-vocabulary 3D scene segmentation tasks by introducing a novel data generation pipeline and
+              training framework.
+              Our work targets three essential aspects required for an effective dataset: precise 3D region
+              segmentation, comprehensive textual descriptions, and sufficient dataset scale.
+              By leveraging state-of-the-art open-vocabulary image segmentation models and region-aware vision-language
+              models (VLM), we develop an automatic pipeline capable of producing high-quality 3D mask-text pairs.
+              Applying this pipeline to multiple 3D scene datasets, we create <strong>Mosaic3D-5.6M</strong>, a dataset
+              of more than 30K annotated scenes with 5.6M mask-text pairs, significantly larger than existing datasets.
+              Building on these data, we propose <strong>Mosaic3D</strong>, a 3D visiual foundation model (3D-VFM)
+              combining a 3D encoder trained with contrastive learning and a lightweight mask decoder for
+              open-vocabulary 3D semantic and instance segmentation.
+              Our approach achieves state-of-the-art results on open-vocabulary 3D semantic and instance segmentation
+              benchmarks including ScanNet200, Matterport3D, and ScanNet++, with ablation studies validating the
+              effectiveness of our large-scale training data.
+            </p>
           </div>
         </div>
+      </div>
+      <!--/ Abstract. -->
 
-        <!-- Results -->
-        <div class="columns is-centered has-text-centered">
-          <div class="column is-four-fifths">
-            <h2 class="title is-3">Dataset Visualization</h2>
-            <div class="gallery" style="width: 100%; overflow-x: auto; white-space: nowrap; padding: 20px 0">
-              <a
-                href="./static/images_dataset/medium/render_aerial_max_x.png"
-                style="display: inline-block; margin-right: 20px"
-                data-pswp-width="1200"
-                data-pswp-height="800"
-              >
-                <img
-                  src="./static/images_dataset/thumbs/render_aerial_max_x.png"
-                  style="height: 300px; width: auto"
-                  class="lazyload"
-                  alt="Dataset Example 1"
-                />
-              </a>
-              <a
-                href="./static/images_dataset/medium/render_aerial_min_y.png"
-                style="display: inline-block; margin-right: 20px"
-                data-pswp-width="1200"
-                data-pswp-height="800"
-              >
-                <img
-                  src="./static/images_dataset/thumbs/render_aerial_min_y.png"
-                  style="height: 300px; width: auto"
-                  class="lazyload"
-                  alt="Dataset Example 2"
-                />
-              </a>
-              <a
-                href="./static/images_dataset/medium/scene0401_00_render_aerial_max_y.png"
-                data-pswp-width="1200"
-                data-pswp-height="800"
-              >
-                <img
-                  src="./static/images_dataset/thumbs/scene0401_00_render_aerial_max_y.png"
-                  class="lazyload"
-                  alt="Dataset Example 3"
-                />
-              </a>
-              <a
-                href="./static/images_dataset/medium/scene0625_01_render_aerial_max_y.png"
-                data-pswp-width="1200"
-                data-pswp-height="800"
-              >
-                <img
-                  src="./static/images_dataset/thumbs/scene0625_01_render_aerial_max_y.png"
-                  class="lazyload"
-                  alt="Dataset Example 4"
-                />
-              </a>
-            </div>
+      <!-- Paper video. -->
+      <!-- <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Video</h2>
+        <div class="publication-video">
+          <iframe src="https://www.youtube.com/embed/MrKrnHhk8IA?rel=0&amp;showinfo=0"
+                  frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div> -->
+      <!--/ Paper video. -->
+    </div>
+  </section>
+  <section class="section p-0">
+    <img src="static/images/composite.png" alt="Mosaic3D Teaser" class="teaser-image" style="filter: brightness(1.1) contrast(1.0) saturate(1.0) opacity(0.9);">
+  </section>
+  <section class="section">
+    <div class="container is-max-desktop">
+      <!-- Data. -->
+      <div class="columns is-centered">
+        <div class="column is-full-width">
+          <h2 class="title is-3">Data</h2>
+
+          <div class="content has-text-justified">
+            <p>
+              Generating 3D mask-text pair datasets can be costly and require meticulous attention. Recent work have
+              leveraged 2D visual foundation models (VFMs) to automate data annotation to an extent; they use multi-view
+              images to generate captions or features on different types of region proposals (e.g. bounding boxes,
+              segmentations, or sliding windows).
+              However, existing approaches suffer from imprecise boundary delineation due to their reliance on coarse
+              object detectors, or provide only simple attribute labels.
+              To overcome these limitations, we propose a data generation pipeline that combines recent advances in
+              open-vocabulary segmentation and robust region-aware vision-language models (VLMs), enabling both precise
+              region boundaries and rich descriptions that capture object attributes, spatial relationships, and scene
+              context.
+            </p>
+          </div>
+          <div class="columns is-vcentered interpolation-panel">
+            <img src="./static/images/data_comparison_v2.jpg" class="interpolation-image"
+              alt="Interpolate start reference image." />
+          </div>
+          <br />
+
+          <!-- Interpolating. -->
+          <div class="content has-text-justified">
+            <p>
+              <strong>Mosaic3D-5.6M</strong> is the largest 3D mask-text paired dataset to date,
+              encompassing over 30K indoor scenes and approximately 1M RGB-D frames, yielding 5.6M region captions
+              comprising 30M total text tokens.
+              Our dataset offers significant advantages over the existing datasets in terms of:
+            </p>
+            <li>
+              <strong>Scale:</strong> We generate over 5.6M mask-text pairs with 30M text tokens across 30K scenes,
+              significantly larger than previous datasets in scene coverage and annotation density.
+            </li>
+            <li>
+              <strong>Precision:</strong> We use Grounded-SAM and SEEM to ensure precise region boundaries,
+              significantly improving over bounding box-based approaches.
+            </li>
+            <li>
+              <strong>Richness:</strong> The region-aware VLM generates detailed contextual descriptions that capture
+              both visual attributes and spatial relationships, providing richer semantic information than simple object
+              labels.
+            </li>
+          </div>
+          <br />
+          <div class="columns is-vcentered interpolation-panel">
+            <img src="./static/images/data_generation_v7.jpg" class="interpolation-image"
+              alt="Interpolate start reference image." />
+          </div>
+          <br />
+          <!--/ Interpolating. -->
+        </div>
+      </div>
+      <!--/ Data. -->
+
+      <!-- Model. -->
+      <div class="columns is-centered">
+        <div class="column is-full-width">
+          <h2 class="title is-3">Model</h2>
+
+          <div class="content has-text-justified">
+            <p>
+              We train the 3D open-vocabulary segmentation model based on Mosaic3D-5.6M using two-stage training:
+              per-point language alignment, and mask decoder training that predicts instances from these aligned
+              features.
+            </p>
+          </div>
+          <div class="columns is-vcentered interpolation-panel">
+            <img src="./static/images/network_v9.jpg" class="interpolation-image"
+              alt="Interpolate start reference image." />
+          </div>
+          <br />
+        </div>
+      </div>
+      <!--/ Model. -->
+
+      <!-- Results. -->
+      <div class="columns is-centered">
+        <div class="column is-full-width">
+          <h2 class="title is-3">Results</h2>
+
+          <div class="columns is-vcentered interpolation-panel">
+            <img src="./static/images/semseg.jpeg" class="interpolation-image"
+              alt="Interpolate start reference image." />
+          </div>
+          <br />
+          <div class="columns is-vcentered interpolation-panel">
+            <img src="./static/images/insseg.jpeg" class="interpolation-image"
+              alt="Interpolate start reference image." />
+          </div>
+          <br />
+        </div>
+      </div>
+      <!--/ Model. -->
+
+      <div class="columns is-centered">
+        <div class="column is-full-width">
+          <h2 class="title is-3">Interactive Viewer</h2>
+        </div>
+      </div>
+      <div class="columns is-mobile is-vcentered is-multiline">
+        <div class="column is-narrow">
+          <span id="button_scannet_1" class="button scene_cam is-info is-rounded" onclick="change_query('scannet_1')">
+            ScanNet #1
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannet_2" class="button scene_cam is-black is-rounded" onclick="change_query('scannet_2')">
+            ScanNet #2
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannet_3" class="button scene_cam is-black is-rounded" onclick="change_query('scannet_3')">
+            ScanNet #3
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannet_4" class="button scene_cam is-black is-rounded" onclick="change_query('scannet_4')">
+            ScanNet #4
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_matterport_1" class="button scene_cam is-black is-rounded"
+            onclick="change_query('matterport_1')">
+            Matterport #1
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_matterport_2" class="button scene_cam is-black is-rounded"
+            onclick="change_query('matterport_2')">
+            Matterport #2
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_arkitscenes_1" class="button scene_cam is-black is-rounded"
+            onclick="change_query('arkitscenes_1')">
+            ARKitScenes #1
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_arkitscenes_2" class="button scene_cam is-black is-rounded"
+            onclick="change_query('arkitscenes_2')">
+            ARKitScenes #2
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_arkitscenes_3" class="button scene_cam is-black is-rounded"
+            onclick="change_query('arkitscenes_3')">
+            ARKitScenes #3
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_arkitscenes_4" class="button scene_cam is-black is-rounded"
+            onclick="change_query('arkitscenes_4')">
+            ARKitScenes #4
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannetpp_1" class="button scene_cam is-black is-rounded"
+            onclick="change_query('scannetpp_1')">
+            ScanNet++ #1
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannetpp_2" class="button scene_cam is-black is-rounded"
+            onclick="change_query('scannetpp_2')">
+            ScanNet++ #2
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannetpp_3" class="button scene_cam is-black is-rounded"
+            onclick="change_query('scannetpp_3')">
+            ScanNet++ #3
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannetpp_4" class="button scene_cam is-black is-rounded"
+            onclick="change_query('scannetpp_4')">
+            ScanNet++ #4
+          </span>
+        </div>
+        <div class="column is-narrow">
+          <span id="button_scannetpp_5" class="button scene_cam is-black is-rounded"
+            onclick="change_query('scannetpp_5')">
+            ScanNet++ #5
+          </span>
+        </div>
+      </div>
+      <div class="columns is-mobile is-vcentered">
+        <div class="column is-narrow">
+          <p class="title is-5 mb-0">Query: </p>
+        </div>
+        <div class="column">
+          <i class="query_text is-size-5">a trash can</i>
+        </div>
+      </div>
+      <div id="iframe-container" class="iframe-container"
+        style="display: flex; flex-direction: row; width: 150%; margin-left: -25%; margin-right: -25%;">
+        <div class="click-and-move-overlay" style="position: absolute; z-index: 10; width: 150%;">
+          <h1 class="tldr">
+            <b>
+              <img src="static/images/drag_icon.png" alt="" class="inline-image">
+              Click and move me!
+              <img src="static/images/drag_icon.png" alt="" class="inline-image">
+            </b>
+          </h1>
+        </div>
+        <div class="thumbnail-panel">
+          <img id="thumbnail" src="static/images/scannet.png" alt="" class="overview-image">
+        </div>
+        <div class="iframe-stack">
+          <div class="iframe-wrapper-show">
+            <iframe id="iframe_scannet_original" class="iframe show"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene0011_00_original.viser&initialCameraPosition=3.769,-0.566,6.336&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper-show">
+            <iframe id="iframe_scannet_1" class="iframe show"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene0011_00_a_trash_can.viser&initialCameraPosition=3.769,-0.566,6.336&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannet_2" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene0011_00_a_suitable_spot_for_a_cup.viser&initialCameraPosition=3.769,-0.566,6.336&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannet_3" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene0011_00_A_place_where_flavors_come_alive,_tools_meet_hands,_and_warmth_fills_the_air—where_creation,_comfort,_and_conversation_blend_effortlessly..viser&initialCameraPosition=3.769,-0.566,6.336&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannet_4" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene0011_00_A_glowing_screen_that_plays_moving_images_and_sounds,_bringing_stories_and_news_into_your_space_at_the_press_of_a_button..viser&initialCameraPosition=3.769,-0.566,6.336&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_matterport_original" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/2azQ1b91cZZ_region0_original.viser&initialCameraPosition=-0.103,8.986,5.111&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_matterport_1" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/2azQ1b91cZZ_region0_soft.viser&initialCameraPosition=-0.103,8.986,5.111&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_matterport_2" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/2azQ1b91cZZ_region0_a_billard_table.viser&initialCameraPosition=-0.103,8.986,5.111&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_arkitscenes_original" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/41125696_original.viser&initialCameraPosition=-2.444,2.781,7.198&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_arkitscenes_1" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/41125696_soft.viser&initialCameraPosition=-2.444,2.781,7.198&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_arkitscenes_2" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/41125696_oven.viser&initialCameraPosition=-2.444,2.781,7.198&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_arkitscenes_3" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/41125696_floor.viser&initialCameraPosition=-2.444,2.781,7.198&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_arkitscenes_4" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/41125696_dish_soap.viser&initialCameraPosition=-2.444,2.781,7.198&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=-0.000,-0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_structured3d_original" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene_03000@room_171_original.viser&initialCameraPosition=-0.019,0.883,6.675&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_structured3d_1" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene_03000@room_171_side_tables.viser&initialCameraPosition=-0.019,0.883,6.675&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_structured3d_2" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene_03000@room_171_pillow.viser&initialCameraPosition=-0.019,0.883,6.675&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_structured3d_3" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/scene_03000@room_171_door.viser&initialCameraPosition=-0.019,0.883,6.675&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannetpp_original" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/0d2ee665be_original.viser&initialCameraPosition=0.493,1.913,6.566&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannetpp_1" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/0d2ee665be_sleeping.viser&initialCameraPosition=0.493,1.913,6.566&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannetpp_2" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/0d2ee665be_sitting.viser&initialCameraPosition=0.493,1.913,6.566&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannetpp_3" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/0d2ee665be_jacket.viser&initialCameraPosition=0.493,1.913,6.566&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannetpp_4" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/0d2ee665be_microwave_oven.viser&initialCameraPosition=0.493,1.913,6.566&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
+          </div>
+          <div class="iframe-wrapper">
+            <iframe id="iframe_scannetpp_5" class="iframe"
+              src="https://junha-l.github.io/mosaic3d-vis/build/?playbackPath=https://junha-l.github.io/mosaic3d-vis/data/0d2ee665be_computer.viser&initialCameraPosition=0.493,1.913,6.566&initialCameraLookAt=0.000,0.000,0.000&initialCameraUp=0.000,0.000,1.000"></iframe>
           </div>
         </div>
+      </div>
+      <br />
+    </div>
+  </section>
 
-        <!-- Abstract -->
-        <div class="columns is-centered has-text-centered">
-          <div class="column is-four-fifths">
-            <h2 class="title is-3">Abstract</h2>
-            <div class="content has-text-justified">
-              <p>
-                We tackle open-vocabulary 3D scene understanding by introducing a novel data generation pipeline and
-                training framework. Our method addresses three critical requirements for effective training: precise 3D
-                region segmentation, comprehensive textual descriptions, and sufficient dataset scale. By leveraging
-                state-of-the-art open-vocabulary image segmentation models and region-aware Vision-Language Models
-                (VLM), we develop an automatic pipeline that generates high-quality 3D mask-text pairs. Applying this
-                pipeline to multiple 3D scene datasets, we create the Mosaic3D dataset, a dataset of over 30K annotated
-                scenes with 5.6M mask-text pairs—significantly larger than existing datasets. Building upon this data,
-                we propose Mosaic3D, a foundation model combining a 3D encoder trained with contrastive learning and a
-                lightweight mask decoder for open-vocabulary 3D semantic and instance segmentation. Our approach
-                achieves state-of-the-art results on open-vocabulary 3D semantic and instance segmentation tasks
-                including ScanNet200, Matterport3D, and ScanNet++, with ablation studies validating the effectiveness of
-                our large-scale training data.
-              </p>
-            </div>
-          </div>
-        </div>
 
-        <!-- Citation -->
-        <div class="columns is-centered has-text-centered">
-          <div class="column is-four-fifths">
-            <h2 class="title is-3">Citation</h2>
-            <div class="content has-text-justified">
-              <pre><code>@article{lee2025mosaic3d,
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <h2 class="title">BibTeX</h2>
+      <pre><code>@article{lee2025mosaic3d,
     title={Mosaic3D: Foundation Dataset and Model for Open-Vocabulary 3D Segmentation},
     author={Junha Lee and Chunghyun Park and Jaesung Choe and Frank Wang and Jan Kautz and Minsu Cho and Chris Choy},
     journal={arXiv},
     year={2025}
 }</code></pre>
-            </div>
+    </div>
+  </section>
+
+  <script>
+    const queries = {
+      "scannet_1": "a trash can",
+      "scannet_2": "a suitable spot for a cup",
+      "scannet_3": "a place where flavors come alive, tools meet hands, and warmth fills the air—where creation, comfort, and conversation blend effortlessly.",
+      "scannet_4": "a glowing screen that plays moving images and sounds, bringing stories and news into your space at the press of a button.",
+      "matterport_1": "soft",
+      "matterport_2": "a billard table",
+      "arkitscenes_1": "soft",
+      "arkitscenes_2": "an oven",
+      "arkitscenes_3": "floor",
+      "arkitscenes_4": "dish soap",
+      "scannetpp_1": "sleeping",
+      "scannetpp_2": "sitting",
+      "scannetpp_3": "jacket",
+      "scannetpp_4": "microwave oven",
+      "scannetpp_5": "computer"
+    }
+    function change_query(key) {
+      // Change button color
+      // Select all spans with id starting with 'button_'
+      var all_buttons = document.querySelectorAll('[id^="button_"]');
+      console.log(all_buttons);
+      all_buttons.forEach(function (button) {
+        button.classList.remove('is-info');
+        button.classList.add('is-black');
+      });
+
+      var button = document.getElementById('button_' + key);
+      button.classList.add('is-info');
+
+      // Hide all iframes
+      var iframes = document.querySelectorAll('.iframe');
+      iframes.forEach(function (iframe) {
+        iframe.classList.remove('show');
+        iframe.parentElement.classList.remove('iframe-wrapper-show');
+      });
+
+      // Show the selected iframe
+      // select original iframe of dataset
+      original_iframe = document.getElementById('iframe_' + key.replace(/_\d+$/, '_original'));
+      original_iframe.classList.add('show');
+      original_iframe.parentElement.classList.remove('iframe-wrapper');
+      original_iframe.parentElement.classList.add('iframe-wrapper-show');
+
+      element = document.getElementById('iframe_' + key);
+      element.classList.add('show');
+      element.parentElement.classList.remove('iframe-wrapper');
+      element.parentElement.classList.add('iframe-wrapper-show');
+
+      // Change query text
+      document.querySelector('.query_text').innerHTML = queries[key];
+
+      // change thumbnail image
+      var thumbnail = document.getElementById('thumbnail');
+      thumbnail.src = './static/images/' + key.replace(/_\d+$/, '') + '.png';
+    }
+  </script>
+
+  <footer class="footer">
+    <div class="container">
+
+      <div class="columns is-centered">
+        <div class="column is-8">
+          <div class="content">
+            <p>
+              Website takens from <a href="https://github.com/nerfies/nerfies.github.io">here</a>
+            </p>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+  </footer>
 
-    <!-- Initialize PhotoSwipe -->
-    <script>
-      import PhotoSwipeLightbox from 'photoswipe/lightbox';
-      const lightbox = new PhotoSwipeLightbox({
-        gallery: '.gallery',
-        children: 'a',
-        pswpModule: PhotoSwipe,
-      });
-      lightbox.init();
-    </script>
-  </body>
+</body>
+
 </html>
