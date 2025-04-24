@@ -179,8 +179,9 @@ def hpc_config(cfg: DictConfig) -> None:
         # cfg.logger.wandb._target_ = "src.utils.autoresume_wandb_logger.AutoResumeWandbLogger"
         # Print warning if not using AutoResumeWandbLogger
         if (
-            str(cfg.logger.wandb._target_)
-            != "src.utils.auto_resume_wandb_logger.AutoResumeWandbLogger"
+            hasattr(cfg.logger, "wandb")
+            and hasattr(cfg.logger.wandb, "_target_")
+            and "AutoResumeWandbLogger" not in str(cfg.logger.wandb._target_)
         ):
             log.warning(
                 "Using WandbLogger without AutoResumeWandbLogger. "

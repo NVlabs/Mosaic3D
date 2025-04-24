@@ -65,9 +65,32 @@ python -m src.data.regionplc.download --download_dir [path/to/save/dataset]
 
 ## Installation
 
-Use of docker is highly recommended.
+It is recommended to use [uv](https://github.com/astral-sh/uv) for managing Python dependencies. `uv` is an extremely fast Python package installer and resolver, written in Rust, and designed as a drop-in replacement for `pip` and `pip-tools`.
 
-#### On Local Machines
+First, install `uv`:
+
+```bash
+# On macOS and Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then, create a virtual environment and install the dependencies from `pyproject.toml`:
+
+```bash
+# Create a virtual environment (optional but recommended)
+uv venv
+
+# Activate the virtual environment
+# On macOS and Linux
+source .venv/bin/activate
+
+# Install dependencies
+uv pip install -e ".[dev]"
+```
+
+Use of docker is still an option if preferred.
+
+#### On Local Machines (Docker)
 
 ```bash
 # build docker image. This command will automatically push the built image to GitLab registry
@@ -78,7 +101,7 @@ bash docker/docker_run.sh [path/to/datasets]
 # e.g. bash docker/docker_run.sh /home/junhal/datasets
 ```
 
-#### ORD
+#### ORD (Docker)
 
 On ORD cluster, all the installation and docker container-related stuffs are located in sbatch script: `script/train.sbatch`
 

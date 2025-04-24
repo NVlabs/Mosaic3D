@@ -7,8 +7,17 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 from timm.models.layers import trunc_normal_
-from torch_geometric.nn.pool import voxel_grid
-import pointops
+
+try:
+    from torch_geometric.nn.pool import voxel_grid
+except ImportError:
+    print("torch_geometric not found")
+    voxel_grid = None
+try:
+    import pointops
+except ImportError:
+    print("pointops not found")
+    pointops = None
 
 from src.models.lightning_modules.language_module import DenseLanguageLitModule
 from src.models.components.misc import offset2batch

@@ -114,14 +114,14 @@ repos:
 
   # md formatting
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.16
+    rev: 0.7.17
     hooks:
       - id: mdformat
         args: ["--number"]
         additional_dependencies:
-          - mdformat-gfm
-          - mdformat-tables
-          - mdformat_frontmatter
+          - mdformat-gfm==0.4.1
+          - mdformat-tables==0.4.1
+          - mdformat-frontmatter==2.0.0
           # - mdformat-toc
           # - mdformat-black
 
