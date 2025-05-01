@@ -163,6 +163,8 @@ results/
 outputs/
 slurm_outputs/
 experiments/
+visualizations/
+caption*/
 
 # Misc
 ckpts/

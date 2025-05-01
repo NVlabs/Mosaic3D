@@ -1,22 +1,42 @@
 [project]
-name = "Mosaic3d"
+name = "Mosaic3D"
 version = "0.1.0"
 description = "Mosaic3D: open-vocabulary 3D neural network foundational models and datasets"
 requires-python = ">=3.8"
 dependencies = [
     # PyTorch ecosystem
+    # TODO(cchoy): Upgrade the torch version
     "torch>=2.2.2,<2.3",
     "torchvision>=0.15.0",
     "lightning>=2.2,<2.3",
     "torchmetrics>=0.11.4",
     "torch-geometric",
-    "torch-cluster",
+    # "torch-cluster",
     "torch-scatter",
 
     # Hydra
     "hydra-core==1.3.2",
     "hydra-colorlog==1.2.0",
     "hydra-optuna-sweeper==1.2.0",
+
+    # 3D ConvNet
+    "spconv-cu120",
+
+    # Essentials
+    "packaging",
+    "numpy<2",
+    "easydict",
+    "pyyaml",
+    "tqdm",
+    "scipy",
+
+    # 3D Utils
+    "plyfile",
+    "open3d==0.18.0",
+    "natsort",
+    "scikit-image",
+    "matplotlib",
+    "pyviz3d",
 
     # Loggers
     "wandb",
@@ -25,33 +45,30 @@ dependencies = [
     "rootutils",
     "rich",
     "jaxtyping",
-
-    # RegionPLC dependencies
-    "numpy<2",
-    "spconv-cu120",
-    "easydict",
-    "pyyaml",
-    "tqdm",
-    "scipy",
-    "plyfile",
     "imageio",
-    "matplotlib",
-    "transformers",
-    "clip @ git+https://github.com/openai/CLIP.git",
     "einops",
-    "open3d==0.18.0",
     "natsort",
     "scikit-image",
+
+    # CLIP
+    "accelerate>=0.26.0",
+    "flash-attn",
+    "transformers",
+    # SigLIPv2 in the latest transformers
+    # "transformers @ git+https://github.com/huggingface/transformers@v4.49.0-SigLIP-2",
+    "clip @ git+https://github.com/openai/CLIP.git",
     "open_clip_torch",
 
-    # Segment3D dependencies
+    # CUDA DBScan Clustering
     "cuml-cu12",
-    "loguru",
-    "albumentations",
-    "pyviz3d",
 ]
 
 [project.optional-dependencies]
+mask_transformers=[
+    "flash-attn",
+    "open_clip_torch",
+    "timm",
+]
 dev = [
     "pytest",
     "black",
@@ -59,6 +76,10 @@ dev = [
     "fire",
     "overrides",
     "gdown",
+    "jupyter",
+    "ipykernel",
+    "plotly",
+    "ipdb",
 ]
 
 [project.urls]

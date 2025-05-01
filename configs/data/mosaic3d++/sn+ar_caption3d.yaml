@@ -5,19 +5,17 @@ train_dataset:
   _target_: src.data.concat_dataset.ConcatDataset
   _partial_: true
   ignore_label: -100
-  conditions: ["ScanNet"]
-  repeat: 4
+  conditions: ["ScanNet", "ARKitScenes"]
+  repeat: 1
   datasets:
-    - _target_: src.data.scannet.dataset.ScanNetDataset
+    - _target_: src.data.scannet.scannet_caption3d_dataset.ScanNetCaption3DDataset
       _partial_: true
       data_dir: /datasets/scannet_hf
       split: train
       caption_dir: /datasets/mosaic3d++
-      caption_subset: caption-mc.osprey.scannet-125k.cyclic-check
+      caption_subset: caption-mc-mv.gemma3.scannet-250k
       segment_dir: /datasets/mosaic3d++
-      segment_subset: mask_clustering.cropformer.scannet-125k
-      load_embeddings: true
-      embedding_filename: embeddings-gathered.recap_clip
+      segment_subset: mask_clustering.cropformer.scannet-250k+combined
       object_num_max: 300
       ignore_label: -100
       repeat: 1
@@ -56,9 +54,83 @@ train_dataset:
         - type: ChromaticJitter
           p: 0.95
           std: 0.05
-        - type: SphereCrop
-          point_max: 250000
-          mode: random
+        # - type: SphereCrop
+        #   point_max: 250000
+        #   mode: random
+        - type: CenterShift
+          apply_z: false
+        - type: NormalizeColor
+        - type: Add
+          keys_dict:
+            condition: ScanNet
+        - type: ToTensor
+        - type: Collect
+          keys:
+            [
+              "origin_coord",
+              "coord",
+              "color",
+              "segment",
+              "instance",
+              "binary",
+              "caption_data",
+              "origin_idx",
+              "condition",
+            ]
+          offset_keys_dict:
+            offset: coord
+            pc_count: origin_coord
+          feat_keys: ["color"]
+
+    - _target_: src.data.arkitscenes.arkit_caption3d_dataset.ARKitScenesCaption3DDataset
+      _partial_: true
+      data_dir: /datasets/arkitscenes/3dod
+      split: train
+      caption_dir: /datasets/mosaic3d++
+      caption_subset: caption-mc-mv.gemma3.arkitscenes
+      segment_dir: /datasets/mosaic3d++
+      segment_subset: mask_clustering.cropformer.arkitscenes+combined
+      object_num_max: 300
+      ignore_label: -100
+      repeat: 1
+      transforms:
+        - type: Copy
+          keys_dict:
+            coord: origin_coord
+        - type: CenterShift
+          apply_z: true
+        - type: RandomRotate
+          p: 0.5
+          angle: [-1, 1]
+          center: [0, 0, 0]
+          axis: "z"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "x"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "y"
+        - type: RandomScale
+          scale: [0.9, 1.1]
+        - type: RandomFlip
+          p: 0.5
+        - type: RandomJitter
+          sigma: 0.005
+          clip: 0.02
+        - type: ElasticDistortion
+        - type: ChromaticAutoContrast
+          p: 0.2
+        - type: ChromaticTranslation
+          p: 0.95
+          ratio: 0.05
+        - type: ChromaticJitter
+          p: 0.95
+          std: 0.05
+        # - type: SphereCrop
+        #   point_max: 250000
+        #   mode: random
         - type: CenterShift
           apply_z: false
         - type: NormalizeColor
@@ -158,7 +230,7 @@ val_datasets:
         feat_keys: ["color"]
 
 collate_fn:
-  _target_: src.data.collate.point_collate_fn_with_masks
+  _target_: src.data.collate.point_collate_fn
   _partial_: true
   grid_size: 0.02
 

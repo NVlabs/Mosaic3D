@@ -28,7 +28,7 @@ trainer:
 logger:
   wandb:
     tags: ${tags}
-    group: "regionplc"
+    group: "mosaic3d"
 
 callbacks:
   model_checkpoint:
