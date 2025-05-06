@@ -79,10 +79,10 @@ for _ in range(WARMUP_BATCHES):
 for i in range(0, len(texts), BATCH_SIZE):
     text = texts[i : i + BATCH_SIZE]
     with meters["SigLIP"]:
-        _ = siglip2_encoder(text)
+        _ = siglip2_encoder(text)  # 1152
 
     with meters["Recap CLIP"]:
-        _ = recap_encoder(text)
+        _ = recap_encoder(text)  # 768
 
 # %%
 # Print results

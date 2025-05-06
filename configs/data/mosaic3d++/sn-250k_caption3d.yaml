@@ -50,13 +50,13 @@ train_dataset:
           p: 0.2
         - type: ChromaticTranslation
           p: 0.95
-          ratio: 0.05
+          ratio: 0.01
         - type: ChromaticJitter
           p: 0.95
-          std: 0.05
-        # - type: SphereCrop
-        #   point_max: 250000
-        #   mode: random
+          std: 0.01
+        - type: SphereCrop
+          point_max: 250000
+          mode: random
         - type: CenterShift
           apply_z: false
         - type: NormalizeColor

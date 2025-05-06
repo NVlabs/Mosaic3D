@@ -21,7 +21,7 @@ from src.data.scannet.scannet_caption3d_dataset import ScanNetCaption3DDataset
 
 # %%
 # --- Configuration ---
-CONFIG_NAME = "data/mosaic3d++/sn-250k_3d_caption.yaml"
+CONFIG_NAME = "data/mosaic3d++/sn-250k_caption3d.yaml"
 SCENE_INDEX = 0  # Index of the scene to load from the dataset
 NUM_OBJECTS_TO_VIS = 10  # Number of random objects to highlight
 VIS_DIR = "visualizations/dataloader_checks"  # Directory to potentially save visualizations
