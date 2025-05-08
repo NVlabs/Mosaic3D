@@ -30,7 +30,7 @@ class CLIPTextEncoderInterace(abc.ABC):
         raise NotImplementedError
 
     @torch.inference_mode()
-    def unique_text_call(
+    def get_unique_text_embedding(
         self,
         list_of_texts: List[str] | List[List[str]],
         normalize: bool = True,

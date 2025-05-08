@@ -11,7 +11,7 @@ from torch_scatter import scatter, segment_csr
 
 import src.utils.dist_utils as dist_utils
 from src.models.losses.loss_base import LossBase
-from src.utils.caption_utils import get_caption_batch, get_unique_caption_batch
+from src.utils.caption_utils import get_caption_batch
 
 
 class CaptionLossBase(LossBase):
@@ -39,10 +39,11 @@ class CaptionLossBase(LossBase):
             labels_per_caption = torch.from_numpy(labels_per_caption).to(device)
         else:
             # extract text features
-            with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-                text_features, labels_per_segment, labels_per_caption = get_unique_caption_batch(
-                    captions, clip_encoder
-                )
+            (
+                text_features,
+                labels_per_segment,
+                labels_per_caption,
+            ) = clip_encoder.get_unique_text_embedding(captions, normalize=True)
             text_features = (
                 text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
             )
@@ -99,14 +100,10 @@ class DenseCaptionAlignmentLoss(CaptionLossBase):
     def __init__(
         self,
         normalize: bool = True,
-        is_entity: bool = False,
-        interpolate: bool = False,
         **kwargs,
     ):
         super().__init__()
         self.normalize = normalize
-        self.is_entity = is_entity
-        self.interpolate = interpolate
 
     def extract_text_features(
         self,
@@ -117,10 +114,7 @@ class DenseCaptionAlignmentLoss(CaptionLossBase):
         if embeddings is not None:
             text_features = torch.stack([item for sublist in embeddings for item in sublist], 0)
         else:
-            with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-                text_features = get_caption_batch(
-                    captions, clip_encoder, is_entity=self.is_entity, interpolate=self.interpolate
-                )
+            text_features = clip_encoder(captions, normalize=self.normalize)
             text_features = (
                 text_features.clone() if isinstance(text_features, torch.Tensor) else text_features
             )
