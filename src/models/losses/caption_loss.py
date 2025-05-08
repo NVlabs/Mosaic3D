@@ -214,7 +214,7 @@ class CaptionLoss(CaptionLossBase):
             point_features = nn.functional.normalize(point_features, dim=-1)
 
         # Logit
-        logits = point_features @ text_features.T.to(device)
+        logits = point_features @ text_features.T.to(point_features)
         if self.use_logit_scale:
             logits = self.logit_scale.exp() * logits
         scores = F.log_softmax(logits, dim=-1)

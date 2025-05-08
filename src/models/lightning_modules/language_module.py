@@ -9,8 +9,7 @@ import torch.nn as nn
 from torchmetrics import MaxMetric, MeanMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
-import src.utils.caption_utils as caption_utils
-from src.models.components.clip_models import build_clip_model, download_clip_model
+from src.models.components.text_encoder import get_text_encoder
 from src.models.components.evaluator import InstanceSegmentationEvaluator
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import (
@@ -24,7 +23,6 @@ from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentEval,
     CLIPAlignmentLoss,
     compute_clip_image_alignment,
-    compute_clip_text_cosine_similarity,
 )
 from src.utils import RankedLogger
 
@@ -102,11 +100,6 @@ class DenseLanguageLitModule(LitModuleBase):
             self.ignore_background = False
             self.ignore_class_prob = False
 
-    def prepare_data(self) -> None:
-        # download clip model on rank 0
-        ckpt_path = download_clip_model(self.hparams.clip_encoder)
-        log.info(f"Downloaded CLIP model to {ckpt_path}")
-
     def configure_model(self) -> None:
         # network
         if self.net is not None:
@@ -118,11 +111,10 @@ class DenseLanguageLitModule(LitModuleBase):
             log.info(self.net)
 
         # clip encoder
-        self.clip_encoder = build_clip_model(self.hparams.clip_encoder, device=self.device)
-
-        # freeze clip encoder
-        for params in self.clip_encoder.parameters():
-            params.requires_grad = False
+        self.clip_encoder = get_text_encoder(
+            **self.hparams.clip_encoder,
+            device=self.device,
+        )
 
     def on_load_checkpoint(self, checkpoint):
         if hasattr(self.hparams, "val_best_metric"):
@@ -304,7 +296,6 @@ class DenseLanguageLitModule(LitModuleBase):
         return loss
 
     def on_validation_epoch_start(self):
-        self.clip_encoder = self.clip_encoder.to(self.device)
         for postfix in self.val_class_info.keys():
             class_info = self.val_class_info[postfix]
             eval_module = self.clip_alignment_eval[postfix]
@@ -315,9 +306,9 @@ class DenseLanguageLitModule(LitModuleBase):
                     class_names = [
                         f"a {c} in a scene" if "other" not in c else "other" for c in class_names
                     ]  # OpenScene setting
-                text_embedding = caption_utils.forward_text_encoder(
-                    class_names, self.clip_encoder, normalize=True, device=self.device
-                )
+                text_embedding = self.clip_encoder(class_names)
+                # normalize embeddings
+                text_embedding = torch.nn.functional.normalize(text_embedding, dim=-1)
                 eval_module.set_target_embedding(text_embedding.to(self.device))
             else:
                 if eval_module.emb_target.device != self.device:

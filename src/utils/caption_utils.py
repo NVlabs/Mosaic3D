@@ -82,8 +82,12 @@ def forward_text_encoder(
         channel_size = clip_encoder.text_projection.shape[1]
         return torch.zeros((0, channel_size), dtype=torch.float32).to(device)
 
-    text_tokens = clip_encoder.text_tokenizer(image_captions).to(device)
-    text_embed = clip_encoder.encode_text(text_tokens).float()
+    # if it has __call__ method, use it
+    if hasattr(clip_encoder, "__call__"):
+        text_embed = clip_encoder(image_captions)
+    else:
+        text_tokens = clip_encoder.text_tokenizer(image_captions).to(device)
+        text_embed = clip_encoder.encode_text(text_tokens).float()
     if normalize:
         text_embed = torch.nn.functional.normalize(text_embed, dim=-1)
     return text_embed

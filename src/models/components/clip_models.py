@@ -1,3 +1,4 @@
+# TODO(cchoy) 2025-05-08: This will be deprecated in favor of ./text_encoder.py
 import os
 
 import open_clip
