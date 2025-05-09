@@ -3,6 +3,7 @@ _target_: src.models.lightning_modules.pointwise_contrastive_module.PointwiseCon
 net:
   _target_: src.models.networks.spunet.spconv_unet_v1m1_base.SpUNetBase
   _partial_: true
+
   in_channels: ${data.in_channel}
   out_channels: ${model.clip_encoder.text_dim} # 1152 for SigLIP, 768 for Recap
   base_channels: 32
@@ -11,6 +12,9 @@ net:
 
 loss_cfg:
   caption_loss:
+    _target_: src.models.losses.caption_pointwise_contrastive_loss.CaptionPointwiseContrastiveLoss
+    _partial_: true
+    normalize: true
     use_logit_scale: true
 
 eval_cfg:

@@ -60,5 +60,3 @@ val_transforms:
       offset: coord
       pc_count: origin_coord
     feat_keys: ["color", "coord"]
-
-in_channel: 6

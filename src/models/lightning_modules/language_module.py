@@ -53,19 +53,7 @@ class DenseLanguageLitModule(LitModuleBase):
         self.mix_prob = loss_cfg.get("mix_prob", 0)
 
         # loss functions
-        self.caption_loss_type = loss_cfg["caption_loss"].get("type", "contrastive")
-        if self.caption_loss_type == "contrastive":
-            self.caption_loss = CaptionLoss(**loss_cfg["caption_loss"])
-        elif self.caption_loss_type == "alignment":
-            self.caption_loss = DenseCaptionAlignmentLoss(**loss_cfg["caption_loss"])
-        elif self.caption_loss_type == "region_alignment":
-            self.caption_loss = CaptionAlignmentLoss(**loss_cfg["caption_loss"])
-        elif self.caption_loss_type == "clip":
-            self.caption_loss = CaptionCLIPLoss(**loss_cfg["caption_loss"])
-        elif self.caption_loss_type == "siglip":
-            self.caption_loss = CaptionSigLIPLoss(**loss_cfg["caption_loss"])
-        else:
-            raise ValueError(f"Caption loss type {self.caption_loss_type} not supported")
+        self.caption_loss = self.hparams.loss_cfg.caption_loss()
 
         self.clip_alignment_loss = (
             CLIPAlignmentLoss(**loss_cfg["seg_loss"])

@@ -42,16 +42,8 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
 
         self.net = None
 
-        # loss functions
-        self.caption_loss_type = loss_cfg["caption_loss"].get("type", "object_contrastive")
-        if self.caption_loss_type == "object_contrastive":
-            self.caption_loss = CaptionLoss(**loss_cfg["caption_loss"])
-        elif self.caption_loss_type == "point_contrastive":
-            self.caption_loss = CaptionPointwiseContrastiveLoss(
-                **loss_cfg["caption_loss"],
-            )
-        else:
-            raise ValueError(f"Caption loss type {self.caption_loss_type} not supported")
+        # Caption loss
+        self.caption_loss = self.hparams.loss_cfg.caption_loss()
 
         # for tracking best so far validation accuracy
         self.val_best_metric = MaxMetric()
@@ -100,8 +92,6 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
                 self.val_best_metric.load_state_dict(metric_state.state_dict())
             else:
                 log.warning("Could not restore val_best_metric state from checkpoint.")
-        # Ensure superclass loading happens
-        # super().on_load_checkpoint(checkpoint) # Call depends on base class implementation needs
 
     def setup(self, stage: str) -> None:
         """Setup validation datasets, metrics, and text embeddings."""

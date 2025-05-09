@@ -143,6 +143,8 @@ class Siglip2TextEncoder(CLIPTextEncoderInterace):
         torch_dtype: torch.dtype = torch.bfloat16,
         **kwargs,
     ):
+        # Disable tokenizer parallelism
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModel.from_pretrained(
             model_id,

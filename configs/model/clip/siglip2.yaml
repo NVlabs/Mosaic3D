@@ -1,5 +1,5 @@
 # @package model
 clip_encoder:
   model_type: siglip2
-  model_id: hf-hub:timm/ViT-B-16-SigLIP2
-  text_dim: 768
+  model_id: google/siglip2-so400m-patch14-224
+  text_dim: 1152

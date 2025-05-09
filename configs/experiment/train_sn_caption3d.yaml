@@ -5,10 +5,10 @@
 
 defaults:
   - override /data: mosaic3d++/sn-250k_caption3d
-  - override /data/transforms: null
-  - override /model: spunet34c
-  - override /model/clip: recap_clip
-  - override /model/loss: caption
+  - override /data/transforms: !!null
+  - override /model: !!null
+  - override /model/clip: siglip2
+  - override /model/loss: point_contrastive_caption
   - override /optim: sgd
   - override /scheduler: onecyclelr
   - override /callbacks: cluster_nolr

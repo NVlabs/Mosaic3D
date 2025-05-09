@@ -6,6 +6,7 @@ import numpy as np
 from src.cuda.load import load_kernel
 
 bsearch_kernel = load_kernel("find_first_gt_bsearch.cu", "find_first_gt_bsearch")
+bsearch_kernel_arange = load_kernel("find_first_gt_bsearch.cu", "find_first_gt_bsearch_arange")
 
 # 2) Prepare data on GPU (as torch.IntTensor)
 M = 1024
@@ -44,3 +45,14 @@ for i in range(100):
     print(f"out: {np_out[i]}, M: {np_srcM[np_out[i] - 1]}-{np_srcM[np_out[i]]}, N: {np_srcN[i]}")
 
 print(np_out)
+
+
+# Launch arange kernel
+bsearch_kernel_arange(
+    (blocks,),
+    (threads,),
+    (torch_srcM.data_ptr(), M, N, torch_out.data_ptr()),
+    shared_mem=shared_mem_bytes,
+)
+print(torch_srcM[:10])
+print(torch_out[:100])

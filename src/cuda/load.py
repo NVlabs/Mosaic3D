@@ -1,3 +1,4 @@
+from typing import Any
 import os
 
 import cupy as cp
@@ -28,7 +29,7 @@ class CupyKernel:
         self.kernel_name = kernel_name
         self.kernel = None
 
-    def __call__(self) -> cp.RawKernel:
+    def __call__(self, *args, **kwargs) -> Any:
         if self.kernel is None:
             self.kernel = load_kernel(self.file_name, self.kernel_name)
-        return self.kernel
+        return self.kernel(*args, **kwargs)
