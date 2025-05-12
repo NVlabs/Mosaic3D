@@ -179,3 +179,77 @@ def neighbour_exchange_bidir_with_grad(
     return NeighbourExchangeBidir.apply(
         left_rank, right_rank, group, tensor_to_left, tensor_to_right
     )
+
+
+def pad_to_max(tensor, max_size):
+    pad_size = max_size - tensor.size(1)
+    if pad_size == 0:
+        return tensor
+    padding = torch.zeros(tensor.size(0), pad_size, dtype=tensor.dtype, device=tensor.device)
+    return torch.cat([tensor, padding], dim=1)
+
+
+class DifferentiableAllGatherVarShapes(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, tensor, world_size, rank):
+        C, N_local = tensor.shape
+
+        # Step 1: Gather local shapes
+        all_N = [None] * world_size
+        dist.all_gather_object(all_N, N_local)
+
+        # Step 2: Flatten tensor
+        flat = tensor.contiguous().view(-1)
+
+        # Step 3: all_to_all
+        input_list = [flat] * world_size
+        output_list = [
+            torch.empty(C * N_i, dtype=tensor.dtype, device=tensor.device) for N_i in all_N
+        ]
+        dist.all_to_all(output_list, input_list)
+
+        # Step 4: Unflatten
+        result = [chunk.view(C, N_i) for chunk, N_i in zip(output_list, all_N)]
+
+        # Save for backward
+        ctx.rank = rank
+        ctx.world_size = world_size
+        ctx.C = C
+        ctx.all_N = all_N
+        ctx.input_shape = tensor.shape
+
+        return result
+
+    @staticmethod
+    def backward(ctx, grad_outputs):
+        # grad_outputs: list of length world_size, each of shape C x N_i
+        rank = ctx.rank
+        C = ctx.C
+        all_N = ctx.all_N
+
+        # Step 1: Flatten grads
+        grad_inputs_flat = [g.contiguous().view(-1) for g in grad_outputs]
+
+        # Step 2: all_to_all (reverse direction)
+        input_list = grad_inputs_flat
+        output_tensor = torch.empty(
+            C * all_N[rank], dtype=grad_outputs[0].dtype, device=grad_outputs[0].device
+        )
+
+        # Create dummy inputs on all ranks except self
+        dummy_output_lists = [
+            torch.empty(
+                C * all_N[rank], dtype=grad_outputs[0].dtype, device=grad_outputs[0].device
+            )
+            for _ in range(ctx.world_size)
+        ]
+        dummy_output_lists[rank] = output_tensor
+
+        dist.all_to_all(dummy_output_lists, input_list)
+
+        # Reshape to original shape
+        return output_tensor.view(ctx.input_shape), None, None
+
+
+def differentiable_all_gather_varshapes(tensor, world_size, rank):
+    return DifferentiableAllGatherVarShapes.apply(tensor, world_size, rank)

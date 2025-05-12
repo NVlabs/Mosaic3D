@@ -1,0 +1,9 @@
+# @package model
+loss_cfg:
+  caption_loss:
+    _target_: src.models.losses.caption_pointwise_contrastive_loss.AllGatherCaptionPointwiseContrastiveLoss
+    _partial_: true
+    normalize: true
+    use_logit_scale: true
+
+  sync_dist: false
