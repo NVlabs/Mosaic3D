@@ -1,0 +1,7 @@
+# @package model
+net:
+  _target_: src.models.networks.ptv3.model.PointTransformerV3
+  _partial_: true
+
+  in_channels: ${data.in_channel}
+  out_channels: ${model.clip_encoder.text_dim}

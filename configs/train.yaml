@@ -10,6 +10,7 @@ defaults:
   - model: regionplc_openvocab
   - model/clip: clip-b16
   - model/loss: caption
+  - model/net: spunet34c
   - optim: fastai
   - scheduler: fastai
 

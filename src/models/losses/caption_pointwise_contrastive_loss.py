@@ -9,8 +9,6 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 import torch.distributed as dist
 
-import cupy as cp
-
 from src.cuda.load import CupyKernel, load_kernel
 from src.utils import dist_utils
 

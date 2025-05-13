@@ -1,0 +1,10 @@
+# @package model
+net:
+  _target_: src.models.networks.spunet.spconv_unet_v1m1_base.SpUNetBase
+  _partial_: true
+
+  in_channels: ${data.in_channel}
+  out_channels: ${model.clip_encoder.text_dim}
+  base_channels: 32
+  channels: [32, 64, 128, 256, 128, 128, 96, 96]
+  layers: [2, 2, 2, 2, 2, 2, 2, 2]

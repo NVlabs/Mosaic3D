@@ -156,9 +156,12 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
         # This should be implemented by subclasses
         if isinstance(output, torch.Tensor):
             return {"clip_feat": output}
-        elif "feat" in output and "v2p_map" in output:  # PointTransformerV3
+        elif "feat" in output and "v2p_map" in output:  # SPUNets
             clip_feat = output.sparse_conv_feat.features[output.v2p_map]
             return {"clip_feat": clip_feat}
+        elif "feat" in output and "sparse_conv_feat" in output:  # PTv3
+            assert "v2p_map" not in output, "v2p_map should not be in the output of PTv3"
+            return {"clip_feat": output["feat"]}
         elif isinstance(output, dict) and "clip_feat" in output:
             return output
         else:

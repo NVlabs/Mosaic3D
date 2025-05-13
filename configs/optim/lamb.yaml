@@ -2,5 +2,5 @@
 optimizer:
   _target_: src.models.optimization.lamb.Lamb
   _partial_: true
-  lr: 5e-2
+  lr: 1e-2
   weight_decay: 1e-4
