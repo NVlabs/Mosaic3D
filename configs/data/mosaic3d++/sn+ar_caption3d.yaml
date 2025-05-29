@@ -128,15 +128,16 @@ train_dataset:
         - type: ChromaticJitter
           p: 0.95
           std: 0.05
-        # - type: SphereCrop
-        #   point_max: 250000
-        #   mode: random
-        - type: CenterShift
-          apply_z: false
+        - type: SphereCrop
+          sample_rate: 0.8
+          mode: captioned
+        - type: SphereCrop
+          point_max: 120000
+          mode: captioned
         - type: NormalizeColor
         - type: Add
           keys_dict:
-            condition: ScanNet
+            condition: ARKitScenes
         - type: ToTensor
         - type: Collect
           keys:
@@ -230,11 +231,12 @@ val_datasets:
         feat_keys: ["color"]
 
 collate_fn:
-  _target_: src.data.collate.point_collate_fn
+  _target_: src.data.collate.point_collate_fn_with_masks
   _partial_: true
   grid_size: 0.02
 
 batch_size: 4
 num_workers: 4
+in_channel: 3
 
 checkpoint_monitor: "val_scannet200/miou"
