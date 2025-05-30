@@ -1,3 +1,4 @@
+// Assume that the first element of srcM is 0.
 extern "C" __global__ void find_first_gt_bsearch(const int *__restrict__ srcM,
                                                  int M,
                                                  const int *__restrict__ srcN,
@@ -33,10 +34,11 @@ extern "C" __global__ void find_first_gt_bsearch(const int *__restrict__ srcM,
             }
         }
         // left == first index where smem[left] > key, or left==M if none
-        out[idx] = (left < M) ? left : -1;
+        out[idx] = (left < M) ? left - 1 : -1;
     }
 }
 
+// Assume that the first element of srcM is 0.
 // Find the first index where the arange index is greater than the sorted array M
 extern "C" __global__ void find_first_gt_bsearch_arange(const int *__restrict__ srcM,
                                                         int M,
@@ -72,6 +74,6 @@ extern "C" __global__ void find_first_gt_bsearch_arange(const int *__restrict__ 
             }
         }
         // left == first index where smem[left] > key, or left==M if none
-        out[idx] = (left < M) ? left : -1;
+        out[idx] = (left < M) ? left - 1 : -1;
     }
 }

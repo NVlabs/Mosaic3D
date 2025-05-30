@@ -1,7 +1,6 @@
-from typing import Optional, List, Literal
+from typing import Optional, List
 from jaxtyping import Float, Int
 
-import math
 import numpy as np
 
 import torch
@@ -9,10 +8,8 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 import torch.distributed as dist
 
-from src.cuda.load import CupyKernel, load_kernel
 from src.utils import dist_utils
-
-bsearch_kernel = CupyKernel("find_first_gt_bsearch.cu", "find_first_gt_bsearch_arange")
+from src.utils.offset_to_bin import offset_to_bin
 
 
 class CaptionPointwiseContrastiveLoss:
@@ -29,34 +26,6 @@ class CaptionPointwiseContrastiveLoss:
             self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07), requires_grad=True)
 
         self.kwargs = kwargs
-
-    @torch.no_grad()
-    def offset_to_indices(
-        self, caption_offsets: Int[Tensor, "M + 1"]  # noqa: F821
-    ) -> Int[Tensor, "M"]:  # noqa: F821
-        """
-        Convert the caption offsets to indices.
-        """
-        N = caption_offsets[-1].item()
-
-        # Launch parameters
-        threads = 256
-        blocks = math.ceil(N / threads)
-        M = caption_offsets.shape[0]
-        shared_mem_bytes = M * caption_offsets.element_size()  # M * sizeof(int)
-        torch_out = torch.empty(N, dtype=torch.int32, device=caption_offsets.device)
-
-        # Launch binary-search kernel
-        bsearch_kernel(
-            (blocks,),
-            (threads,),
-            (caption_offsets.int().data_ptr(), M, N, torch_out.data_ptr()),
-            shared_mem=shared_mem_bytes,
-        )
-        # Subtract 1 from the output
-        torch_out = torch_out - 1
-
-        return torch_out
 
     def loss(
         self,
@@ -98,7 +67,7 @@ class CaptionPointwiseContrastiveLoss:
 
         # Generate labels for all logits
         # convert the caption_offsets to a tensor of shape L.
-        labels_per_segment = self.offset_to_indices(caption_offsets)
+        labels_per_segment = offset_to_bin(caption_offsets)
         loss = self.loss_func(scores[point_indices], labels_per_segment.long())
 
         return loss.mean()
@@ -166,8 +135,9 @@ class AllGatherCaptionPointwiseContrastiveLoss(CaptionPointwiseContrastiveLoss):
         # Scores
         scores = F.log_softmax(logits, dim=-1)
 
-        # The labels are the same since the other ranks are concatenated at the end.
-        labels_per_segment = self.offset_to_indices(caption_offsets)
+        # Generate labels for all logits
+        # convert the caption_offsets to a tensor of shape L.
+        labels_per_segment = offset_to_bin(caption_offsets)
         loss = self.loss_func(scores[point_indices], labels_per_segment.long())
 
         return loss.mean()

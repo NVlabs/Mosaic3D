@@ -11,7 +11,10 @@ bsearch_kernel_arange = load_kernel("find_first_gt_bsearch.cu", "find_first_gt_b
 # 2) Prepare data on GPU (as torch.IntTensor)
 M = 1024
 N = 1 << 20
-torch_srcM = torch.randint(0, 10000, (M,), dtype=torch.int32, device="cuda").sort()[0].contiguous()
+torch_srcM = torch.randint(0, 10000, (M,), dtype=torch.int32).sort()[0].contiguous()
+# append 0 to the first element
+torch_srcM = torch.cat([torch.tensor([0], dtype=torch.int32), torch_srcM]).to("cuda")
+assert len(torch_srcM) == M + 1
 torch_srcN = torch.randint(0, 10000, (N,), dtype=torch.int32, device="cuda")
 torch_out = torch.empty(N, dtype=torch.int32, device="cuda")
 
