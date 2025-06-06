@@ -724,8 +724,221 @@ class ElasticDistortion:
         return data_dict
 
 
+class BasePointCloudTransform:
+    """
+    Base class for point cloud transformations that handle data indexing and remapping.
+
+    This class provides common functionality for point cloud operations that need to:
+    - Apply indexing to multiple data fields
+    - Remap caption data indices after point selection
+    - Handle clip point indices
+    - Filter empty captions
+
+    All point cloud transforms that modify point indices should inherit from this class
+    to ensure consistent data handling across different fields.
+    """
+
+    def _apply_point_indexing(self, data_dict, idx_selected, keys=None):
+        """
+        Apply point indexing to data_dict based on selected indices.
+
+        This method applies the same index selection to multiple point cloud data fields,
+        ensuring all per-point data remains synchronized after point selection operations.
+
+        Args:
+            data_dict (dict): Dictionary containing point cloud data with per-point arrays
+            idx_selected (np.ndarray): 1D array of indices to keep (shape: [N])
+            keys (tuple, optional): Tuple of keys to apply indexing to. If None,
+                applies to common point cloud keys: coord, color, normal, segment,
+                binary, instance, displacement, strength, origin_coord, grid_coord, origin_idx
+
+        Returns:
+            dict: Modified data_dict with indexed data. Only the specified keys are modified.
+
+        Example:
+            >>> data_dict = {"coord": np.random.rand(1000, 3), "color": np.random.rand(1000, 3)}
+            >>> indices = np.array([0, 10, 20, 30])  # Select 4 points
+            >>> data_dict = self._apply_point_indexing(data_dict, indices)
+            >>> data_dict["coord"].shape  # (4, 3)
+        """
+        if keys is None:
+            # Default keys for point cloud data
+            keys = (
+                "coord",
+                "color",
+                "normal",
+                "segment",
+                "binary",
+                "instance",
+                "displacement",
+                "strength",
+                "origin_coord",
+                "grid_coord",
+                "origin_idx",
+            )
+
+        # Apply indexing to all specified keys that exist in data_dict
+        for key in keys:
+            if key in data_dict:
+                data_dict[key] = data_dict[key][idx_selected]
+
+        return data_dict
+
+    def _remap_caption_data(self, data_dict, idx_selected, original_size):
+        """
+        Remap caption data indices after point sampling/cropping.
+
+        When points are selected from a point cloud, any associated caption data that
+        references point indices must be updated to reflect the new indexing. This method
+        handles the complex task of remapping caption indices and filtering out captions
+        that no longer have associated points.
+
+        Args:
+            data_dict (dict): Dictionary containing point cloud data with caption_data field
+            idx_selected (np.ndarray): Array of indices that were selected (shape: [N])
+            original_size (int): Original number of points before selection
+
+        Returns:
+            dict: Modified data_dict with updated caption_data indices
+
+        Note:
+            - Creates a mapping from original indices to new indices
+            - Filters out captions that have no points after selection
+            - Preserves both "caption" and "embedding" data types
+            - Handles both list and tensor indices
+        """
+        if "caption_data" not in data_dict:
+            return data_dict
+
+        caption_dict = data_dict["caption_data"]
+        target_key = "caption" if "caption" in caption_dict else "embedding"
+        assert target_key in caption_dict
+        captions_or_embeddings = caption_dict[target_key]
+        # List of point indices for each caption
+        caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
+        assert len(captions_or_embeddings) == len(caption_point_indices)
+
+        # Create mapping from old to new indices
+        new_index = np.arange(len(idx_selected))
+        to_new_index = np.ones(original_size, dtype=int) * -1
+        to_new_index[idx_selected] = new_index
+
+        # Remap caption indices
+        new_caption_index = [
+            to_new_index[point_indices] for point_indices in caption_point_indices
+        ]
+        # Remove -1 index (points that were filtered out)
+        new_caption_index = [
+            point_indices[point_indices != -1] for point_indices in new_caption_index
+        ]
+        # Get indices of captions that still have points
+        valid_caption_indices = [
+            i for i, point_indices in enumerate(new_caption_index) if len(point_indices) > 0
+        ]
+        # Filter out empty arrays
+        new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
+        captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
+
+        data_dict["caption_data"] = {
+            target_key: captions_or_embeddings,
+            "idx": new_caption_index,
+        }
+
+        return data_dict
+
+    def _remap_clip_point_indices(self, data_dict, idx_selected, original_size):
+        """
+        Remap clip point indices after point sampling/cropping.
+
+        Clip point indices are special indices that mark important points that should
+        be preserved during transformations. This method updates these indices to
+        reflect the new point ordering after selection operations.
+
+        Args:
+            data_dict (dict): Dictionary containing point cloud data with clip_point_indices field
+            idx_selected (np.ndarray): Array of indices that were selected (shape: [N])
+            original_size (int): Original number of points before selection
+
+        Returns:
+            dict: Modified data_dict with updated clip_point_indices
+
+        Note:
+            - Uses torch tensors for index operations
+            - Filters out clip indices that are no longer present
+            - Concatenates multiple clip point groups into a single tensor
+        """
+        if "clip_point_indices" not in data_dict:
+            return data_dict
+
+        clip_point_indices = data_dict["clip_point_indices"]
+        new_index = torch.arange(len(idx_selected))
+        to_new_index = torch.full((original_size,), -1, dtype=torch.long)
+        to_new_index[idx_selected] = new_index
+        new_clip_point_indices = [
+            to_new_index[clip_point_index] for clip_point_index in clip_point_indices
+        ]
+        # Remove -1 index
+        new_clip_point_indices = [
+            new_clip_point_index[new_clip_point_index != -1]
+            for new_clip_point_index in new_clip_point_indices
+        ]
+        new_clip_point_indices = torch.cat(new_clip_point_indices)
+        data_dict["clip_point_indices"] = new_clip_point_indices
+
+        return data_dict
+
+    def _filter_empty_captions(self, data_dict):
+        """
+        Filter out captions that have no associated points.
+
+        After point selection operations, some captions may end up with no associated
+        points. This method removes such empty captions to maintain data consistency
+        and prevent errors in downstream processing.
+
+        Args:
+            data_dict (dict): Dictionary containing point cloud data with caption_data field
+
+        Returns:
+            dict: Modified data_dict with empty captions removed
+
+        Note:
+            - Validates that all remaining captions have at least one point
+            - Preserves the order of remaining captions
+            - Works with both "caption" and "embedding" data types
+
+        Raises:
+            AssertionError: If any caption ends up with no points after filtering
+        """
+        if "caption_data" not in data_dict:
+            return data_dict
+
+        caption_dict = data_dict["caption_data"]
+        target_key = "caption" if "caption" in caption_dict else "embedding"
+        assert target_key in caption_dict
+        captions_or_embeddings = caption_dict[target_key]
+        # List of point indices for each caption
+        caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
+
+        # Filter out captions that have no points
+        valid_caption_indices = [
+            i for i, point_indices in enumerate(caption_point_indices) if len(point_indices) > 0
+        ]
+        # Filter out captions that have no points
+        if len(valid_caption_indices) != len(captions_or_embeddings):
+            caption_point_indices = [caption_point_indices[i] for i in valid_caption_indices]
+            captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
+        # Assert that all captions have points
+        assert all(len(point_indices) > 0 for point_indices in caption_point_indices)
+        data_dict["caption_data"] = {
+            target_key: captions_or_embeddings,
+            "idx": caption_point_indices,
+        }
+
+        return data_dict
+
+
 @TRANSFORMS.register_module()
-class GridSample:
+class GridSample(BasePointCloudTransform):
     def __init__(
         self,
         grid_size=0.05,
@@ -751,6 +964,7 @@ class GridSample:
 
     def __call__(self, data_dict):
         assert "coord" in data_dict.keys()
+        original_size = len(data_dict["coord"])
         scaled_coord = data_dict["coord"] / np.array(self.grid_size)
         grid_coord = np.floor(scaled_coord).astype(int)
         min_coord = grid_coord.min(0)
@@ -761,50 +975,24 @@ class GridSample:
         idx_sort = np.argsort(key)
         key_sort = key[idx_sort]
         _, inverse, count = np.unique(key_sort, return_inverse=True, return_counts=True)
+
         if self.mode == "train":  # train mode
             idx_select = (
                 np.cumsum(np.insert(count, 0, 0)[0:-1])
                 + np.random.randint(0, count.max(), count.size) % count
             )
             idx_unique = idx_sort[idx_select]
+
             if "sampled_index" in data_dict:
                 # for ScanNet data efficient, we need to make sure labeled point is sampled.
                 idx_unique = np.unique(np.append(idx_unique, data_dict["sampled_index"]))
                 mask = np.zeros_like(data_dict["segment"]).astype(bool)
                 mask[data_dict["sampled_index"]] = True
                 data_dict["sampled_index"] = np.where(mask[idx_unique])[0]
-            if "caption_data" in data_dict:
-                caption_dict = data_dict["caption_data"]
-                target_key = "caption" if "caption" in caption_dict else "embedding"
-                assert target_key in caption_dict
-                captions_or_embeddings = caption_dict[target_key]
-                # List of point indices for each caption
-                caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
-                assert len(captions_or_embeddings) == len(caption_point_indices)
-                # Filter point_indices that are not in idx_crop and replace it with the new index
-                new_index = np.arange(len(idx_unique))
-                to_new_index = np.ones(len(data_dict["coord"]), dtype=int) * -1
-                to_new_index[idx_unique] = new_index
-                new_caption_index = [
-                    to_new_index[point_indices] for point_indices in caption_point_indices
-                ]
-                # Remove -1 index
-                new_caption_index = [
-                    point_indices[point_indices != -1] for point_indices in new_caption_index
-                ]
-                # caption indices of non empty arrays
-                valid_caption_indices = [
-                    i
-                    for i, point_indices in enumerate(new_caption_index)
-                    if len(point_indices) > 0
-                ]
-                # Filter out empty arrays
-                new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
-                captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
-                data_dict["caption_data"] = {
-                    target_key: captions_or_embeddings,
-                    "idx": new_caption_index,
-                }
+
+            # Use base class methods for data remapping
+            data_dict = self._remap_caption_data(data_dict, idx_unique, original_size)
+
             if self.return_inverse:
                 data_dict["inverse"] = np.zeros_like(inverse)
                 data_dict["inverse"][idx_sort] = inverse
@@ -821,8 +1009,9 @@ class GridSample:
                         displacement * data_dict["normal"], axis=-1, keepdims=True
                     )
                 data_dict["displacement"] = displacement[idx_unique]
-            for key in self.keys:
-                data_dict[key] = data_dict[key][idx_unique]
+
+            # Apply point indexing using base class method
+            data_dict = self._apply_point_indexing(data_dict, idx_unique, self.keys)
             return data_dict
 
         elif self.mode == "test":  # test mode
@@ -888,20 +1077,94 @@ class GridSample:
         return hashed_arr
 
 
-class BaseCrop:
-    """Base class for point cloud cropping operations."""
+class BaseCrop(BasePointCloudTransform):
+    """
+    Base class for point cloud cropping operations with optional voxel downsampling.
 
-    def __init__(self, point_max=80000, sample_rate=None):
+    This class provides a flexible framework for point cloud cropping that combines:
+    1. Optional voxel-based downsampling for efficiency
+    2. Spatial cropping (spherical, rectangular, etc.)
+    3. Sample rate and point count constraints
+
+    The processing pipeline follows this order:
+    1. Calculate target number of points from original size (sample_rate/point_max takes precedence)
+    2. Apply voxel downsampling if voxel_size is specified (preprocessing for efficiency)
+    3. Apply spatial cropping to reach the target point count
+    4. Apply final data transformation with proper index remapping
+
+    Parameters:
+        point_max (int): Maximum number of points to keep (default: 80000)
+        sample_rate (float, optional): Fraction of original points to keep (takes precedence over voxel_size)
+        mode (str): How to select center point ("random", "center", "captioned")
+        voxel_size (float, optional): Voxel size for grid downsampling preprocessing
+        hash_type (str): Hash function type for voxelization ("fnv" or "ravel")
+    """
+
+    def __init__(
+        self,
+        point_max=80000,
+        sample_rate=None,
+        mode: Literal["random", "center", "captioned"] = "random",
+        voxel_size=None,
+        hash_type="fnv",
+    ):
         self.point_max = point_max
         self.sample_rate = sample_rate
+        assert mode in ["random", "center", "captioned"]
+        self.mode = mode
+        self.voxel_size = voxel_size
+        # Set up hash function for grid downsampling
+        if voxel_size is not None:
+            self.hash = self.fnv_hash_vec if hash_type == "fnv" else self.ravel_hash_vec
 
-    def _get_point_max(self, data_dict):
-        """Calculate the maximum number of points to keep."""
-        return (
-            int(self.sample_rate * data_dict["coord"].shape[0])
-            if self.sample_rate is not None
-            else self.point_max
-        )
+    def _get_point_max(self, original_num_points):
+        """
+        Calculate the maximum number of points to keep based on original point cloud size.
+
+        This method implements the precedence rule where sample_rate and point_max are calculated
+        from the original point cloud size, giving users predictable control over the final
+        output regardless of any preprocessing steps like voxel downsampling.
+
+        Args:
+            original_num_points (int): Number of points in the original point cloud (before any processing)
+
+        Returns:
+            int: Maximum number of points to keep
+
+        Examples:
+            >>> # With sample_rate only
+            >>> crop = BaseCrop(sample_rate=0.1)
+            >>> crop._get_point_max(100000)  # Returns 10000 (10% of 100K)
+
+            >>> # With both sample_rate and point_max
+            >>> crop = BaseCrop(sample_rate=0.2, point_max=15000)
+            >>> crop._get_point_max(100000)  # Returns 15000 (min of 20K and 15K)
+        """
+        if self.sample_rate is not None:
+            sample_based_max = int(self.sample_rate * original_num_points)
+            # If both sample_rate and point_max are specified, take the minimum
+            return (
+                min(sample_based_max, self.point_max)
+                if self.point_max is not None
+                else sample_based_max
+            )
+        else:
+            return self.point_max
+
+    def _get_center_point(self, data_dict):
+        """Get the center point for cropping based on mode."""
+        if self.mode == "random":
+            return data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
+        elif self.mode == "center":
+            return data_dict["coord"][data_dict["coord"].shape[0] // 2]
+        elif self.mode == "captioned":
+            assert "caption_data" in data_dict, "Caption data is required for captioned mode"
+            point_indices = data_dict["caption_data"]["idx"]
+            sel_point_indices = np.random.randint(len(point_indices))
+            random_idx = np.random.choice(point_indices[sel_point_indices])
+            return data_dict["coord"][random_idx]
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not supported")
 
     def _crop_data_dict(self, data_dict, idx_crop):
         """
@@ -914,108 +1177,72 @@ class BaseCrop:
         Returns:
             Cropped data_dict
         """
-        num_points_before = data_dict["coord"].shape[0]
+        original_size = data_dict["coord"].shape[0]
 
-        # Crop basic point cloud fields
-        if "coord" in data_dict.keys():
-            data_dict["coord"] = data_dict["coord"][idx_crop]
-        if "origin_coord" in data_dict.keys():
-            data_dict["origin_coord"] = data_dict["origin_coord"][idx_crop]
-        if "grid_coord" in data_dict.keys():
-            data_dict["grid_coord"] = data_dict["grid_coord"][idx_crop]
-        if "color" in data_dict.keys():
-            data_dict["color"] = data_dict["color"][idx_crop]
-        if "normal" in data_dict.keys():
-            data_dict["normal"] = data_dict["normal"][idx_crop]
-        if "segment" in data_dict.keys():
-            data_dict["segment"] = data_dict["segment"][idx_crop]
-        if "binary" in data_dict.keys():
-            data_dict["binary"] = data_dict["binary"][idx_crop]
-        if "instance" in data_dict.keys():
-            data_dict["instance"] = data_dict["instance"][idx_crop]
-        if "displacement" in data_dict.keys():
-            data_dict["displacement"] = data_dict["displacement"][idx_crop]
-        if "strength" in data_dict.keys():
-            data_dict["strength"] = data_dict["strength"][idx_crop]
-        if "origin_idx" in data_dict.keys():
-            data_dict["origin_idx"] = data_dict["origin_idx"][idx_crop]
-
-        # Handle caption data with index remapping
-        if "caption_data" in data_dict.keys():
-            caption_dict = data_dict["caption_data"]
-            target_key = "caption" if "caption" in caption_dict else "embedding"
-            assert target_key in caption_dict
-            captions_or_embeddings = caption_dict[target_key]
-            # List of point indices for each caption
-            caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
-            assert len(captions_or_embeddings) == len(caption_point_indices)
-            # Filter point_indices that are not in idx_crop and replace it with the new index
-            new_index = np.arange(len(idx_crop))
-            to_new_index = np.ones(num_points_before, dtype=int) * -1
-            to_new_index[idx_crop] = new_index
-            new_caption_index = [
-                to_new_index[point_indices] for point_indices in caption_point_indices
-            ]
-            # Remove -1 index
-            new_caption_index = [
-                point_indices[point_indices != -1] for point_indices in new_caption_index
-            ]
-            # caption indices of non empty arrays
-            valid_caption_indices = [
-                i for i, point_indices in enumerate(new_caption_index) if len(point_indices) > 0
-            ]
-            # Filter out empty arrays
-            new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
-            captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
-            data_dict["caption_data"] = {
-                target_key: captions_or_embeddings,
-                "idx": new_caption_index,
-            }
-
-        # Handle clip point indices with index remapping
-        if "clip_point_indices" in data_dict.keys():
-            clip_point_indices = data_dict["clip_point_indices"]
-            new_index = torch.arange(len(idx_crop))
-            to_new_index = torch.full((num_points_before,), -1, dtype=torch.long)
-            to_new_index[idx_crop] = new_index
-            new_clip_point_indices = [
-                to_new_index[clip_point_index] for clip_point_index in clip_point_indices
-            ]
-            # Remove -1 index
-            new_clip_point_indices = [
-                new_clip_point_index[new_clip_point_index != -1]
-                for new_clip_point_index in new_clip_point_indices
-            ]
-            new_clip_point_indices = torch.cat(new_clip_point_indices)
-            data_dict["clip_point_indices"] = new_clip_point_indices
-
-        # Filter out captions that have no points
-        if "caption_data" in data_dict:
-            caption_dict = data_dict["caption_data"]
-            target_key = "caption" if "caption" in caption_dict else "embedding"
-            assert target_key in caption_dict
-            captions_or_embeddings = caption_dict[target_key]
-            # List of point indices for each caption
-            caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
-
-            # Filter out captions that have no points
-            valid_caption_indices = [
-                i
-                for i, point_indices in enumerate(caption_point_indices)
-                if len(point_indices) > 0
-            ]
-            # Filter out captions that have no points
-            if len(valid_caption_indices) != len(captions_or_embeddings):
-                caption_point_indices = [caption_point_indices[i] for i in valid_caption_indices]
-                captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
-            # Assert that all captions have points
-            assert all(len(point_indices) > 0 for point_indices in caption_point_indices)
-            data_dict["caption_data"] = {
-                target_key: captions_or_embeddings,
-                "idx": caption_point_indices,
-            }
+        # Use base class methods for data remapping and indexing
+        data_dict = self._apply_point_indexing(data_dict, idx_crop)
+        data_dict = self._remap_caption_data(data_dict, idx_crop, original_size)
+        data_dict = self._remap_clip_point_indices(data_dict, idx_crop, original_size)
+        data_dict = self._filter_empty_captions(data_dict)
 
         return data_dict
+
+    def _grid_downsample(self, data_dict):
+        """
+        Apply grid downsampling to the point cloud for computational efficiency.
+
+        This method performs voxel-based downsampling where the point cloud is divided
+        into a regular 3D grid and one representative point is randomly selected from
+        each occupied voxel. This preprocessing step can significantly reduce
+        computational cost for subsequent spatial operations.
+
+        Args:
+            data_dict (dict): Dictionary containing point cloud data with "coord" field
+
+        Returns:
+            tuple: (downsampled_indices, original_data_dict)
+                - downsampled_indices (np.ndarray): Indices of selected points (shape: [M])
+                - original_data_dict (dict): Unchanged input data_dict
+
+        Note:
+            - If voxel_size is None, returns all point indices (no downsampling)
+            - Uses random selection within each voxel for diversity
+            - Coordinate scaling: coord / voxel_size
+            - Grid origin is shifted to ensure non-negative indices
+
+        Examples:
+            >>> # With voxel_size specified
+            >>> crop = BaseCrop(voxel_size=0.05)
+            >>> indices, data = crop._grid_downsample({"coord": points})
+            >>> len(indices) < len(points)  # True - points reduced
+
+            >>> # Without voxel_size
+            >>> crop = BaseCrop()
+            >>> indices, data = crop._grid_downsample({"coord": points})
+            >>> len(indices) == len(points)  # True - no downsampling
+        """
+        if self.voxel_size is None:
+            # No downsampling, return all indices
+            return np.arange(len(data_dict["coord"])), data_dict
+
+        scaled_coord = data_dict["coord"] / np.array(self.voxel_size)
+        grid_coord = np.floor(scaled_coord).astype(int)
+        min_coord = grid_coord.min(0)
+        grid_coord -= min_coord
+
+        key = self.hash(grid_coord)
+        idx_sort = np.argsort(key)
+        key_sort = key[idx_sort]
+        _, inverse, count = np.unique(key_sort, return_inverse=True, return_counts=True)
+
+        # Use train mode logic - randomly select one point per voxel
+        idx_select = (
+            np.cumsum(np.insert(count, 0, 0)[0:-1])
+            + np.random.randint(0, count.max(), count.size) % count
+        )
+        idx_unique = idx_sort[idx_select]
+
+        return idx_unique, data_dict
 
     def _apply_clip_point_indices(self, idx_crop, data_dict):
         """Apply clip point indices if present in data_dict."""
@@ -1025,6 +1252,36 @@ class BaseCrop:
             idx_crop[-num_replace:] = clip_point_indices.numpy()
         return idx_crop
 
+    @staticmethod
+    def ravel_hash_vec(arr):
+        """Ravel the coordinates after subtracting the min coordinates."""
+        assert arr.ndim == 2
+        arr = arr.copy()
+        arr -= arr.min(0)
+        arr = arr.astype(np.uint64, copy=False)
+        arr_max = arr.max(0).astype(np.uint64) + 1
+
+        keys = np.zeros(arr.shape[0], dtype=np.uint64)
+        # Fortran style indexing
+        for j in range(arr.shape[1] - 1):
+            keys += arr[:, j]
+            keys *= arr_max[j + 1]
+        keys += arr[:, -1]
+        return keys
+
+    @staticmethod
+    def fnv_hash_vec(arr):
+        """FNV64-1A."""
+        assert arr.ndim == 2
+        # Floor first for negative coordinates
+        arr = arr.copy()
+        arr = arr.astype(np.uint64, copy=False)
+        hashed_arr = np.uint64(14695981039346656037) * np.ones(arr.shape[0], dtype=np.uint64)
+        for j in range(arr.shape[1]):
+            hashed_arr *= np.uint64(1099511628211)
+            hashed_arr = np.bitwise_xor(hashed_arr, arr[:, j])
+        return hashed_arr
+
     def __call__(self, data_dict):
         """Must be implemented by subclasses."""
         raise NotImplementedError("Subclasses must implement __call__ method")
@@ -1032,55 +1289,156 @@ class BaseCrop:
 
 @TRANSFORMS.register_module()
 class SphereCrop(BaseCrop):
-    """Spherical cropping around a center point."""
+    """
+    Spherical cropping around a center point with optional voxel downsampling.
+
+    This transform selects points within a sphere around a chosen center point.
+    The center can be selected randomly, from the middle of the point cloud, or
+    from points associated with captions. Optionally applies voxel downsampling
+    first for computational efficiency.
+
+    The spherical selection is based on Euclidean distance from the center point,
+    choosing the closest points up to the specified limit.
+
+    Args:
+        point_max (int): Maximum number of points to keep (default: 80000)
+        sample_rate (float, optional): Fraction of original points to keep
+        mode (str): Center selection method:
+            - "random": Random point as center
+            - "center": Middle point of sorted coordinates as center
+            - "captioned": Random point from caption annotations as center
+        voxel_size (float, optional): Voxel size for preprocessing downsampling
+        hash_type (str): Hash function for voxelization ("fnv" or "ravel")
+
+    Examples:
+        >>> # Basic spherical cropping
+        >>> transform = SphereCrop(point_max=50000, mode="random")
+
+        >>> # With voxel downsampling + spherical cropping
+        >>> transform = SphereCrop(
+        ...     sample_rate=0.1,
+        ...     voxel_size=0.05,
+        ...     mode="center"
+        ... )
+
+        >>> # Caption-guided spherical cropping
+        >>> transform = SphereCrop(point_max=80000, mode="captioned")
+    """
 
     def __init__(
         self,
         point_max=80000,
         sample_rate=None,
         mode: Literal["random", "center", "captioned"] = "random",
+        voxel_size=None,
+        hash_type="fnv",
     ):
-        super().__init__(point_max, sample_rate)
-        assert mode in ["random", "center", "captioned"]
-        self.mode = mode
-
-    def _get_center_point(self, data_dict):
-        """Get the center point for spherical cropping based on mode."""
-        if self.mode == "random":
-            return data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
-        elif self.mode == "center":
-            return data_dict["coord"][data_dict["coord"].shape[0] // 2]
-        elif self.mode == "captioned":
-            point_indices = data_dict["caption_data"]["idx"]
-            sel_point_indices = np.random.randint(len(point_indices))
-            random_idx = np.random.choice(point_indices[sel_point_indices])
-            return data_dict["coord"][random_idx]
-        else:
-            raise NotImplementedError(f"Mode {self.mode} not supported")
+        super().__init__(point_max, sample_rate, mode, voxel_size, hash_type)
 
     def __call__(self, data_dict):
         assert "coord" in data_dict.keys()
-        point_max = self._get_point_max(data_dict)
+        original_size = len(data_dict["coord"])
 
-        # Only crop if we have more points than the maximum
-        if data_dict["coord"].shape[0] > point_max:
-            center = self._get_center_point(data_dict)
-            # Find closest points to center
-            distances = np.sum(np.square(data_dict["coord"] - center), 1)
-            idx_crop = np.argsort(distances)[:point_max]
+        # Step 1: Calculate target number of points based on original size
+        # sample_rate and point_max take precedence over voxel_size
+        target_point_max = self._get_point_max(original_size)
 
-            # Apply clip point indices if present
-            idx_crop = self._apply_clip_point_indices(idx_crop, data_dict)
+        # Step 2: Apply grid downsampling if voxel_size is specified
+        idx_downsample, data_dict = self._grid_downsample(data_dict)
 
-            # Apply cropping
-            data_dict = self._crop_data_dict(data_dict, idx_crop)
+        # Step 3: Apply spherical cropping to reach target_point_max
+        if len(idx_downsample) > target_point_max:
+            # Get center point using downsampled coordinates
+            downsampled_coords = data_dict["coord"][idx_downsample]
+            center = self._get_center_point_from_coords(
+                downsampled_coords, data_dict, idx_downsample
+            )
+
+            # Find closest points to center among downsampled points
+            distances = np.sum(np.square(downsampled_coords - center), 1)
+            idx_crop_local = np.argsort(distances)[:target_point_max]
+
+            # Map back to original indices
+            idx_final = idx_downsample[idx_crop_local]
+        else:
+            # Use all downsampled points (fewer than target)
+            idx_final = idx_downsample
+
+        # Apply clip point indices if present
+        idx_final = self._apply_clip_point_indices(idx_final, data_dict)
+
+        # Apply final cropping using combined indices
+        data_dict = self._crop_data_dict(data_dict, idx_final)
 
         return data_dict
+
+    def _get_center_point_from_coords(self, coords, data_dict, coord_indices):
+        """Get center point for cropping from given coordinates."""
+        if self.mode == "random":
+            return coords[np.random.randint(len(coords))]
+        elif self.mode == "center":
+            return coords[len(coords) // 2]
+        elif self.mode == "captioned":
+            assert "caption_data" in data_dict, "Caption data is required for captioned mode"
+            point_indices = data_dict["caption_data"]["idx"]
+            sel_point_indices = np.random.randint(len(point_indices))
+            caption_point_idx = np.random.choice(point_indices[sel_point_indices])
+
+            # Find the index in coord_indices that matches caption_point_idx
+            coord_mask = np.isin(coord_indices, caption_point_idx)
+            if coord_mask.any():
+                local_idx = np.where(coord_mask)[0][0]
+                return coords[local_idx]
+            else:
+                # Fallback to random if caption point not in downsampled set
+                return coords[np.random.randint(len(coords))]
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not supported")
 
 
 @TRANSFORMS.register_module()
 class RectCrop(BaseCrop):
-    """Rectangular/cubic cropping around a center point."""
+    """
+    Rectangular/cubic cropping around a center point with optional voxel downsampling.
+
+    This transform selects points within a rectangular bounding box around a chosen
+    center point. The bounding box can have uniform or different dimensions for each
+    axis. If the rectangular region contains fewer points than requested, falls back
+    to distance-based selection.
+
+    Args:
+        point_max (int): Maximum number of points to keep (default: 80000)
+        sample_rate (float, optional): Fraction of original points to keep
+        size (float or tuple, optional): Size of rectangular crop region
+            - float: Uniform size for all dimensions (creates a cube)
+            - tuple: (x_size, y_size, z_size) for different dimensions
+            - None: Falls back to distance-based selection
+        mode (str): Center selection method:
+            - "random": Random point as center
+            - "center": Middle point of sorted coordinates as center
+            - "captioned": Random point from caption annotations as center
+        voxel_size (float, optional): Voxel size for preprocessing downsampling
+        hash_type (str): Hash function for voxelization ("fnv" or "ravel")
+
+    Examples:
+        >>> # Cubic cropping
+        >>> transform = RectCrop(point_max=50000, size=10.0, mode="center")
+
+        >>> # Non-uniform rectangular cropping
+        >>> transform = RectCrop(
+        ...     sample_rate=0.15,
+        ...     size=(20, 20, 5),  # 20x20x5 box
+        ...     mode="random"
+        ... )
+
+        >>> # With voxel preprocessing
+        >>> transform = RectCrop(
+        ...     point_max=80000,
+        ...     size=15.0,
+        ...     voxel_size=0.02,
+        ...     mode="captioned"
+        ... )
+    """
 
     def __init__(
         self,
@@ -1088,25 +1446,11 @@ class RectCrop(BaseCrop):
         sample_rate=None,
         size=None,
         mode: Literal["random", "center", "captioned"] = "random",
+        voxel_size=None,
+        hash_type="fnv",
     ):
-        super().__init__(point_max, sample_rate)
-        assert mode in ["random", "center", "captioned"]
-        self.mode = mode
+        super().__init__(point_max, sample_rate, mode, voxel_size, hash_type)
         self.size = size  # Size of the rectangular crop (can be tuple for different dimensions)
-
-    def _get_center_point(self, data_dict):
-        """Get the center point for rectangular cropping based on mode."""
-        if self.mode == "random":
-            return data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
-        elif self.mode == "center":
-            return data_dict["coord"][data_dict["coord"].shape[0] // 2]
-        elif self.mode == "captioned":
-            point_indices = data_dict["caption_data"]["idx"]
-            sel_point_indices = np.random.randint(len(point_indices))
-            random_idx = np.random.choice(point_indices[sel_point_indices])
-            return data_dict["coord"][random_idx]
-        else:
-            raise NotImplementedError(f"Mode {self.mode} not supported")
 
     def _get_rectangular_indices(self, coords, center, size, point_max):
         """Get indices for points within rectangular bounds."""
@@ -1138,22 +1482,64 @@ class RectCrop(BaseCrop):
 
     def __call__(self, data_dict):
         assert "coord" in data_dict.keys()
-        point_max = self._get_point_max(data_dict)
+        original_size = len(data_dict["coord"])
 
-        # Only crop if we have more points than the maximum
-        if data_dict["coord"].shape[0] > point_max:
-            center = self._get_center_point(data_dict)
-            idx_crop = self._get_rectangular_indices(
-                data_dict["coord"], center, self.size, point_max
+        # Step 1: Calculate target number of points based on original size
+        # sample_rate and point_max take precedence over voxel_size
+        target_point_max = self._get_point_max(original_size)
+
+        # Step 2: Apply grid downsampling if voxel_size is specified
+        idx_downsample, data_dict = self._grid_downsample(data_dict)
+
+        # Step 3: Apply rectangular cropping to reach target_point_max
+        if len(idx_downsample) > target_point_max:
+            # Get center point using downsampled coordinates
+            downsampled_coords = data_dict["coord"][idx_downsample]
+            center = self._get_center_point_from_coords(
+                downsampled_coords, data_dict, idx_downsample
             )
 
-            # Apply clip point indices if present
-            idx_crop = self._apply_clip_point_indices(idx_crop, data_dict)
+            # Get rectangular indices among downsampled points
+            idx_crop_local = self._get_rectangular_indices(
+                downsampled_coords, center, self.size, target_point_max
+            )
 
-            # Apply cropping
-            data_dict = self._crop_data_dict(data_dict, idx_crop)
+            # Map back to original indices
+            idx_final = idx_downsample[idx_crop_local]
+        else:
+            # Use all downsampled points (fewer than target)
+            idx_final = idx_downsample
+
+        # Apply clip point indices if present
+        idx_final = self._apply_clip_point_indices(idx_final, data_dict)
+
+        # Apply final cropping using combined indices
+        data_dict = self._crop_data_dict(data_dict, idx_final)
 
         return data_dict
+
+    def _get_center_point_from_coords(self, coords, data_dict, coord_indices):
+        """Get center point for cropping from given coordinates."""
+        if self.mode == "random":
+            return coords[np.random.randint(len(coords))]
+        elif self.mode == "center":
+            return coords[len(coords) // 2]
+        elif self.mode == "captioned":
+            assert "caption_data" in data_dict, "Caption data is required for captioned mode"
+            point_indices = data_dict["caption_data"]["idx"]
+            sel_point_indices = np.random.randint(len(point_indices))
+            caption_point_idx = np.random.choice(point_indices[sel_point_indices])
+
+            # Find the index in coord_indices that matches caption_point_idx
+            coord_mask = np.isin(coord_indices, caption_point_idx)
+            if coord_mask.any():
+                local_idx = np.where(coord_mask)[0][0]
+                return coords[local_idx]
+            else:
+                # Fallback to random if caption point not in downsampled set
+                return coords[np.random.randint(len(coords))]
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not supported")
 
 
 @TRANSFORMS.register_module()
