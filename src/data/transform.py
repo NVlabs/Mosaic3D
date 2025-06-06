@@ -3,7 +3,7 @@ import numbers
 import random
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from typing import List, Optional
+from typing import List, Optional, Literal
 import re
 
 import numpy as np
@@ -888,159 +888,106 @@ class GridSample:
         return hashed_arr
 
 
-@TRANSFORMS.register_module()
-class SphereCrop:
-    def __init__(self, point_max=80000, sample_rate=None, mode="random"):
+class BaseCrop:
+    """Base class for point cloud cropping operations."""
+
+    def __init__(self, point_max=80000, sample_rate=None):
         self.point_max = point_max
         self.sample_rate = sample_rate
-        assert mode in ["random", "center", "all", "captioned"]
-        self.mode = mode
 
-    def __call__(self, data_dict):
-        point_max = (
+    def _get_point_max(self, data_dict):
+        """Calculate the maximum number of points to keep."""
+        return (
             int(self.sample_rate * data_dict["coord"].shape[0])
             if self.sample_rate is not None
             else self.point_max
         )
 
-        assert "coord" in data_dict.keys()
-        if self.mode == "all":
-            raise NotImplementedError("Deprecated")
-            # TODO: Optimize
-            if "index" not in data_dict.keys():
-                data_dict["index"] = np.arange(data_dict["coord"].shape[0])
-            data_part_list = []
-            coord_list, color_list, dist2_list, idx_list, offset_list = [], [], [], [], []
-            if data_dict["coord"].shape[0] > point_max:
-                coord_p, idx_uni = np.random.rand(data_dict["coord"].shape[0]) * 1e-3, np.array([])
-                while idx_uni.size != data_dict["index"].shape[0]:
-                    init_idx = np.argmin(coord_p)
-                    dist2 = np.sum(
-                        np.power(data_dict["coord"] - data_dict["coord"][init_idx], 2),
-                        1,
-                    )
-                    idx_crop = np.argsort(dist2)[:point_max]
+    def _crop_data_dict(self, data_dict, idx_crop):
+        """
+        Apply cropping to data_dict based on idx_crop indices.
 
-                    data_crop_dict = dict()
-                    if "coord" in data_dict.keys():
-                        data_crop_dict["coord"] = data_dict["coord"][idx_crop]
-                    if "grid_coord" in data_dict.keys():
-                        data_crop_dict["grid_coord"] = data_dict["grid_coord"][idx_crop]
-                    if "normal" in data_dict.keys():
-                        data_crop_dict["normal"] = data_dict["normal"][idx_crop]
-                    if "color" in data_dict.keys():
-                        data_crop_dict["color"] = data_dict["color"][idx_crop]
-                    if "displacement" in data_dict.keys():
-                        data_crop_dict["displacement"] = data_dict["displacement"][idx_crop]
-                    if "strength" in data_dict.keys():
-                        data_crop_dict["strength"] = data_dict["strength"][idx_crop]
-                    data_crop_dict["weight"] = dist2[idx_crop]
-                    data_crop_dict["index"] = data_dict["index"][idx_crop]
-                    data_part_list.append(data_crop_dict)
+        Args:
+            data_dict: Dictionary containing point cloud data
+            idx_crop: Indices to keep after cropping
 
-                    delta = np.square(
-                        1 - data_crop_dict["weight"] / np.max(data_crop_dict["weight"])
-                    )
-                    coord_p[idx_crop] += delta
-                    idx_uni = np.unique(np.concatenate((idx_uni, data_crop_dict["index"])))
-            else:
-                data_crop_dict = data_dict.copy()
-                data_crop_dict["weight"] = np.zeros(data_dict["coord"].shape[0])
-                data_crop_dict["index"] = data_dict["index"]
-                data_part_list.append(data_crop_dict)
-            return data_part_list
-        # mode is "random" or "center"
-        elif data_dict["coord"].shape[0] > point_max:
-            if self.mode == "random":
-                center = data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
-            elif self.mode == "center":
-                center = data_dict["coord"][data_dict["coord"].shape[0] // 2]
-            elif self.mode == "captioned":
-                point_indices = data_dict["caption_data"]["idx"]
-                sel_point_indices = np.random.randint(len(point_indices))
-                random_idx = np.random.choice(point_indices[sel_point_indices])
-                center = data_dict["coord"][random_idx]
-            else:
-                raise NotImplementedError
-            num_points_before = data_dict["coord"].shape[0]
-            idx_crop = np.argsort(np.sum(np.square(data_dict["coord"] - center), 1))[:point_max]
+        Returns:
+            Cropped data_dict
+        """
+        num_points_before = data_dict["coord"].shape[0]
 
-            # If needed, we intentionally include specific point clouds.
-            if "clip_point_indices" in data_dict.keys():
-                clip_point_indices = data_dict["clip_point_indices"]
-                num_replace = len(clip_point_indices)
-                idx_crop[-num_replace:] = clip_point_indices.numpy()
+        # Crop basic point cloud fields
+        if "coord" in data_dict.keys():
+            data_dict["coord"] = data_dict["coord"][idx_crop]
+        if "origin_coord" in data_dict.keys():
+            data_dict["origin_coord"] = data_dict["origin_coord"][idx_crop]
+        if "grid_coord" in data_dict.keys():
+            data_dict["grid_coord"] = data_dict["grid_coord"][idx_crop]
+        if "color" in data_dict.keys():
+            data_dict["color"] = data_dict["color"][idx_crop]
+        if "normal" in data_dict.keys():
+            data_dict["normal"] = data_dict["normal"][idx_crop]
+        if "segment" in data_dict.keys():
+            data_dict["segment"] = data_dict["segment"][idx_crop]
+        if "binary" in data_dict.keys():
+            data_dict["binary"] = data_dict["binary"][idx_crop]
+        if "instance" in data_dict.keys():
+            data_dict["instance"] = data_dict["instance"][idx_crop]
+        if "displacement" in data_dict.keys():
+            data_dict["displacement"] = data_dict["displacement"][idx_crop]
+        if "strength" in data_dict.keys():
+            data_dict["strength"] = data_dict["strength"][idx_crop]
+        if "origin_idx" in data_dict.keys():
+            data_dict["origin_idx"] = data_dict["origin_idx"][idx_crop]
 
-            # Crop point clouds
-            if "coord" in data_dict.keys():
-                data_dict["coord"] = data_dict["coord"][idx_crop]
-            if "origin_coord" in data_dict.keys():
-                data_dict["origin_coord"] = data_dict["origin_coord"][idx_crop]
-            if "grid_coord" in data_dict.keys():
-                data_dict["grid_coord"] = data_dict["grid_coord"][idx_crop]
-            if "color" in data_dict.keys():
-                data_dict["color"] = data_dict["color"][idx_crop]
-            if "normal" in data_dict.keys():
-                data_dict["normal"] = data_dict["normal"][idx_crop]
-            if "segment" in data_dict.keys():
-                data_dict["segment"] = data_dict["segment"][idx_crop]
-            if "binary" in data_dict.keys():
-                data_dict["binary"] = data_dict["binary"][idx_crop]
-            if "instance" in data_dict.keys():
-                data_dict["instance"] = data_dict["instance"][idx_crop]
-            if "displacement" in data_dict.keys():
-                data_dict["displacement"] = data_dict["displacement"][idx_crop]
-            if "strength" in data_dict.keys():
-                data_dict["strength"] = data_dict["strength"][idx_crop]
-            if "origin_idx" in data_dict.keys():
-                data_dict["origin_idx"] = data_dict["origin_idx"][idx_crop]
-            if "caption_data" in data_dict.keys():
-                caption_dict = data_dict["caption_data"]
-                target_key = "caption" if "caption" in caption_dict else "embedding"
-                assert target_key in caption_dict
-                captions_or_embeddings = caption_dict[target_key]
-                # List of point indices for each caption
-                caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
-                assert len(captions_or_embeddings) == len(caption_point_indices)
-                # Filter point_indices that are not in idx_crop and replace it with the new index
-                new_index = np.arange(len(idx_crop))
-                to_new_index = np.ones(num_points_before, dtype=int) * -1
-                to_new_index[idx_crop] = new_index
-                new_caption_index = [
-                    to_new_index[point_indices] for point_indices in caption_point_indices
-                ]
-                # Remove -1 index
-                new_caption_index = [
-                    point_indices[point_indices != -1] for point_indices in new_caption_index
-                ]
-                # caption indices of non empty arrays
-                valid_caption_indices = [
-                    i
-                    for i, point_indices in enumerate(new_caption_index)
-                    if len(point_indices) > 0
-                ]
-                # Filter out empty arrays
-                new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
-                captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
-                data_dict["caption_data"] = {
-                    target_key: captions_or_embeddings,
-                    "idx": new_caption_index,
-                }
-            if "clip_point_indices" in data_dict.keys():
-                clip_point_indices = data_dict["clip_point_indices"]
-                new_index = torch.arange(len(idx_crop))
-                to_new_index = torch.full((num_points_before,), -1, dtype=torch.long)
-                to_new_index[idx_crop] = new_index
-                new_clip_point_indices = [
-                    to_new_index[clip_point_index] for clip_point_index in clip_point_indices
-                ]
-                # Remove -1 index
-                new_clip_point_indices = [
-                    new_clip_point_index[new_clip_point_index != -1]
-                    for new_clip_point_index in new_clip_point_indices
-                ]
-                new_clip_point_indices = torch.cat(new_clip_point_indices)
-                data_dict["clip_point_indices"] = new_clip_point_indices
+        # Handle caption data with index remapping
+        if "caption_data" in data_dict.keys():
+            caption_dict = data_dict["caption_data"]
+            target_key = "caption" if "caption" in caption_dict else "embedding"
+            assert target_key in caption_dict
+            captions_or_embeddings = caption_dict[target_key]
+            # List of point indices for each caption
+            caption_point_indices: List[Int[Tensor, "*"]] = caption_dict["idx"]  # noqa: F722
+            assert len(captions_or_embeddings) == len(caption_point_indices)
+            # Filter point_indices that are not in idx_crop and replace it with the new index
+            new_index = np.arange(len(idx_crop))
+            to_new_index = np.ones(num_points_before, dtype=int) * -1
+            to_new_index[idx_crop] = new_index
+            new_caption_index = [
+                to_new_index[point_indices] for point_indices in caption_point_indices
+            ]
+            # Remove -1 index
+            new_caption_index = [
+                point_indices[point_indices != -1] for point_indices in new_caption_index
+            ]
+            # caption indices of non empty arrays
+            valid_caption_indices = [
+                i for i, point_indices in enumerate(new_caption_index) if len(point_indices) > 0
+            ]
+            # Filter out empty arrays
+            new_caption_index = [new_caption_index[i] for i in valid_caption_indices]
+            captions_or_embeddings = [captions_or_embeddings[i] for i in valid_caption_indices]
+            data_dict["caption_data"] = {
+                target_key: captions_or_embeddings,
+                "idx": new_caption_index,
+            }
+
+        # Handle clip point indices with index remapping
+        if "clip_point_indices" in data_dict.keys():
+            clip_point_indices = data_dict["clip_point_indices"]
+            new_index = torch.arange(len(idx_crop))
+            to_new_index = torch.full((num_points_before,), -1, dtype=torch.long)
+            to_new_index[idx_crop] = new_index
+            new_clip_point_indices = [
+                to_new_index[clip_point_index] for clip_point_index in clip_point_indices
+            ]
+            # Remove -1 index
+            new_clip_point_indices = [
+                new_clip_point_index[new_clip_point_index != -1]
+                for new_clip_point_index in new_clip_point_indices
+            ]
+            new_clip_point_indices = torch.cat(new_clip_point_indices)
+            data_dict["clip_point_indices"] = new_clip_point_indices
 
         # Filter out captions that have no points
         if "caption_data" in data_dict:
@@ -1067,6 +1014,144 @@ class SphereCrop:
                 target_key: captions_or_embeddings,
                 "idx": caption_point_indices,
             }
+
+        return data_dict
+
+    def _apply_clip_point_indices(self, idx_crop, data_dict):
+        """Apply clip point indices if present in data_dict."""
+        if "clip_point_indices" in data_dict.keys():
+            clip_point_indices = data_dict["clip_point_indices"]
+            num_replace = len(clip_point_indices)
+            idx_crop[-num_replace:] = clip_point_indices.numpy()
+        return idx_crop
+
+    def __call__(self, data_dict):
+        """Must be implemented by subclasses."""
+        raise NotImplementedError("Subclasses must implement __call__ method")
+
+
+@TRANSFORMS.register_module()
+class SphereCrop(BaseCrop):
+    """Spherical cropping around a center point."""
+
+    def __init__(
+        self,
+        point_max=80000,
+        sample_rate=None,
+        mode: Literal["random", "center", "captioned"] = "random",
+    ):
+        super().__init__(point_max, sample_rate)
+        assert mode in ["random", "center", "captioned"]
+        self.mode = mode
+
+    def _get_center_point(self, data_dict):
+        """Get the center point for spherical cropping based on mode."""
+        if self.mode == "random":
+            return data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
+        elif self.mode == "center":
+            return data_dict["coord"][data_dict["coord"].shape[0] // 2]
+        elif self.mode == "captioned":
+            point_indices = data_dict["caption_data"]["idx"]
+            sel_point_indices = np.random.randint(len(point_indices))
+            random_idx = np.random.choice(point_indices[sel_point_indices])
+            return data_dict["coord"][random_idx]
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not supported")
+
+    def __call__(self, data_dict):
+        assert "coord" in data_dict.keys()
+        point_max = self._get_point_max(data_dict)
+
+        # Only crop if we have more points than the maximum
+        if data_dict["coord"].shape[0] > point_max:
+            center = self._get_center_point(data_dict)
+            # Find closest points to center
+            distances = np.sum(np.square(data_dict["coord"] - center), 1)
+            idx_crop = np.argsort(distances)[:point_max]
+
+            # Apply clip point indices if present
+            idx_crop = self._apply_clip_point_indices(idx_crop, data_dict)
+
+            # Apply cropping
+            data_dict = self._crop_data_dict(data_dict, idx_crop)
+
+        return data_dict
+
+
+@TRANSFORMS.register_module()
+class RectCrop(BaseCrop):
+    """Rectangular/cubic cropping around a center point."""
+
+    def __init__(
+        self,
+        point_max=80000,
+        sample_rate=None,
+        size=None,
+        mode: Literal["random", "center", "captioned"] = "random",
+    ):
+        super().__init__(point_max, sample_rate)
+        assert mode in ["random", "center", "captioned"]
+        self.mode = mode
+        self.size = size  # Size of the rectangular crop (can be tuple for different dimensions)
+
+    def _get_center_point(self, data_dict):
+        """Get the center point for rectangular cropping based on mode."""
+        if self.mode == "random":
+            return data_dict["coord"][np.random.randint(data_dict["coord"].shape[0])]
+        elif self.mode == "center":
+            return data_dict["coord"][data_dict["coord"].shape[0] // 2]
+        elif self.mode == "captioned":
+            point_indices = data_dict["caption_data"]["idx"]
+            sel_point_indices = np.random.randint(len(point_indices))
+            random_idx = np.random.choice(point_indices[sel_point_indices])
+            return data_dict["coord"][random_idx]
+        else:
+            raise NotImplementedError(f"Mode {self.mode} not supported")
+
+    def _get_rectangular_indices(self, coords, center, size, point_max):
+        """Get indices for points within rectangular bounds."""
+        if size is None:
+            # Fallback to taking closest points if no size specified
+            distances = np.sum(np.square(coords - center), 1)
+            return np.argsort(distances)[:point_max]
+
+        # Convert size to array for broadcasting
+        if isinstance(size, (int, float)):
+            size = np.array([size, size, size])
+        else:
+            size = np.array(size)
+
+        # Find points within rectangular bounds
+        diff = np.abs(coords - center)
+        within_bounds = np.all(diff <= size / 2, axis=1)
+        valid_indices = np.where(within_bounds)[0]
+
+        # If we have more points than needed, randomly sample
+        if len(valid_indices) > point_max:
+            valid_indices = np.random.choice(valid_indices, point_max, replace=False)
+        # If we don't have enough points, fall back to distance-based selection
+        elif len(valid_indices) < point_max:
+            distances = np.sum(np.square(coords - center), 1)
+            valid_indices = np.argsort(distances)[:point_max]
+
+        return valid_indices
+
+    def __call__(self, data_dict):
+        assert "coord" in data_dict.keys()
+        point_max = self._get_point_max(data_dict)
+
+        # Only crop if we have more points than the maximum
+        if data_dict["coord"].shape[0] > point_max:
+            center = self._get_center_point(data_dict)
+            idx_crop = self._get_rectangular_indices(
+                data_dict["coord"], center, self.size, point_max
+            )
+
+            # Apply clip point indices if present
+            idx_crop = self._apply_clip_point_indices(idx_crop, data_dict)
+
+            # Apply cropping
+            data_dict = self._crop_data_dict(data_dict, idx_crop)
 
         return data_dict
 
