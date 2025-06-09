@@ -54,9 +54,9 @@ train_dataset:
         - type: ChromaticJitter
           p: 0.95
           std: 0.05
-        # - type: SphereCrop
-        #   point_max: 250000
-        #   mode: random
+        - type: RectCrop
+          size: 2
+          mode: captioned
         - type: CenterShift
           apply_z: false
         - type: NormalizeColor
@@ -128,11 +128,9 @@ train_dataset:
         - type: ChromaticJitter
           p: 0.95
           std: 0.05
-        - type: SphereCrop
-          sample_rate: 0.8
-          mode: captioned
-        - type: SphereCrop
-          point_max: 120000
+        - type: RectCrop
+          voxel_size: 0.01
+          size: 2
           mode: captioned
         - type: NormalizeColor
         - type: Add

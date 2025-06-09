@@ -100,6 +100,8 @@ export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
 pip install flash-attn warp-lang;
 pip install --force-reinstall --no-deps ./warpconvnet;
+export WARPCONVNET_FWD_ALGO_MODE=explicit_gemm;
+export WARPCONVNET_BWD_ALGO_MODE=explicit_gemm;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \
