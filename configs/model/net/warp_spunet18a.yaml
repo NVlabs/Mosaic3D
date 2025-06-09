@@ -1,0 +1,14 @@
+# @package model.net
+_target_: src.models.networks.warp.mink_unet.MinkUNetToCLIP
+_partial_: true
+
+backbone_cfg:
+  in_channels: ${data.in_channel}
+  # out_channels: 192
+  out_channels: ${model.clip_encoder.text_dim}
+  # MinkUNet18A
+  planes: [32, 64, 128, 256, 128, 128, 96, 96]
+  layers: [2, 2, 2, 2, 2, 2, 2, 2]
+  init_dim: 32
+  voxel_size: 0.02
+  block_types: "bbbbbbbb"

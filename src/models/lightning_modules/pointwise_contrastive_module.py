@@ -63,9 +63,6 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
             return
 
         self.net = self.hparams.net()
-        # Print network on the first GPU
-        if self.local_rank == 0:
-            log.info(self.net)
 
         # Clip encoder
         self.clip_encoder = get_text_encoder(

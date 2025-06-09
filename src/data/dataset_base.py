@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from src.data.transform import Compose
 from src.utils import RankedLogger
 
-log = RankedLogger(__name__, rank_zero_only=False)
+log = RankedLogger(__name__, rank_zero_only=True)
 
 
 class DatasetBase(Dataset, metaclass=ABCMeta):
