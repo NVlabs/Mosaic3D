@@ -1,0 +1,11 @@
+# @package model.net
+_target_: src.models.networks.warp.model.WarpModel
+_partial_: true
+
+voxel_size: 0.02
+
+backbone:
+  _target_: warpconvnet.models.backbones.point_transformer_v3.PointTransformerV3
+  in_channels: ${data.in_channel}
+  out_channels: ${model.clip_encoder.text_dim}
+  rand_perm_patch: true
