@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Union
 from jaxtyping import Float
 
 import os
@@ -10,6 +10,8 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 from torchmetrics import MaxMetric
+
+from lightning.pytorch.core.module import Optimizer, LightningOptimizer
 
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_pointwise_contrastive_loss import CaptionPointwiseContrastiveLoss
@@ -56,6 +58,9 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
 
         self.validation_evaluators = None
         self.val_dataset_names = {}  # To map dataloader_idx to postfix
+
+        self.skip_current_optimizer_step_count = 0
+        self.skip_current_optimizer_step = False
 
     def configure_model(self) -> None:
         # network
@@ -226,6 +231,48 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
             sync_dist=self.train_sync_dist,
         )
         return loss
+
+    def optimizer_step(
+        self,
+        epoch: int,
+        batch_idx: int,
+        optimizer: Union[Optimizer, LightningOptimizer],
+        optimizer_closure: Optional[Callable[[], Any]] = None,
+        **kwargs,
+    ):
+        """
+        Skipping updates in case of unstable gradients
+        https://github.com/Lightning-AI/lightning/issues/4956
+        """
+        time_start = time.time()
+        valid_gradients = True
+        rand_param_idx = random.randint(0, len(list(self.named_parameters())) - 1)
+        for name, param in list(self.named_parameters())[rand_param_idx:]:
+            if param.grad is not None:
+                # valid_gradients = not (torch.isnan(param.grad).any() or torch.isinf(param.grad).any())
+                valid_gradients = not (torch.isnan(param.grad).any())
+                if not valid_gradients:
+                    break
+        if not valid_gradients:
+            self.skip_current_optimizer_step_count += 1
+            log.warning(
+                f"detected inf or nan values in gradients. not updating model parameters. "
+                f"Skipped {self.skip_current_optimizer_step_count} optimizer steps."
+            )
+            if self.skip_current_optimizer_step_count > 10:
+                raise ValueError("Too many optimizer steps skipped. Check the loss function.")
+            self.zero_grad()
+
+        super().optimizer_step(epoch, batch_idx, optimizer, optimizer_closure, **kwargs)
+        time_end = time.time()
+        self.log(
+            "train/time/backward",
+            time_end - time_start,
+            prog_bar=False,
+            logger=True,
+            on_step=True,
+            on_epoch=False,
+        )
 
     def on_validation_epoch_start(self):
         """Called before the validation epoch begins."""

@@ -21,6 +21,8 @@ from warpconvnet.nn.modules.sparse_pool import PointToSparseWrapper
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
+torch.set_float32_matmul_precision("medium")
+
 
 class WarpModel(NetworkBaseDict):
     """Convert a point cloud to a language aligned feature vector using various backbones."""
