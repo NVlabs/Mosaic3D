@@ -49,6 +49,7 @@ dependencies = [
     "einops",
     "natsort",
     "scikit-image",
+    "overrides",
 
     # CLIP
     "accelerate>=0.26.0",

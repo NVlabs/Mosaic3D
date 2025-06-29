@@ -1,14 +1,8 @@
-import os
-from glob import glob
 from pathlib import Path
-from typing import List, Literal, Optional, Union, Dict, Tuple
+from typing import List, Optional, Dict, Tuple
 
-import fire
 import numpy as np
 import torch
-from clip import clip
-from PIL import Image
-from tqdm import tqdm
 import json
 
 from src.data.dataset_base import DatasetBase

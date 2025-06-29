@@ -8,7 +8,6 @@
 #SBATCH --output=slurm_outputs/%j.log
 #SBATCH --job-name=openvocab-3d-training
 #SBATCH --signal=SIGUSR1@300             # Send SIGUSR1 300 seconds before time limit
-#SBATCH --gres=gpu:8
 
 # Usage:
 #
@@ -23,7 +22,7 @@
 GPU_COUNT=$(scontrol show job "$SLURM_JOBID" | grep gres | awk -F: '{print $3}' | tr -d '[:space:]')
 
 # Set default TAG to "warp"
-TAG="default"
+TAG="warpconvnet"
 
 # Check if the next argument doesn't start with "--" or contains "=" (indicating it's a TAG)
 if [[ $# -gt 0 && ${1:0:2} != "--" && ! $1 =~ "=" ]]; then
@@ -33,6 +32,20 @@ fi
 
 # Training arguments
 TRAINING_ARGS=("$@")
+
+# Check if use_url_directly=true is in the arguments and filter it out
+USE_URL_DIRECTLY=false
+FILTERED_TRAINING_ARGS=()
+for arg in "${TRAINING_ARGS[@]}"; do
+    if [[ "$arg" == "use_url_directly=true" ]]; then
+        USE_URL_DIRECTLY=true
+    else
+        FILTERED_TRAINING_ARGS+=("$arg")
+    fi
+done
+
+# Update TRAINING_ARGS to the filtered version
+TRAINING_ARGS=("${FILTERED_TRAINING_ARGS[@]}")
 
 NODE=$(hostname -s)
 USER=$(whoami)
@@ -69,18 +82,24 @@ Running a GPU job on
     TRAINING_ARGS: ${TRAINING_ARGS[*]}
 "
 
-# Cache docker file
-# Check if the cache_image.sh exists
-if [ -f "$LUSTRE_HOME/sbatch/cache_image.sh" ]; then
-    # Cache the image
-    # shellcheck source=/dev/null
-    source "$LUSTRE_HOME/sbatch/cache_image.sh"
-
-    SQSH_CACHE_DIR=${PROJECT_ROOT}/enroot-cache
-    IMAGE_CACHE_FILE=$(cache_image "$IMAGE_URL" "$ACCOUNT" "$SQSH_CACHE_DIR")
-else
-    echo "$LUSTRE_HOME/sbatch/cache_image.sh does not exist. Using ${IMAGE_URL} without caching."
+# Determine the container image to use
+if [ "$USE_URL_DIRECTLY" = true ]; then
+    echo "Using image URL directly: $IMAGE_URL"
     IMAGE_CACHE_FILE=${IMAGE_URL}
+else
+    # Cache docker file
+    # Check if the cache_image.sh exists
+    if [ -f "$LUSTRE_HOME/sbatch/cache_image.sh" ]; then
+        # Cache the image
+        # shellcheck source=/dev/null
+        source "$LUSTRE_HOME/sbatch/cache_image.sh"
+
+        SQSH_CACHE_DIR=${PROJECT_ROOT}/enroot-cache
+        IMAGE_CACHE_FILE=$(cache_image "$IMAGE_URL" "$ACCOUNT" "$SQSH_CACHE_DIR")
+    else
+        echo "$LUSTRE_HOME/sbatch/cache_image.sh does not exist. Using ${IMAGE_URL} without caching."
+        IMAGE_CACHE_FILE=${IMAGE_URL}
+    fi
 fi
 
 TRAINER="ddp" # Default trainer
@@ -98,10 +117,9 @@ nvidia-smi;
 export HF_HUB_CACHE=${HF_HUB_CACHE};
 export PYTHONPATH=/workspace;
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True;
-pip install flash-attn warp-lang;
-pip install --force-reinstall --no-deps ./warpconvnet;
-export WARPCONVNET_FWD_ALGO_MODE=explicit_gemm;
-export WARPCONVNET_BWD_ALGO_MODE=explicit_gemm;
+source /workspace/.venv/bin/activate;
+mkdir -p ~/.cache;
+ln -s ${LUSTRE_HOME}/.cache/warpconvnet ~/.cache/warpconvnet;
 torchrun \
     --nnodes=1 \
     --nproc_per_node=${GPU_COUNT} \

@@ -24,6 +24,7 @@ trainer:
   max_steps: 50000
   val_check_interval: 500
   check_val_every_n_epoch: !!null
+  precision: 16-mixed
 
 logger:
   wandb:
