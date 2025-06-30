@@ -129,9 +129,8 @@ class HPCSignalHandler:
         if exc_type is not None:
             log.error(f"Exception: {exc_type} - {exc_value}")
             self.STATUS = "ERROR"
-
-        # When it goes out of context without stopping, or error, then it is finished.
-        if not self.is_stopped():
+        elif not self.is_stopped():
+            # When it goes out of context without stopping, or error, then it is finished.
             self.STATUS = "FINISHED"
 
     def _register_sigusr_handler(self, stop_signals: List[_SIGNUM]):
