@@ -1,0 +1,28 @@
+_target_: src.models.lightning_modules.pointwise_contrastive_module_manual_opt.PointwiseContrastiveLanguageLitModuleManualOpt
+
+net:
+  _target_: src.models.networks.warp.model.WarpModel
+  _partial_: true
+
+  voxel_size: 0.02
+
+  backbone:
+    _target_: warpconvnet.models.backbones.point_transformer_v3.PointTransformerV3
+    in_channels: ${data.in_channel}
+    out_channels: ${model.clip_encoder.text_dim}
+    shuffle_orders: true
+    attn_type: patch
+
+loss_cfg:
+  caption_loss:
+    _target_: src.models.losses.caption_pointwise_contrastive_loss.CaptionPointwiseContrastiveLoss
+    _partial_: true
+    normalize: true
+    use_logit_scale: true
+
+eval_cfg:
+  ignore_background: false # Passed to ValidationEvaluator indirectly via dataset info
+  ignore_class_prob: false # Likely not used in this module's validation logic
+
+use_prompt: true
+compile: false

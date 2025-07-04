@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable, Union, Literal
 from jaxtyping import Float
 
 import os
@@ -241,10 +241,12 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
         **kwargs,
     ):
         """
-        Skipping updates in case of unstable gradients
+        Skipping updates in case of unstable gradients or OOM errors
         https://github.com/Lightning-AI/lightning/issues/4956
         """
         time_start = time.time()
+
+        # Check for invalid gradients
         valid_gradients = True
         rand_param_idx = random.randint(0, len(list(self.named_parameters())) - 1)
         for name, param in list(self.named_parameters())[rand_param_idx:]:
@@ -253,6 +255,7 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
                 valid_gradients = not (torch.isnan(param.grad).any())
                 if not valid_gradients:
                     break
+
         if not valid_gradients:
             self.skip_current_optimizer_step_count += 1
             log.warning(
@@ -261,9 +264,15 @@ class PointwiseContrastiveLanguageLitModule(LitModuleBase):
             )
             if self.skip_current_optimizer_step_count > 10:
                 raise ValueError("Too many optimizer steps skipped. Check the loss function.")
+            # Execute closure but don't update parameters
+            if optimizer_closure is not None:
+                optimizer_closure()
             self.zero_grad()
+            return  # Skip the optimizer step
 
+        # Normal case: execute the optimizer step with the closure
         super().optimizer_step(epoch, batch_idx, optimizer, optimizer_closure, **kwargs)
+
         time_end = time.time()
         self.log(
             "train/time/backward",

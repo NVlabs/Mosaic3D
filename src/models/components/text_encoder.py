@@ -123,7 +123,7 @@ class OpenCLIPTextEncoder(CLIPTextEncoderInterace):
         return ckpt_path
 
     @torch.inference_mode()
-    @torch.cuda.amp.autocast(enabled=True)
+    @torch.amp.autocast(enabled=True, device_type="cuda")
     def __call__(self, list_of_texts: List[str], normalize: bool = True) -> torch.Tensor:
         text_tokens = self.tokenizer(list_of_texts, context_length=128).to(self.device)
         embeddings = self.model.encode_text(text_tokens)
@@ -156,7 +156,7 @@ class Siglip2TextEncoder(CLIPTextEncoderInterace):
         self.device = device
 
     @torch.inference_mode()
-    @torch.cuda.amp.autocast(enabled=True)
+    @torch.amp.autocast(enabled=True, device_type="cuda")
     def __call__(self, list_of_texts: List[str], normalize: bool = True) -> torch.Tensor:
         # Length is 64 https://huggingface.co/docs/transformers/main/model_doc/siglip2
         text_inputs = self.tokenizer(

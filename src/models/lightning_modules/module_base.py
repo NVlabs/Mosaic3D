@@ -21,6 +21,7 @@ class LitModuleBase(LightningModule, metaclass=abc.ABCMeta):
         self.forward_time = MeanMetric()
         self.loss_time = MeanMetric()
         self.train_time = MeanMetric()
+        self.backward_time = MeanMetric()
         self._data_load_start = None
         self._train_start = None
         self._forward_start = None

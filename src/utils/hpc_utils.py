@@ -105,6 +105,7 @@ class HPCSignalHandler:
         self.status_path = status_path
         if self._RANK == 0:
             os.makedirs(os.path.dirname(status_path), exist_ok=True)
+            log.info(f"HPCSignalHandler: Status path: {status_path}")
 
         self.STATUS = "RUNNING"
 
