@@ -73,29 +73,56 @@ class PointwiseContrastiveLanguageLitModuleManualOpt(PointwiseContrastiveLanguag
         self.invalid_batch_count = 0
         self.max_invalid_batches = loss_cfg.get("max_invalid_batches", 10)
 
-    def _sync_validity_status(self, local_invalid: bool) -> bool:
+        # Initialize CPU-only process group for OOM sync fallback
+        self.cpu_sync_group = None
+
+    def _initialize_cpu_sync_group(self):
+        """Initialize CPU-only process group for OOM sync fallback."""
+        if self.cpu_sync_group is None and torch.distributed.is_initialized():
+            try:
+                # Create CPU-only process group with GLOO backend
+                world_size = torch.distributed.get_world_size()
+                ranks = list(range(world_size))
+                self.cpu_sync_group = torch.distributed.new_group(ranks=ranks, backend="gloo")
+                log.info(
+                    f"Rank {self.trainer.global_rank}: Created CPU sync group with GLOO backend"
+                )
+            except Exception as e:
+                log.warning(
+                    f"Rank {self.trainer.global_rank}: Failed to create CPU sync group: {e}"
+                )
+                self.cpu_sync_group = None
+
+    def _sync_validity_status_cpu(self, local_invalid: bool) -> bool:
         """
-        Synchronize invalid status (OOM or invalid loss) across all GPUs.
-        Returns True if any GPU experienced invalid state.
+        CPU-only fallback synchronization for OOM cases.
+        Uses GLOO backend with CPU tensors only.
         """
         if not torch.distributed.is_initialized():
-            # Single GPU case
             return local_invalid
 
-        # Create a tensor with invalid status (1 if invalid, 0 otherwise)
+        assert self.cpu_sync_group is not None, "CPU sync group not available"
+
+        # Create tensor on CPU only - never move to GPU
         invalid_tensor = torch.tensor(
-            1.0 if local_invalid else 0.0, device=self.device, dtype=torch.float32
+            1.0 if local_invalid else 0.0, dtype=torch.float32, device="cpu"
         )
 
-        # Use all_reduce with MAX to detect if any GPU had invalid state
-        torch.distributed.all_reduce(invalid_tensor, op=torch.distributed.ReduceOp.MAX)
+        # Use CPU-only sync with GLOO backend
+        torch.distributed.all_reduce(
+            invalid_tensor, op=torch.distributed.ReduceOp.MAX, group=self.cpu_sync_group
+        )
 
-        # Return True if any GPU had invalid state
+        # Extract result - tensor is already on CPU
         any_gpu_invalid = invalid_tensor.item() > 0
-
         return any_gpu_invalid
 
-    def training_step(self, batch, batch_idx):
+    def on_train_start(self) -> None:
+        """Initialize CPU sync group early if not already done."""
+        if self.cpu_sync_group is None:
+            self._initialize_cpu_sync_group()
+
+    def training_step(self, batch, batch_idx) -> None:
         """
         Training step with manual optimization and OOM handling.
         """
@@ -107,11 +134,13 @@ class PointwiseContrastiveLanguageLitModuleManualOpt(PointwiseContrastiveLanguag
 
         # Initialize tracking variables
         forward_oom = False
-        backward_oom = False
         loss_is_valid = True
         loss = None
         forward_time = 0
         loss_time = 0
+
+        # Zero gradients before the forward so OOM failure in previous iteration does not affect current iteration
+        opt.zero_grad()
 
         # Forward pass with OOM handling
         try:
@@ -138,71 +167,52 @@ class PointwiseContrastiveLanguageLitModuleManualOpt(PointwiseContrastiveLanguag
 
             # Check if loss is valid (not NaN or Inf)
             loss_is_valid = torch.isfinite(loss).all().item()
-            if not loss_is_valid and self.trainer.is_global_zero:
-                log.warning(f"Invalid loss detected (NaN or Inf) on batch {batch_idx}")
+            if not loss_is_valid:
+                log.warning(
+                    f"Rank {self.trainer.global_rank}: Invalid loss detected (NaN or Inf) on batch {batch_idx}"
+                )
 
-        except torch.cuda.OutOfMemoryError:
+        except torch.OutOfMemoryError:
             forward_oom = True
-            if self.trainer.is_global_zero:
-                log.warning("OOM error detected during forward pass.")
+            log.warning(
+                f"OOM error detected during forward pass in rank: {self.trainer.global_rank}. Total skips: {self.invalid_batch_count}/{self.max_invalid_batches}"
+            )
+            torch.cuda.synchronize()
             torch.cuda.empty_cache()
 
         # Check if any GPU had invalid forward pass (OOM or invalid loss)
         forward_invalid = forward_oom or not loss_is_valid
-        any_gpu_forward_invalid = self._sync_validity_status(forward_invalid)
+        any_gpu_forward_invalid = self._sync_validity_status_cpu(forward_invalid)
+        if any_gpu_forward_invalid:
+            # Since the any_gpu_forward_invalid is synchronized, count does not need to be synced.
+            self.invalid_batch_count += 1
+            log.warning(
+                f"Skipping batch {batch_idx} due to invalid forward pass. Total skips: {self.invalid_batch_count}/{self.max_invalid_batches}"
+            )
+            return
 
         # If forward pass was valid on all GPUs, proceed with backward pass
         backward_invalid = False
         backward_start = time.time()
-        if not any_gpu_forward_invalid and loss is not None:
-            try:
-                # Manual backward pass
-                self.manual_backward(loss)
-            except torch.cuda.OutOfMemoryError:
-                backward_oom = True
-                if self.trainer.is_global_zero:
-                    log.warning("OOM error detected during backward pass.")
-                torch.cuda.empty_cache()
-                backward_invalid = True
-
-        # Check if any GPU had OOM during backward
-        any_gpu_backward_invalid = self._sync_validity_status(backward_invalid)
-
-        # Determine if we should skip this step
-        any_gpu_invalid = any_gpu_forward_invalid or any_gpu_backward_invalid
-
-        if any_gpu_invalid:
-            # Increment counter only if there was an invalid batch
-            self.invalid_batch_count += 1
-
-            # Clear gradients on all GPUs
-            opt.zero_grad()
-
-            # Log on rank 0
-            if self.trainer.is_global_zero:
-                if any_gpu_forward_invalid:
-                    reason = "invalid loss" if not loss_is_valid else "OOM"
-                    phase = f"forward pass ({reason})"
-                elif any_gpu_backward_invalid and backward_oom:
-                    phase = "backward pass (OOM)"
-                else:
-                    phase = "backward pass (invalid loss)"
-
-                log.warning(
-                    f"Skipping batch {batch_idx} due to {phase}. "
-                    f"Total skips: {self.invalid_batch_count}/{self.max_invalid_batches}"
-                )
-
-            # Log the skip event
-            self.log(
-                "train/skip_count",
-                float(self.invalid_batch_count),
-                prog_bar=True,
-                logger=True,
-                on_step=True,
-                on_epoch=False,
-                rank_zero_only=True,
+        try:
+            # Manual backward pass
+            self.manual_backward(loss)
+        except torch.OutOfMemoryError as e:
+            log.warning(
+                f"OOM error detected during backward pass in rank: {self.trainer.global_rank}: {e}"
             )
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            backward_invalid = True
+
+        any_gpu_backward_invalid = self._sync_validity_status_cpu(backward_invalid)
+        if any_gpu_backward_invalid:
+            log.warning(
+                f"Skipping batch {batch_idx} due to invalid backward pass. Total skips: {self.invalid_batch_count}/{self.max_invalid_batches}"
+            )
+            # return
+            # Backward OOM cannot be recovered due to gradient synchronization
+            raise RuntimeError("OOM error detected during backward pass")
 
         # Check if we've exceeded the maximum allowed OOM skips
         if self.invalid_batch_count >= self.max_invalid_batches:
@@ -212,67 +222,65 @@ class PointwiseContrastiveLanguageLitModuleManualOpt(PointwiseContrastiveLanguag
             )
 
         # If no issues, perform optimizer step
-        if not any_gpu_invalid and loss is not None:
-            # Check for invalid gradients
-            valid_gradients = self._check_gradients()
+        valid_gradients = self._check_gradients()
+        if not valid_gradients:
+            log.warning(
+                f"Skipping optimizer step due to invalid gradients in rank: {self.trainer.global_rank}"
+            )
+            return
 
-            if valid_gradients:
-                # Clip gradients if configured
-                if self.trainer.gradient_clip_val is not None:
-                    self.clip_gradients(
-                        opt,
-                        gradient_clip_val=self.trainer.gradient_clip_val,
-                        gradient_clip_algorithm=self.trainer.gradient_clip_algorithm,
-                    )
+        # Clip gradients if configured
+        if self.trainer.gradient_clip_val is not None:
+            self.clip_gradients(
+                opt,
+                gradient_clip_val=self.trainer.gradient_clip_val,
+                gradient_clip_algorithm=self.trainer.gradient_clip_algorithm,
+            )
 
-                # Optimizer step
-                opt.step()
+        # Optimizer step
+        opt.step()
 
-                # Scheduler step - respect the interval configuration
-                # Step-based schedulers (e.g., OneCycleLR) are updated here
-                # Epoch-based schedulers (e.g., StepLR) are updated in on_train_epoch_end()
-                if sch is not None and self.hparams.scheduler_interval == "step":
-                    sch.step()
+        # Scheduler step - respect the interval configuration
+        # Step-based schedulers (e.g., OneCycleLR) are updated here
+        # Epoch-based schedulers (e.g., StepLR) are updated in on_train_epoch_end()
+        if sch is not None and self.hparams.scheduler_interval == "step":
+            sch.step()
 
-            # Zero gradients for next iteration
-            opt.zero_grad()
+        # Log metrics
+        backward_time = time.time() - backward_start
 
-            # Log metrics
-            backward_time = time.time() - backward_start
+        lr = opt.param_groups[0]["lr"]
+        log_metrics = dict(loss=loss, lr=lr)
 
-            if loss is not None:
-                lr = opt.param_groups[0]["lr"]
-                log_metrics = dict(loss=loss, lr=lr)
+        # useful metadata
+        batch_size = len(batch["offset"]) - 1
+        log_metrics["num_points"] = batch["coord"].shape[0] / batch_size
+        log_metrics["num_objects"] = (
+            batch["caption_data"]["caption_offsets"].shape[0] - 1
+        ) / batch_size
 
-                # useful metadata
-                batch_size = len(batch["offset"]) - 1
-                log_metrics["num_points"] = batch["coord"].shape[0] / batch_size
-                log_metrics["num_objects"] = (
-                    batch["caption_data"]["caption_offsets"].shape[0] - 1
-                ) / batch_size
+        # Calculate training time and mark start of next data loading
+        train_time = time.time() - train_start
+        self.train_time(train_time)
 
-                # Calculate training time and mark start of next data loading
-                train_time = time.time() - train_start
-                self.train_time(train_time)
+        # Add timing metrics to existing logging
+        log_metrics.update(
+            {
+                "time/forward": forward_time,
+                "time/backward": backward_time,
+                "time/loss": loss_time,
+                "time/training": train_time,
+            }
+        )
 
-                # Add timing metrics to existing logging
-                log_metrics.update(
-                    {
-                        "time/forward": forward_time,
-                        "time/backward": backward_time,
-                        "time/loss": loss_time,
-                        "time/training": train_time,
-                    }
-                )
-
-                self.log_dict(
-                    {f"train/{key}": value for key, value in log_metrics.items()},
-                    prog_bar=True,
-                    logger=True,
-                    on_step=True,
-                    on_epoch=False,
-                    sync_dist=self.train_sync_dist,
-                )
+        self.log_dict(
+            {f"train/{key}": value for key, value in log_metrics.items()},
+            prog_bar=True,
+            logger=True,
+            on_step=True,
+            on_epoch=False,
+            sync_dist=self.train_sync_dist,
+        )
 
     def _check_gradients(self) -> bool:
         """
@@ -309,10 +317,6 @@ class PointwiseContrastiveLanguageLitModuleManualOpt(PointwiseContrastiveLanguag
             sch = self.lr_schedulers()
             if sch is not None:
                 sch.step()
-                # Log current learning rate
-                if self.trainer.is_global_zero:
-                    current_lr = self.optimizers().param_groups[0]["lr"]
-                    log.info(f"Epoch {self.current_epoch} ended. Learning rate: {current_lr}")
 
         if self.invalid_batch_count > 0:
             log.info(
