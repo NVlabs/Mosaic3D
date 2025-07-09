@@ -1,7 +1,7 @@
 defaults:
   - model_checkpoint
   - model_summary
-  - rich_progress_bar
+  - tqdm_progress_bar
   - lr_monitor_wrapper
   - _self_
 

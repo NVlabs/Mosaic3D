@@ -11,7 +11,7 @@
 
 # Usage:
 #
-# sbatch --gres=gpu:8 ./scripts/train.sbatch [TAG] \
+# sbatch --nodes=1 --gres=gpu:8 ./scripts/train.sbatch [TAG] \
 #      experiment=regionplc_openvocab \
 #      trainer=ddp \
 #      logger=auto_resume_wandb
@@ -29,6 +29,14 @@ if [[ $# -gt 0 && ${1:0:2} != "--" && ! $1 =~ "=" ]]; then
     TAG=$1
     shift
 fi
+
+# debugging flags (optional)
+export NCCL_DEBUG=INFO
+export PYTHONFAULTHANDLER=1
+
+# on your cluster you might need these:
+# set the network interface
+export NCCL_SOCKET_IFNAME=^docker0,lo
 
 # Training arguments
 TRAINING_ARGS=("$@")
@@ -121,7 +129,7 @@ source /workspace/.venv/bin/activate;
 mkdir -p ~/.cache;
 ln -s ${LUSTRE_HOME}/.cache/warpconvnet ~/.cache/warpconvnet;
 torchrun \
-    --nnodes=1 \
+    --nnodes=${SLURM_JOB_NUM_NODES} \
     --nproc_per_node=${GPU_COUNT} \
     src/train.py \
     trainer=${TRAINER} \

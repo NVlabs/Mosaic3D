@@ -1,0 +1,30 @@
+# @package model.net
+_target_: src.models.networks.warp.model.WarpModel
+_partial_: true
+
+voxel_size: 0.02
+
+backbone:
+  _target_: warpconvnet.models.internal.backbones.point_transformer_v3.PointTransformerV3
+  in_channels: ${data.in_channel}
+  out_channels: ${model.clip_encoder.text_dim}
+  enc_channels: [32, 64, 128, 256, 512]
+  enc_patch_size: [16, 16, 16, 16, 16]
+  enc_depths: [2, 2, 2, 6, 2]
+  dec_channels: [64, 64, 128, 256]
+  dec_patch_size: [16, 16, 16, 16]
+  dec_depths: [2, 2, 2, 2]
+  orders:
+    - zero
+    - xy
+    - xz
+    - yz
+    - xyz
+  shuffle_orders: true
+  block_type: peri_ln
+  attn_type: voxel
+  use_rope: false
+  rope_base: null
+  enc_rope_bases: [250, 250, 250, 250, 250]
+  dec_rope_bases: [250, 250, 250, 250]
+  rope_learnable_theta: false

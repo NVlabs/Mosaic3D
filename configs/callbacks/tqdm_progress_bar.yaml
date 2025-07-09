@@ -1,0 +1,7 @@
+# TQDM Progress Bar with reduced refresh rate to save disk space
+# https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.callbacks.TQDMProgressBar.html
+
+tqdm_progress_bar:
+  _target_: lightning.pytorch.callbacks.TQDMProgressBar
+  refresh_rate: 10 # Update progress bar every 10 batches instead of every batch
+  leave: false # Don't leave progress bars after completion (saves space)

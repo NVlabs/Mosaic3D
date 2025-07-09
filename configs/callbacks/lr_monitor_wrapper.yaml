@@ -1,0 +1,8 @@
+# LearningRateMonitorWrapper - automatically disables when no loggers are present
+# https://github.com/Lightning-AI/lightning/blob/master/src/lightning/pytorch/callbacks/lr_monitor.py
+
+lr_monitor:
+  _target_: src.utils.lr_monitor_wrapper.LearningRateMonitorWrapper
+  logging_interval: step
+  log_momentum: false
+  log_weight_decay: false

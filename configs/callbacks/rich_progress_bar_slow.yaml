@@ -1,0 +1,4 @@
+rich_progress_bar:
+  _target_: lightning.pytorch.callbacks.RichProgressBar
+  refresh_rate: 20 # Update progress bar every N batches instead of every batch
+  leave: false # Don't leave progress bars after completion (saves space)
