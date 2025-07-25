@@ -1,0 +1,8 @@
+# @package model
+optimizer:
+  _target_: src.models.optimization.muon.Muon
+  _partial_: true
+  lr: 0.02
+  weight_decay: 1e-2
+  adam_lr: 1e-3
+  adam_weight_decay: 1e-2

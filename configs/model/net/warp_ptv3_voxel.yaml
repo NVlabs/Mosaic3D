@@ -9,11 +9,14 @@ backbone:
   in_channels: ${data.in_channel}
   out_channels: ${model.clip_encoder.text_dim}
   enc_channels: [32, 64, 128, 256, 512]
-  enc_patch_size: [16, 16, 16, 16, 16]
+  enc_num_head: [2, 4, 8, 16, 32]
+  enc_patch_size: [32, 32, 32, 32, 32]
   enc_depths: [2, 2, 2, 6, 2]
   dec_channels: [64, 64, 128, 256]
-  dec_patch_size: [16, 16, 16, 16]
+  dec_num_head: [4, 4, 8, 16]
+  dec_patch_size: [32, 32, 32, 32]
   dec_depths: [2, 2, 2, 2]
+  kernel_size: 3
   orders:
     - zero
     - xy
@@ -21,9 +24,9 @@ backbone:
     - yz
     - xyz
   shuffle_orders: true
-  block_type: peri_ln
+  block_type: pre_attn_norm
   attn_type: voxel
-  use_rope: false
+  use_rope: true
   rope_base: null
   enc_rope_bases: [250, 250, 250, 250, 250]
   dec_rope_bases: [250, 250, 250, 250]
