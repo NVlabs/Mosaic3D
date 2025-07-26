@@ -1,3 +1,0 @@
-[submodule "warpconvnet"]
-	path = warpconvnet
-	url = https://gitlab-master.nvidia.com/3dmmllm/warp
