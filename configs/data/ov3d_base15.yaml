@@ -1,6 +1,0 @@
-defaults:
-  - regionplc_base15
-
-train_dataset:
-  caption_dir: /datasets/scannet_captions
-  caption_subset: ov3d_v2

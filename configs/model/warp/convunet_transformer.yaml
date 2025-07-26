@@ -1,7 +1,0 @@
-defaults:
-  - warp/convunet@ # map this to model
-
-net:
-  backbone_cfg:
-    block_types: ["res", "res", "res", "res", "attn", "attn", "attn", "attn"]
-    num_heads: [2, 2, 2, 2, 2, 2, 2, 4]

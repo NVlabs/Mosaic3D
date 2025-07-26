@@ -1,6 +1,0 @@
-defaults:
-  - scannet
-
-train_dataset:
-  caption_subset: caption.osprey.scannet-125k
-  segment_subset: segment.sam2.scannet-125k
