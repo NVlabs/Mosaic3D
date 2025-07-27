@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 import torch.distributed as dist
 from torch import Tensor
@@ -109,13 +111,14 @@ class Muon(Optimizer):
 
         self.rank = rank
         self.world_size = world_size
+        lr_to_adam_ratio = adam_lr / lr
         defaults = dict(
             lr=lr,
             weight_decay=weight_decay,
             momentum=momentum,
             nesterov=nesterov,
             ns_steps=ns_steps,
-            adam_lr=adam_lr,
+            lr_to_adam_ratio=lr_to_adam_ratio,
             adam_weight_decay=adam_weight_decay,
             betas=betas,
             eps=eps,
@@ -146,10 +149,32 @@ class Muon(Optimizer):
             )
             param_groups.append(group)
 
+        self.buffer_set = False
         super().__init__(param_groups, defaults)
+
+    # For resumed training, we need everything to be on the same device
+    def reset_buffers(self, device="cuda"):
+        print(f"Resetting muon parameters to {device}")
+        world_size = self.world_size
+        self.buffer_set = True
+        for group in self.param_groups:
+            if group.get("use_muon", True):
+                group["params"] = [p.to(device) for p in group["params"]]
+                group["update_buffer"] = torch.empty(
+                    world_size, group["update_buffer"].size(1), dtype=torch.bfloat16, device=device
+                )
+                group["update_buffer_views"] = [
+                    group["update_buffer"][i] for i in range(world_size)
+                ]
+            else:
+                group["params"] = [p.to(device) for p in group["params"]]
+        return self
 
     @torch.no_grad()
     def step(self, closure=None):
+        if not self.buffer_set:
+            self.reset_buffers()
+
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -179,7 +204,7 @@ class Muon(Optimizer):
                 for base_i in range(len(params))[:: self.world_size]:
                     if base_i + self.rank < len(params):
                         p = params[base_i + self.rank]
-                        g = p.grad
+                        g = p.grad.cuda()
                         assert g is not None
                         state = self.state[p]
                         if "momentum_buffer" not in state:
@@ -197,12 +222,19 @@ class Muon(Optimizer):
                     if dist.is_initialized():
                         # Ensure g has the same dtype as update_buffer for all_gather_into_tensor
                         g = g.to(dtype=update_buffer.dtype)
+                        if update_buffer.device != g.device:
+                            warnings.warn(
+                                f"update_buffer.device: {update_buffer.device}, g.device: {g.device}"
+                            )
+                            update_buffer = update_buffer.cuda()
+                            g = g.cuda()
+
                         handle = dist.all_gather_into_tensor(update_buffer, g, async_op=True)
                     else:
                         update_buffer.copy_(g)
                     params_world = params[base_i : base_i + self.world_size]
                 update_prev()
-            else:
+            else:  # use_muon=False
                 # Adam optimization for ndim < 2 parameters
                 for p in group["params"]:
                     if p.grad is None:
@@ -221,7 +253,9 @@ class Muon(Optimizer):
                         group["betas"],
                         group["eps"],
                     )
-                    p.mul_(1 - group["adam_lr"] * group["adam_weight_decay"])
-                    p.add_(update, alpha=-group["adam_lr"])
+                    p.mul_(
+                        1 - group["lr"] * group["lr_to_adam_ratio"] * group["adam_weight_decay"]
+                    )
+                    p.add_(update, alpha=-group["lr"] * group["lr_to_adam_ratio"])
 
         return loss

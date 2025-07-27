@@ -11,7 +11,7 @@ defaults:
   - override /model/loss: point_contrastive_caption
   - override /optim: sgd
   - override /scheduler: onecyclelr
-  - override /callbacks: cluster_nolr
+  - override /callbacks: reduced_logging
   - override /trainer: gpu
 
 # all parameters below will be merged with parameters from default configurations set above
