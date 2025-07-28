@@ -1,7 +1,7 @@
 _target_: src.data.datamodule.MultiDataModule
 
 train_dataset:
-  _target_: src.data.concat_dataset.ConcatDataset
+  _target_: src.data.multi_dataloader.ConcatDataset
   _partial_: true
   ignore_label: -100
   conditions: ["ScanNet", "ARKitScenes", "ScanNetPP"]
