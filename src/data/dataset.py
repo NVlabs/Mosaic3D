@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -14,27 +15,44 @@ from src.utils.io import unpack_list_of_np_arrays
 log = RankedLogger(__name__, rank_zero_only=False)
 
 
-class AnnotatedDataset(Dataset):
+class BaseDataset(Dataset):
+    """Base dataset class with core functionality for 3D datasets."""
+
+    BACKGROUND_CLASSES = ("wall", "floor", "ceiling")
+    CLASS_LABELS = None
+
     def __init__(
         self,
         dataset_name: str,
         data_dir: str,
         split: str,
-        max_num_masks: int,
         repeat: int = 1,
+        ignore_label: int = -100,
         transforms: Optional[List[Dict]] = None,
     ):
         super().__init__()
         self.dataset_name = dataset_name
-        self.data_dir = Path(data_dir)
+        self.data_dir = Path(data_dir) / dataset_name
         assert self.data_dir.exists(), f"{self.data_dir} not exist."
         self.split = split
-
-        self.max_num_masks = max_num_masks
         self.repeat = repeat
-        self.anno_sources = ["gsam2", "seem"]
+        self.ignore_label = ignore_label
 
-        # read split
+        # setup class mappers
+        self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
+        self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, self.ignore_label)
+        self.fg_class_idx = [
+            i
+            for i, c in enumerate(self.CLASS_LABELS)
+            if c not in self.BACKGROUND_CLASSES and "other" not in c
+        ]
+        self.bg_class_idx = list(set(range(len(self.CLASS_LABELS))) - set(self.fg_class_idx))
+        self.instance_ignore_class_idx = [
+            i for i, c in enumerate(self.CLASS_LABELS) if c in ("wall", "floor") or "other" in c
+        ]
+        self.subset_mapper = self.build_subset_mapper()
+
+        # read split file
         split_file_path = (
             Path(__file__).parent
             / "metadata"
@@ -46,6 +64,7 @@ class AnnotatedDataset(Dataset):
                 [line.strip() for line in f.readlines() if not line.startswith("#")]
             )
 
+        # setup transforms
         self.transforms = lambda x: x
         if transforms is not None:
             transforms_cfg = OmegaConf.to_container(transforms)
@@ -63,8 +82,94 @@ class AnnotatedDataset(Dataset):
             n *= self.repeat
         return n
 
+    @staticmethod
+    def build_class_mapper(class_idx, ignore_label, squeeze_label=False):
+        num_classes = max(256, len(class_idx))
+        remapper = np.ones(num_classes, dtype=np.int64) * ignore_label
+        for i, x in enumerate(class_idx):
+            if squeeze_label:
+                remapper[x] = i
+            else:
+                remapper[x] = x
+        return remapper
+
+    def build_subset_mapper(self):
+        return None
+
+    @abstractmethod
+    def load_point_cloud(self, scene_name: str):
+        """Load point cloud data for a given scene."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def __getitem__(self, idx):
+        """Get item by index."""
+        raise NotImplementedError
+
+
+class AnnotatedDataset(BaseDataset):
+    """Dataset with annotation/caption capabilities."""
+
+    CLASS_LABELS = None
+    SEGMENT_FILE = None
+    INSTANCE_FILE = None
+    LOG_PREFIX = None
+
+    def __init__(
+        self,
+        dataset_name: str,
+        data_dir: str,
+        split: str,
+        repeat: int = 1,
+        ignore_label: int = -100,
+        transforms: Optional[List[Dict]] = None,
+        num_masks: Optional[int] = None,
+        anno_sources: Optional[List[str]] = None,
+    ):
+        super().__init__(
+            dataset_name=dataset_name,
+            data_dir=data_dir,
+            split=split,
+            repeat=repeat,
+            ignore_label=ignore_label,
+            transforms=transforms,
+        )
+        self.num_masks = num_masks
+        self.anno_sources = anno_sources or ["gsam2", "seem"]
+        self.log_prefix = self.LOG_PREFIX
+
+    def load_point_cloud(self, scene_name: str):
+        """Load point cloud data for a given scene."""
+        geom_dir = self.data_dir / scene_name / "geometry"
+        coord = np.load(geom_dir / "coord.npy").astype(np.float32)
+        color = np.load(geom_dir / "color.npy")
+        origin_idx = np.arange(coord.shape[0]).astype(np.int64)
+
+        return_dict = dict(
+            coord=coord,
+            color=color,
+            origin_idx=origin_idx,
+        )
+
+        if self.SEGMENT_FILE is not None:
+            segment_file = geom_dir / self.SEGMENT_FILE
+            assert segment_file.exists(), f"{segment_file} not exist."
+            segment_raw = np.load(segment_file)
+            segment = self.valid_class_mapper[segment_raw.astype(np.int64)]
+            return_dict["segment"] = segment
+
+        if self.INSTANCE_FILE is not None:
+            instance_file = geom_dir / self.INSTANCE_FILE
+            assert instance_file.exists(), f"{instance_file} not exist."
+            assert "segment" in return_dict, "segment is required for instance"
+            instance = np.load(instance_file)
+            instance[return_dict["segment"] == self.ignore_label] = self.ignore_label
+            return_dict["instance"] = instance
+
+        return return_dict
+
     def load_caption(self, scene_name: str):
-        # load caption
+        """Load caption data for a given scene."""
         scene_dir = self.data_dir / scene_name
         anno_source = np.random.choice(self.anno_sources)
         captions = unpack_list_of_np_arrays(scene_dir / anno_source / "captions.npz")
@@ -74,8 +179,8 @@ class AnnotatedDataset(Dataset):
             torch.from_numpy(item).int() for sublist in point_indices for item in sublist
         ]
 
-        if self.max_num_masks is not None and self.max_num_masks < len(point_indices):
-            sel = np.random.choice(len(point_indices), self.max_num_masks, replace=False)
+        if self.num_masks is not None and self.num_masks < len(point_indices):
+            sel = np.random.choice(len(point_indices), self.num_masks, replace=False)
             point_indices = [point_indices[i] for i in sel]
             captions = [captions[i] for i in sel]
 
@@ -84,31 +189,14 @@ class AnnotatedDataset(Dataset):
     def __getitem__(self, idx_original):
         idx = idx_original % len(self.scene_names)
         scene_name = self.scene_names[idx]
-        scene_dir = self.data_dir / scene_name
 
-        # load point cloud
-        coord = np.load(scene_dir / "geometry" / "coord.npy")
-        color = np.load(scene_dir / "geometry" / "color.npy")
-        segment = np.load(scene_dir / "geometry" / "segment.npy")
-
-        data_dict = dict(
-            coord=coord.astype(np.float32),
-            color=color,
-            origin_idx=np.arange(coord.shape[0]).astype(np.int64),
-        )
+        # load point cloud data
+        data_dict = dict(scene_name=scene_name)
+        point_cloud_data = self.load_point_cloud(scene_name)
+        data_dict.update(point_cloud_data)
 
         if self.split == "train":
             data_dict["caption_data"] = self.load_caption(scene_name)
 
         data_dict = self.transforms(data_dict)
         return data_dict
-
-
-class ScanNetDataset(AnnotatedDataset):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.segment_file = "segment.npy"
-        self.max_num_masks = 300
-        self.ignore_label = -100
-        self.repeat = 4
-        self.anno_sources = ["gsam2", "seem"]
