@@ -10,8 +10,6 @@ from torchmetrics import MaxMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
 import src.utils.caption_utils as caption_utils
-from src.models.components.clip_models import build_clip_model, download_clip_model
-from src.models.components.evaluator import InstanceSegmentationEvaluator
 from src.models.lightning_modules.module_base import LitModuleBase
 from src.models.losses.caption_loss import (
     CaptionAlignmentLoss,
@@ -25,6 +23,8 @@ from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentLoss,
     compute_clip_image_alignment,
 )
+from src.models.utils.clip_models import build_clip_model, download_clip_model
+from src.models.utils.evaluator import InstanceSegmentationEvaluator
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)

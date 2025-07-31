@@ -1,15 +1,15 @@
+import argparse
 from pathlib import Path
 from typing import List
-import argparse
 
-from natsort import natsorted
-import torch
 import numpy as np
-from tqdm import tqdm
+import torch
+from natsort import natsorted
 from rich.console import Console
 from rich.table import Table
+from tqdm import tqdm
 
-from src.models.components.evaluator import InstanceSegmentationEvaluator
+from src.models.utils.evaluator import InstanceSegmentationEvaluator
 from src.utils.io import unpack_list_of_np_arrays
 
 console = Console()
@@ -84,7 +84,7 @@ def main(
     }
 
     for metric_name, value in metrics.items():
-        table.add_row(metric_name, f"{value*100:.1f}")
+        table.add_row(metric_name, f"{value * 100:.1f}")
 
     console.print(table)
 

@@ -1,29 +1,27 @@
-from typing import Dict, Optional, Any
 import time
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.distributed as dist
+import torch.nn as nn
+from cuml.cluster import DBSCAN
 from einops import repeat
 from torchmetrics import MaxMetric, MeanMetric
-from cuml.cluster import DBSCAN
 
 import src.utils.caption_utils as caption_utils
-from src.utils.dist_utils import all_gather, all_gather_different_shapes
-from src.models.components.clip_models import build_clip_model, download_clip_model
-from src.models.components.evaluator import InstanceSegmentationEvaluator
 from src.models.lightning_modules.module_base import LitModuleBase
+from src.models.losses.clip_alignment_loss import CLIPAlignmentEval
 from src.models.losses.mask_caption_loss import (
     MaskCaptionAlignmentLoss,
-    MaskCaptionLoss,
     MaskCaptionCLIPLoss,
+    MaskCaptionLoss,
     MaskCaptionSigLIPLoss,
 )
-from src.models.losses.clip_alignment_loss import (
-    CLIPAlignmentEval,
-)
+from src.models.utils.clip_models import build_clip_model, download_clip_model
+from src.models.utils.evaluator import InstanceSegmentationEvaluator
 from src.utils import RankedLogger
+from src.utils.dist_utils import all_gather, all_gather_different_shapes
 
 log = RankedLogger(__file__, rank_zero_only=True)
 
@@ -197,7 +195,10 @@ class MaskLanguageLitModule(LitModuleBase):
         matched_mask_features = torch.cat(matched_mask_features)
         caption_loss = (
             self.caption_loss.loss(
-                matched_mask_features, matched_captions, self.clip_encoder, matched_embeddings
+                matched_mask_features,
+                matched_captions,
+                self.clip_encoder,
+                matched_embeddings,
             )
             * self.hparams.loss_cfg.weights.caption_loss
         )
@@ -332,7 +333,14 @@ class MaskLanguageLitModule(LitModuleBase):
         log_metrics = {}
         for postfix, metrics in self.val_metrics.items():
             val_section = f"val_{postfix}"
-            logging_keys = ["map", "map50", "map25", "map_head", "map_common", "map_tail"]
+            logging_keys = [
+                "map",
+                "map50",
+                "map25",
+                "map_head",
+                "map_common",
+                "map_tail",
+            ]
 
             # Only compute metrics on rank 0
             ap_tensor = torch.zeros(len(logging_keys), device=self.device)
