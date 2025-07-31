@@ -4,7 +4,6 @@
 usage() {
     echo "Usage: $0 [OPTIONS] [VERSION]"
     echo "Options:"
-    echo "  -p, --push    Push the Docker image after building"
     echo "  -h, --help    Display this help message"
     echo "  -t, --tag     Tag the Docker image with the provided version"
     echo "  -n, --no-cache Build the Docker image without using cache"
@@ -12,18 +11,13 @@ usage() {
 }
 
 # Initialize variables
-PUSH=false
 VERSION="latest"
-TAG="openvocab-3d:${VERSION}"
+TAG="mosaic3d:${VERSION}"
 NO_CACHE=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -p | --push)
-            PUSH=true
-            shift
-            ;;
         -h | --help)
             usage
             exit 0
@@ -43,25 +37,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-IMAGE_URL="gitlab-master.nvidia.com/3dmmllm/openvocab-3d:${VERSION}"
-
-# Prep warpconvnet
-# Check if warpconvnet does not exist
-if [ ! -d warpconvnet ]; then
-    echo "Cloning warpconvnet..."
-    git clone --recurse-submodules ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git warpconvnet
-# Check if warpconvnet exists but is not up to date
-elif [ -d warpconvnet ]; then
-    echo "Updating warpconvnet..."
-    pushd warpconvnet || exit
-    git pull
-    pushd warpconvnet/models || exit
-    git pull
-    popd || exit
-    popd || exit
-fi
-
-
 # Build the Docker image
 # Add --no-cache to force a rebuild
 echo "Building Docker image..."
@@ -76,20 +51,5 @@ if ! docker run --gpus all -it --rm "$TAG" python -c "import torch, MinkowskiEng
     exit 1
 fi
 
-# Tag the image
-docker tag "$TAG" "$IMAGE_URL"
-
-# shellcheck disable=SC2181
-# Push the Docker image if requested
-if [ "$PUSH" = true ]; then
-    echo "Pushing Docker image..."
-    docker push "$IMAGE_URL"
-    if [ $? -ne 0 ]; then
-        echo "Docker push failed"
-        exit 1
-    fi
-    echo "Docker image pushed successfully"
-else
-    echo "Docker image built and tested successfully"
-    echo "To push the image, run the script with the -p or --push option"
-fi
+echo "Docker image built and tested successfully"
+echo "To push the image, run the script with the -p or --push option"

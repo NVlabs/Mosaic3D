@@ -3,7 +3,6 @@ FROM nvcr.io/nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 
 # metainformation
 LABEL org.opencontainers.image.version = "0.0.1"
-LABEL org.opencontainers.image.source = "https://gitlab.nvidia.com:3dmmllm/openvocab-3d"
 
 # CUDA architectures.
 ## A5500 is 86, A100 is 80, V100 is 70, T4 is 75
@@ -69,15 +68,6 @@ RUN pip3 install -U pip
 RUN pip3 install torch==2.2.2 torchvision==0.17.2 --index-url https://download.pytorch.org/whl/cu121
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install -r /tmp/requirements.txt
-
-# Install warp
-RUN pip3 install warp-lang
-# First copy the warp repository
-# git clone ssh://git@gitlab-master.nvidia.com:12051/3dmmllm/warp.git
-COPY ./warpconvnet /home/user/warpconvnet
-WORKDIR /home/user/warpconvnet
-# Install warpconvnet
-RUN pip3 install -e .[all]
 
 # Install MinkowskiEngine manually for Segment3D
 # this is a patch for MinkowskiEngine to work with CUDA 12.1 (https://github.com/NVIDIA/MinkowskiEngine/issues/543)

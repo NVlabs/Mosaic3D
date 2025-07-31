@@ -5,7 +5,7 @@ set -o xtrace
 
 # Run docker image as an argument but use triplane-cfd by default
 DATASET_PATH=${1:-"datasets"}
-DOCKER_IMAGE=${2:-"openvocab-3d"}
+DOCKER_IMAGE=${2:-"mosaic3d"}
 
 USER=$(whoami)
 
