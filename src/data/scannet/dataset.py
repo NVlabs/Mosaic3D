@@ -88,7 +88,7 @@ class ScanNet200Dataset(ScanNetDataset):
 
 if __name__ == "__main__":
     dataset = ScanNet200Dataset(
-        data_dir="/datasets/mosaic3d/data",
+        data_dir="/datasets/mosaic3d/data/scannet",
         split="val",
         repeat=1,
         ignore_label=-100,

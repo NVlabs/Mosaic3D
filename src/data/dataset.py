@@ -39,7 +39,7 @@ class BaseDataset(Dataset):
 
         # setup class mappers
         self.valid_class_idx = [
-            i for i, c in enumerate(self.CLASS_LABELS) if c.startswith("other")
+            i for i, c in enumerate(self.CLASS_LABELS) if not c.startswith("other")
         ]
         self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, self.ignore_label)
         self.fg_class_idx = [
