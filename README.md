@@ -10,7 +10,7 @@
 [![Project Page](https://img.shields.io/badge/Project-Page-blue)](https://nvlabs.github.io/Mosaic3D/)
 [![Paper](https://img.shields.io/badge/CVPR-2025-green)](https://arxiv.org/abs/YOUR_ARXIV_ID)
 
-**[Junha Lee¹'²](https://junhalee.me/), [Chunghyun Park¹'²](https://chpark.me/), [Jaesung Choe¹](https://jaesungchoe.github.io/), [Frank Wang¹](https://frankwang.me/), [Jan Kautz¹](http://jankautz.net/), [Minsu Cho²](https://cvlab.postech.ac.kr/~mcho/), [Chris Choy¹](https://chrischoy.github.io/)**
+**[Junha Lee¹'²*](https://junha-l.github.io/), [Chunghyun Park¹'²*](https://chrockey.github.io/), [Jaesung Choe¹](https://jaesung-choe.github.io/), [Frank Wang¹](https://vllab.ee.ntu.edu.tw/ycwang.html), [Jan Kautz¹](https://research.nvidia.com/person/jan-kautz), [Minsu Cho²](https://cvlab.postech.ac.kr/~mcho/), [Chris Choy¹](https://chrischoy.github.io/)**
 
 ¹NVIDIA, ²POSTECH
 
