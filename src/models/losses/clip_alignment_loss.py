@@ -5,7 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import repeat
 from jaxtyping import Float, Int
 from torch import Tensor
 
@@ -13,9 +12,9 @@ try:
     from warpconvnet.geometry.types.points import Points
 except ImportError:
     from src.utils.misc import DummyClass
+
     Points = DummyClass
 
-import src.utils.caption_utils as caption_utils
 from src.models.losses.loss_base import LossBase
 from src.utils import RankedLogger
 
@@ -146,99 +145,3 @@ class CLIPAlignmentEval(nn.Module):
             return logit
 
         return logit.argmax(dim=1)
-
-
-def compute_clip_image_alignment(
-    clip_encoder,
-    clip_processed_image: torch.Tensor,
-    point_feat: torch.Tensor,
-    clip_point_indices: torch.Tensor,
-    clip_indices_image_to_point: torch.Tensor,
-    is_loss: bool = True,
-) -> torch.Tensor:
-    """Compute clip_loss using images.
-
-    args:
-        clip_encoder:
-        clip_processed_image: [b c h w]
-        point_feat: [n_pts c]
-        clip_point_indices: [n_pts_slice]
-            These indices incicate the points visible to the given image.
-            In collate.py, we already add offset.
-        clip_indices_image_to_point: [n_pts_slice]
-            These indices indicate the pixels corresponding to coord (3d_input_points).
-    returns:
-        clip_image_alignment_loss: []
-        clip_scores: [n_pts_slice]
-    """
-    # prepare image data in bf16
-    with torch.cuda.amp.autocast(enabled=True) and torch.inference_mode():
-        image_feats = caption_utils.forward_image_encoder(
-            clip_processed_image,
-            clip_encoder,
-        )  # [b c]
-
-    # slice pointcloud visible to images.
-    point_feat_slices = point_feat[clip_point_indices]  # [n_pts c]
-
-    # unpool image_feats to per-point feats.
-    image_feats_unpooled = image_feats[clip_indices_image_to_point, :]  # [n_pts c]
-
-    # compute per-point cossine similarity between point_feat and image_feat
-    # if len(point_feat_slices) != 0:
-    target = torch.ones(
-        len(point_feat_slices),
-        device=point_feat_slices.device,
-    )
-
-    if is_loss:
-        clip_image_alignment_loss = nn.CosineEmbeddingLoss()(
-            point_feat_slices, image_feats_unpooled, target
-        )
-        return clip_image_alignment_loss
-    else:
-        clip_scores = F.cosine_similarity(point_feat_slices, image_feats_unpooled)
-        return clip_scores
-
-
-def compute_clip_text_cosine_similarity(
-    clip_encoder,
-    clip_tokenized_text,
-    point_feat: torch.Tensor,
-    offset: torch.Tensor,
-    point_indices_to_caption: torch.Tensor,
-) -> torch.Tensor:
-    """Compute cosine similarity between predictions and captions.
-
-    args:
-        clip_encoder:
-        clip_tokenized_text:
-            preprocessed text tokenziation following CLIP
-        point_feat
-        offset
-        point_indices_to_caption: List[Tensor]
-    returns:
-        clip_avg_score: []
-    """
-    text_feats = clip_encoder.encode_text(clip_tokenized_text)  # [n_captions c]
-
-    # slice pointcloud per caption
-
-    point_feat_slices = [
-        point_feat[point_indices_per_caption + offset[idx_batch], :]
-        for idx_batch, point_indices_per_batch in enumerate(point_indices_to_caption)
-        for point_indices_per_caption in point_indices_per_batch
-    ]
-
-    # compute per-point cossine similarity between point_feat and text_feat
-    clip_score_sum = 0.0
-    cnt = 0
-    for point_feat_slice, text_feat in zip(point_feat_slices, text_feats):
-        text_feat_unpooled = repeat(  # unpool text_feat to per-point feats
-            text_feat, "c -> n_pts_per_caption c", n_pts_per_caption=len(point_feat_slice)
-        )
-        clip_scores_per_caption = F.cosine_similarity(point_feat_slice, text_feat_unpooled)
-        clip_score_sum += clip_scores_per_caption.sum().cpu().numpy()
-        cnt += len(clip_scores_per_caption)
-    clip_avg_score = clip_score_sum / float(cnt)
-    return clip_avg_score
