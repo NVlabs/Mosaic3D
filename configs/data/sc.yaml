@@ -1,12 +1,11 @@
 _target_: src.data.datamodule.DataModule
 
 train_dataset:
-  _target_: src.data.dataset.AnnotatedDataset
+  _target_: src.data.scannet.dataset.ScanNetDataset
   _partial_: true
-  dataset_name: scannetv2
   data_dir: /datasets/mosaic3d/data/scannet
   split: train
-  max_num_masks: 300
+  num_masks: 300
   ignore_label: -100
   repeat: 4
   transforms: ${data.train_transforms}
@@ -14,18 +13,15 @@ train_dataset:
 val_datasets:
   - _target_: src.data.scannet.dataset.ScanNetDataset
     _partial_: true
-    data_dir: /datasets/scannet_hf
+    data_dir: /datasets/mosaic3d/data/scannet
     split: val
-    log_postfix: scannet20
-    ignore_class_idx: [19] # otherfurniture
     ignore_label: ${data.train_dataset.ignore_label}
     transforms: ${data.val_transforms}
 
   - _target_: src.data.scannet.dataset.ScanNet200Dataset
     _partial_: true
-    data_dir: /datasets/scannet_hf
+    data_dir: /datasets/mosaic3d/data/scannet
     split: val
-    log_postfix: scannet200
     mask_dir: /datasets/scannet_masks/mask3d_scannet200_openins3d
     ignore_label: ${data.train_dataset.ignore_label}
     transforms: ${data.val_transforms}

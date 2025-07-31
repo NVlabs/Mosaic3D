@@ -1,17 +1,17 @@
-from typing import Dict, Optional, Tuple
-from itertools import chain
 import random
 import time
+from itertools import chain
+from typing import Dict, Optional, Tuple
 
+import pointops
 import torch
-import torch.nn as nn
 import torch.distributed as dist
+import torch.nn as nn
 from timm.models.layers import trunc_normal_
 from torch_geometric.nn.pool import voxel_grid
-import pointops
 
 from src.models.lightning_modules.language_module import DenseLanguageLitModule
-from src.models.components.misc import offset2batch
+from src.models.utils.misc import offset2batch
 from src.utils.dist_utils import get_world_size
 
 
@@ -109,7 +109,8 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         patch_max_point = counts.max().item()
         patch2point_map = cluster.new_zeros(patch_num, patch_max_point)
         patch2point_mask = torch.lt(
-            torch.arange(patch_max_point, device=device).unsqueeze(0), counts.unsqueeze(-1)
+            torch.arange(patch_max_point, device=device).unsqueeze(0),
+            counts.unsqueeze(-1),
         )
         _, sorted_cluster_indices = torch.sort(cluster)
         patch2point_map[patch2point_mask] = sorted_cluster_indices
@@ -185,7 +186,8 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         # Create patch to point mapping
         patch2point_map = cluster.new_zeros(patch_num, patch_max_point)
         patch2point_mask = torch.lt(
-            torch.arange(patch_max_point, device=device).unsqueeze(0), counts.unsqueeze(-1)
+            torch.arange(patch_max_point, device=device).unsqueeze(0),
+            counts.unsqueeze(-1),
         )
         _, sorted_cluster_indices = torch.sort(cluster)
         patch2point_map[patch2point_mask] = sorted_cluster_indices
@@ -255,7 +257,8 @@ class MaskedDenseLanguageLitModule(DenseLanguageLitModule):
         point_mask_split = point_mask.split(
             list(
                 torch.cat(
-                    [view1_batch_count.unsqueeze(-1), view2_batch_count.unsqueeze(-1)], dim=-1
+                    [view1_batch_count.unsqueeze(-1), view2_batch_count.unsqueeze(-1)],
+                    dim=-1,
                 ).flatten()
             )
         )

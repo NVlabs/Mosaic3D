@@ -1,20 +1,26 @@
-from typing import List, Optional, Dict
 from contextlib import nullcontext
+from typing import Dict, List, Optional
 
+import pointops
+import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
-from torch_scatter import scatter
-from spconv.pytorch.core import ImplicitGemmIndiceData
-import spconv.pytorch as spconv
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
-import pointops
+from spconv.pytorch.core import ImplicitGemmIndiceData
+from torch_scatter import scatter
 
+from src.models.networks.mask3d.mask3d import (
+    CrossAttentionLayer,
+    FFNLayer,
+    SelfAttentionLayer,
+)
 from src.models.networks.segment3d.modules.helpers_3detr import GenericMLP
-from src.models.networks.segment3d.modules.position_embedding import PositionEmbeddingCoordsSine
-from src.models.networks.mask3d.mask3d import CrossAttentionLayer, FFNLayer, SelfAttentionLayer
-from src.models.components.structure import Point
-from src.models.components.misc import batch2offset
+from src.models.networks.segment3d.modules.position_embedding import (
+    PositionEmbeddingCoordsSine,
+)
+from src.models.utils.misc import batch2offset
+from src.models.utils.structure import Point
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
@@ -85,7 +91,9 @@ class OpenSegment3D(nn.Module):
         # Prediction heads
         self.class_head = nn.Linear(hidden_dim, 2)  # for Segment3D ckpt compatibility
         self.mask_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
         )
         self.clip_head = nn.Linear(hidden_dim, clip_dim)
 
@@ -293,7 +301,10 @@ class OpenSegment3D(nn.Module):
             for i in range(max_hlevel - 1):
                 indice_data = indice_dict[f"spconv{i + 1}"]
                 centroids_down, _ = spconv.ops.indice_avgpool_implicit_gemm(
-                    centroids_all[i], indice_data.pair_fwd, indice_data.pair_fwd.shape[1], False
+                    centroids_all[i],
+                    indice_data.pair_fwd,
+                    indice_data.pair_fwd.shape[1],
+                    False,
                 )
                 centroids_all.append(centroids_down)
             centroids_all.reverse()  # coarse to fine

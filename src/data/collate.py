@@ -1,15 +1,12 @@
 import random
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
-from jaxtyping import Bool, Float, Int
+from jaxtyping import Bool, Int
 from torch import Tensor
 from torch.utils.data.dataloader import default_collate
-
-from src.models.components.misc import offset2bincount
 
 
 def convert_list_list_tensor_to_tensor(
@@ -164,42 +161,6 @@ def point_collate_fn(batch, grid_size, mix_prob=0, drop_feat: bool = False):
     return batch
 
 
-def point_collate_fn_with_captioned_masks(batch, grid_size, mix_prob=0, drop_feat: bool = False):
-    batch = [b for b in batch if b is not None]
-    assert isinstance(batch[0], Mapping)
-
-    # Extract caption data before collating
-    batch_captioned_masks = [x.pop("caption_data") for x in batch if "caption_data" in x]
-    batch = point_collate_fn(batch, grid_size, mix_prob, drop_feat)
-
-    if batch_captioned_masks:
-        # Create binary masks for each caption's point indices
-        collated_masks = []
-        for num_points, caption_data in zip(
-            offset2bincount(batch["offset"]), batch_captioned_masks
-        ):
-            has_embedding = "embedding" in caption_data
-            key = "embedding" if has_embedding else "caption"
-            num_captions = len(caption_data[key])
-
-            # Create masks and set points to True
-            masks = torch.zeros(
-                [num_captions, num_points],
-                dtype=torch.bool,
-                device=batch["feat"].device,
-            )
-            for i, idx in enumerate(caption_data["idx"]):
-                masks[i, idx] = True
-
-            # Build collated mask with appropriate data
-            collated_mask = {"mask": masks, key: caption_data[key], "num_captions": num_captions}
-            collated_masks.append(collated_mask)
-
-        batch["caption_data"] = collated_masks
-
-    return batch
-
-
 def point_collate_fn_with_masks(batch, grid_size, mix_prob=0, drop_feat: bool = False):
     batch = [b for b in batch if b is not None]  # filter out None
     assert isinstance(batch[0], Mapping)
@@ -214,132 +175,3 @@ def point_collate_fn_with_masks(batch, grid_size, mix_prob=0, drop_feat: bool = 
         batch["masks_binary"] = batch_masks_binary
 
     return batch
-
-
-def collate_regionplc(batch_list, ignore_label: int, min_spatial_shape: int):
-    data_dict = defaultdict(list)
-    for cur_sample in batch_list:
-        for key, val in cur_sample.items():
-            data_dict[key].append(val)
-    batch_size = len(batch_list)
-    ret = {}
-
-    total_inst_num = 0
-    for key, val in data_dict.items():
-        if key in ["points"]:
-            coors = []
-            for i, coor in enumerate(val):
-                coor_pad = np.pad(coor, ((0, 0), (1, 0)), mode="constant", constant_values=i)
-                coors.append(coor_pad)
-            ret[key] = np.concatenate(coors, axis=0)
-        elif key in ["ids", "pc_count", "batch_size", "inst_num"]:
-            ret[key] = data_dict[key]
-        elif key in [
-            "points_xyz",
-            "feats",
-            "labels",
-            "binary_labels",
-            "origin_idx",
-            "rgb",
-            "pt_offset_label",
-            "inst_info",
-            "inst_pointnum",
-            "kd_labels",
-            "pred_mask",
-            "kd_labels_mask",
-            "adapter_feats",
-            "adapter_feats_mask",
-            "super_voxel",
-            "pt_offset_mask",
-            "n_captions_points",
-        ]:
-            ret[key] = np.concatenate(data_dict[key], axis=0)
-        elif key in ["inst_label"]:
-            if "inst_num" in data_dict:
-                inst_labels = []
-                for i, il in enumerate(val):
-                    il[np.where(il != ignore_label)] += total_inst_num
-                    total_inst_num += data_dict["inst_num"][i]
-                    inst_labels.append(il)
-            else:
-                inst_labels = val
-            ret[key] = np.concatenate(inst_labels, axis=0)
-        elif key in ["points_xyz_voxel_scale"]:
-            if data_dict[key][0].shape[1] == 4:  # x4_split
-                assert len(data_dict[key]) == 1
-                ret[key] = np.concatenate(data_dict[key], axis=0)
-                batch_size = int(ret[key][..., 0].max() + 1)  # re-set batch size
-            else:
-                ret[key] = np.concatenate(
-                    [
-                        np.concatenate(
-                            [np.full((d.shape[0], 1), i), d.astype(np.int64)],
-                            axis=-1,
-                        )
-                        for i, d in enumerate(data_dict[key])
-                    ],
-                    axis=0,
-                )
-        elif key in ["caption_data"]:
-            if val[0] is None:
-                continue
-            ret[key] = {}
-            ret[key] = {}
-            ret[key]["idx"] = [val[n]["idx"] for n in range(len(val))]
-            ret[key]["caption"] = []
-            for n in range(len(val)):
-                ret[key]["caption"].extend(val[n]["caption"])
-        elif key in ["inst_cls"]:
-            ret[key] = np.array([j for i in data_dict[key] for j in i], dtype=np.int32)
-        else:
-            ret[key] = np.stack(val, axis=0)
-
-    ret["spatial_shape"] = np.clip(
-        (ret["points_xyz_voxel_scale"].max(0)[1:] + 1), min_spatial_shape, None
-    )
-
-    ret["batch_idxs"] = ret["points_xyz_voxel_scale"][:, 0].astype(np.int32)
-    if len(batch_list) == 1:
-        ret["offsets"] = np.array([0, ret["batch_idxs"].shape[0]]).astype(np.int32)
-    else:
-        ret["offsets"] = np.cumsum(np.bincount(ret["batch_idxs"] + 1).astype(np.int32))
-        assert len(ret["offsets"]) == batch_size + 1
-
-    ret["batch_size"] = batch_size
-
-    for key, val in ret.items():
-        if isinstance(val, torch.Tensor):
-            ret[key] = ret[key].cuda()
-        elif not isinstance(val, np.ndarray) or key in [
-            "calib",
-            "point_img_idx",
-            "point_img",
-        ]:
-            continue
-        elif key in [
-            "ids",
-            "scan_id",
-            "metadata",
-            "scene_name",
-            "n_captions_points",
-            "image_shape",
-            "cam",
-        ]:
-            continue
-        elif key in [
-            "points_xyz_voxel_scale",
-            "labels",
-            "inst_label",
-            "origin_idx",
-            "offsets",
-            "inst_cls",
-            "super_voxel",
-        ]:
-            ret[key] = torch.from_numpy(val).long()
-        elif key in ["inst_pointnum", "batch_idxs"]:
-            ret[key] = torch.from_numpy(val).int()
-        elif key in ["adapter_feats_mask", "kd_labels_mask", "pt_offset_mask"]:
-            ret[key] = torch.from_numpy(val).bool()
-        else:
-            ret[key] = torch.from_numpy(val).float()
-    return ret

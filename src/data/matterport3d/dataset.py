@@ -15,7 +15,7 @@ log = RankedLogger(__name__, rank_zero_only=False)
 class Matterport3DDataset(AnnotatedDataset):
     CLASS_LABELS = CLASS_LABELS_21
     SEGMENT_FILE = "segment.npy"
-    LOG_PREFIX = "matterport3d"
+    LOG_POSTFIX = "matterport3d"
 
     def __init__(
         self,
@@ -27,7 +27,6 @@ class Matterport3DDataset(AnnotatedDataset):
         num_masks: Optional[int] = None,
     ):
         super().__init__(
-            dataset_name="matterport3d",
             data_dir=data_dir,
             split=split,
             repeat=repeat,
@@ -39,17 +38,17 @@ class Matterport3DDataset(AnnotatedDataset):
 
 class Matterport3D40Dataset(Matterport3DDataset):
     CLASS_LABELS = CLASS_LABELS_40
-    LOG_PREFIX = "matterport3d40"
+    LOG_POSTFIX = "matterport3d40"
 
 
 class Matterport3D80Dataset(Matterport3DDataset):
     CLASS_LABELS = CLASS_LABELS_80
-    LOG_PREFIX = "matterport3d80"
+    LOG_POSTFIX = "matterport3d80"
 
 
 class Matterport3D160Dataset(Matterport3DDataset):
     CLASS_LABELS = CLASS_LABELS_160
-    LOG_PREFIX = "matterport3d160"
+    LOG_POSTFIX = "matterport3d160"
 
 
 if __name__ == "__main__":

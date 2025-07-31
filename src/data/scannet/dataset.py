@@ -21,7 +21,7 @@ class ScanNetDataset(AnnotatedDataset):
     CLASS_LABELS = CLASS_LABELS_20
     SEGMENT_FILE = "segment20.npy"
     INSTANCE_FILE = "instance.npy"
-    LOG_PREFIX = "scannet20"
+    LOG_POSTFIX = "scannet20"
 
     def __init__(
         self,
@@ -33,8 +33,8 @@ class ScanNetDataset(AnnotatedDataset):
         num_masks: Optional[int] = None,
         mask_dir: Optional[str] = None,
     ):
+        self.mask_dir = mask_dir
         super().__init__(
-            dataset_name="scannet",
             data_dir=data_dir,
             split=split,
             repeat=repeat,
@@ -42,15 +42,26 @@ class ScanNetDataset(AnnotatedDataset):
             transforms=transforms,
             num_masks=num_masks,
         )
-        self.mask_dir = mask_dir
 
     def __getitem__(self, idx_original):
-        data_dict = super().__getitem__(idx_original)
-        if self.mask_dir is not None:
+        idx = idx_original % len(self.scene_names)
+        scene_name = self.scene_names[idx]
+
+        # load point cloud data
+        data_dict = dict(scene_name=scene_name)
+        point_cloud_data = self.load_point_cloud(scene_name)
+        data_dict.update(point_cloud_data)
+
+        if self.is_train:
+            data_dict["caption_data"] = self.load_caption(scene_name)
+
+        if not self.is_train and self.mask_dir is not None:
             mask_path = os.path.join(self.mask_dir, f"{self.scene_names[idx_original]}.npz")
             mask_data = np.load(mask_path)
             masks_binary = mask_data["masks_binary"]
             data_dict["masks_binary"] = masks_binary
+
+        data_dict = self.transforms(data_dict)
         return data_dict
 
 
@@ -58,7 +69,7 @@ class ScanNet200Dataset(ScanNetDataset):
     CLASS_LABELS = CLASS_LABELS_200
     SEGMENT_FILE = "segment200.npy"
     INSTANCE_FILE = "instance.npy"
-    LOG_PREFIX = "scannet200"
+    LOG_POSTFIX = "scannet200"
 
     def build_subset_mapper(self):
         mapper = {}

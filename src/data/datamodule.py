@@ -1,10 +1,9 @@
 from typing import Any, Callable, List, Optional
 
 from lightning import LightningDataModule
-from torch.utils.data import DataLoader, Dataset, RandomSampler
+from torch.utils.data import DataLoader, Dataset
 
-from src.data.concat_dataset import ConcatDataset
-from src.data.multi_dataloader import MultiDatasetDataloader
+from src.data.multi_dataloader import ConcatDataset, MultiDatasetDataloader
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)

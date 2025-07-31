@@ -3,7 +3,6 @@ from collections import OrderedDict
 
 import torch
 
-
 ID_CKPTS = {
     "regionplc_sparseunet16.ckpt": r"https://connecthkuhk-my.sharepoint.com/:u:/g/personal/jhyang13_connect_hku_hk/EWqYW58Q0GlKuhcAmWZYakUBYV0wyWfbxSarMHo0EZLfMg?e=1Ipfka\&download\=1",
     "regionplc_sparseunet32.ckpt": r"https://connecthkuhk-my.sharepoint.com/:u:/g/personal/jhyang13_connect_hku_hk/EdeusrJ9OnROsFYLd3E1vQMBdfydH5z5L7674K8tG4gYwQ?e=BTWn6j\&download\=1",
@@ -31,7 +30,7 @@ def patch(ckpt_path):
 
     new_state_dict = OrderedDict()
     for k, v in state_dict.items():
-        new_state_dict[f"net.{k}"] = v
+        new_state_dict[f"net.{k.replace('backbone_3d.', 'backbone.')}"] = v
 
     torch.save(dict(state_dict=new_state_dict), ckpt_path.replace(".ckpt", "_patched.ckpt"))
 

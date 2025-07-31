@@ -1,10 +1,9 @@
 import copy
 import numbers
 import random
-from collections import Counter
-from collections.abc import Mapping, Sequence
-from typing import List, Optional
 import re
+from collections.abc import Mapping, Sequence
+from typing import List
 
 import numpy as np
 import scipy
@@ -910,9 +909,18 @@ class SphereCrop:
             if "index" not in data_dict.keys():
                 data_dict["index"] = np.arange(data_dict["coord"].shape[0])
             data_part_list = []
-            coord_list, color_list, dist2_list, idx_list, offset_list = [], [], [], [], []
+            coord_list, color_list, dist2_list, idx_list, offset_list = (
+                [],
+                [],
+                [],
+                [],
+                [],
+            )
             if data_dict["coord"].shape[0] > point_max:
-                coord_p, idx_uni = np.random.rand(data_dict["coord"].shape[0]) * 1e-3, np.array([])
+                coord_p, idx_uni = (
+                    np.random.rand(data_dict["coord"].shape[0]) * 1e-3,
+                    np.array([]),
+                )
                 while idx_uni.size != data_dict["index"].shape[0]:
                     init_idx = np.argmin(coord_p)
                     dist2 = np.sum(
@@ -1236,7 +1244,10 @@ class FilterCaption:
                 idx for idx, valid in zip(caption_point_indices, valid_flags) if valid
             ]
 
-            data_dict["caption_data"] = {"caption": filtered_captions, "idx": filtered_indices}
+            data_dict["caption_data"] = {
+                "caption": filtered_captions,
+                "idx": filtered_indices,
+            }
 
         return data_dict
 

@@ -6,21 +6,14 @@ Please cite our work if the code is helpful to you.
 
 from collections import OrderedDict
 from functools import partial
-from typing import List, Optional
 
 import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
+from timm.layers import trunc_normal_
 from torch_scatter import scatter
 
-from src.models.components.structure import (
-    Custom1x1Subm3d,
-    Point,
-    PointModule,
-    PointSequential,
-)
-from src.models.networks.openscene.utils import trunc_normal_
-from src.models.networks.ppt.pdnorm import PDNorm
+from src.models.utils.structure import Custom1x1Subm3d, Point
 
 
 class PDBatchNorm(torch.nn.Module):
@@ -425,7 +418,16 @@ if __name__ == "__main__":
     model_kargs = {
         "in_channels": 6,
         "out_channels": 512,
-        "channels": (32, 64, 128, 256, 128, 128, 96, 96),  # MinkUNet18A (OpenScene default)
+        "channels": (
+            32,
+            64,
+            128,
+            256,
+            128,
+            128,
+            96,
+            96,
+        ),  # MinkUNet18A (OpenScene default)
         "layers": (2, 2, 2, 2, 2, 2, 2, 2),  # MinkUNet18A (OpenScene default),
     }
 

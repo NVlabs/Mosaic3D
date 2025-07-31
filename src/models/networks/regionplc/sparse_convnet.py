@@ -7,8 +7,8 @@ import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
 
-from src.models.components.structure import Point, PointModule, PointSequential
 from src.models.networks.ppt.pdnorm import PDNorm
+from src.models.utils.structure import Point, PointModule, PointSequential
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)

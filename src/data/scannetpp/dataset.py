@@ -9,7 +9,7 @@ log = RankedLogger(__name__, rank_zero_only=False)
 
 class ScanNetPPDataset(AnnotatedDataset):
     CLASS_LABELS = CLASS_LABELS
-    LOG_PREFIX = "scannetpp"
+    LOG_POSTFIX = "scannetpp"
 
     def __init__(
         self,
@@ -21,7 +21,6 @@ class ScanNetPPDataset(AnnotatedDataset):
         num_masks: Optional[int] = None,
     ):
         super().__init__(
-            dataset_name="scannetpp",
             data_dir=data_dir,
             split=split,
             repeat=repeat,

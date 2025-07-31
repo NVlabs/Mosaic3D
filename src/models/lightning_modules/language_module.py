@@ -1,12 +1,12 @@
 import os
-import time
 import random
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torchmetrics import MaxMetric, MeanMetric
+from torchmetrics import MaxMetric
 from torchmetrics.classification.confusion_matrix import MulticlassConfusionMatrix
 
 import src.utils.caption_utils as caption_utils
@@ -24,7 +24,6 @@ from src.models.losses.clip_alignment_loss import (
     CLIPAlignmentEval,
     CLIPAlignmentLoss,
     compute_clip_image_alignment,
-    compute_clip_text_cosine_similarity,
 )
 from src.utils import RankedLogger
 
@@ -168,12 +167,18 @@ class DenseLanguageLitModule(LitModuleBase):
             val_class_info = dict(
                 postfix=postfix,
                 class_names=class_names,
-                base_class_idx=dataset.base_class_idx,
-                novel_class_idx=dataset.novel_class_idx,
-                fg_class_idx=dataset.fg_class_idx,
-                bg_class_idx=dataset.bg_class_idx,
+                base_class_idx=dataset.base_class_idx
+                if hasattr(dataset, "base_class_idx")
+                else None,
+                novel_class_idx=dataset.novel_class_idx
+                if hasattr(dataset, "novel_class_idx")
+                else None,
+                fg_class_idx=dataset.fg_class_idx if hasattr(dataset, "fg_class_idx") else None,
+                bg_class_idx=dataset.bg_class_idx if hasattr(dataset, "bg_class_idx") else None,
                 ignore_label=dataset.ignore_label,
-                instance_ignore_class_idx=dataset.instance_ignore_class_idx,
+                instance_ignore_class_idx=dataset.instance_ignore_class_idx
+                if hasattr(dataset, "instance_ignore_class_idx")
+                else None,
                 subset_mapper=dataset.subset_mapper if hasattr(dataset, "subset_mapper") else None,
             )
             self.val_metrics[postfix] = val_metric

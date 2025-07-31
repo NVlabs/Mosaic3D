@@ -23,7 +23,6 @@ class BaseDataset(Dataset):
 
     def __init__(
         self,
-        dataset_name: str,
         data_dir: str,
         split: str,
         repeat: int = 1,
@@ -31,15 +30,17 @@ class BaseDataset(Dataset):
         transforms: Optional[List[Dict]] = None,
     ):
         super().__init__()
-        self.dataset_name = dataset_name
-        self.data_dir = Path(data_dir) / dataset_name
+        self.data_dir = Path(data_dir)
+        self.dataset_name = self.data_dir.stem
         assert self.data_dir.exists(), f"{self.data_dir} not exist."
         self.split = split
         self.repeat = repeat
         self.ignore_label = ignore_label
 
         # setup class mappers
-        self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
+        self.valid_class_idx = [
+            i for i, c in enumerate(self.CLASS_LABELS) if c.startswith("other")
+        ]
         self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, self.ignore_label)
         self.fg_class_idx = [
             i
@@ -68,6 +69,10 @@ class BaseDataset(Dataset):
         self.transforms = lambda x: x
         if transforms is not None:
             transforms_cfg = OmegaConf.to_container(transforms)
+            if hasattr(self, "mask_dir") and self.mask_dir is not None:
+                for transform_cfg in transforms_cfg:
+                    if transform_cfg["type"] == "Collect":
+                        transform_cfg["keys"].append("masks_binary")
             self.transforms = Compose(transforms_cfg)
 
         log.info(
@@ -81,6 +86,10 @@ class BaseDataset(Dataset):
         if self.split == "train":
             n *= self.repeat
         return n
+
+    @property
+    def is_train(self):
+        return self.split == "train"
 
     @staticmethod
     def build_class_mapper(class_idx, ignore_label, squeeze_label=False):
@@ -113,11 +122,10 @@ class AnnotatedDataset(BaseDataset):
     CLASS_LABELS = None
     SEGMENT_FILE = None
     INSTANCE_FILE = None
-    LOG_PREFIX = None
+    LOG_POSTFIX = None
 
     def __init__(
         self,
-        dataset_name: str,
         data_dir: str,
         split: str,
         repeat: int = 1,
@@ -127,7 +135,6 @@ class AnnotatedDataset(BaseDataset):
         anno_sources: Optional[List[str]] = None,
     ):
         super().__init__(
-            dataset_name=dataset_name,
             data_dir=data_dir,
             split=split,
             repeat=repeat,
@@ -136,7 +143,7 @@ class AnnotatedDataset(BaseDataset):
         )
         self.num_masks = num_masks
         self.anno_sources = anno_sources or ["gsam2", "seem"]
-        self.log_prefix = self.LOG_PREFIX
+        self.log_postfix = self.LOG_POSTFIX
 
     def load_point_cloud(self, scene_name: str):
         """Load point cloud data for a given scene."""
@@ -151,14 +158,14 @@ class AnnotatedDataset(BaseDataset):
             origin_idx=origin_idx,
         )
 
-        if self.SEGMENT_FILE is not None:
+        if not self.is_train and self.SEGMENT_FILE is not None:
             segment_file = geom_dir / self.SEGMENT_FILE
             assert segment_file.exists(), f"{segment_file} not exist."
             segment_raw = np.load(segment_file)
             segment = self.valid_class_mapper[segment_raw.astype(np.int64)]
             return_dict["segment"] = segment
 
-        if self.INSTANCE_FILE is not None:
+        if not self.is_train and self.INSTANCE_FILE is not None:
             instance_file = geom_dir / self.INSTANCE_FILE
             assert instance_file.exists(), f"{instance_file} not exist."
             assert "segment" in return_dict, "segment is required for instance"
@@ -195,7 +202,7 @@ class AnnotatedDataset(BaseDataset):
         point_cloud_data = self.load_point_cloud(scene_name)
         data_dict.update(point_cloud_data)
 
-        if self.split == "train":
+        if self.is_train:
             data_dict["caption_data"] = self.load_caption(scene_name)
 
         data_dict = self.transforms(data_dict)

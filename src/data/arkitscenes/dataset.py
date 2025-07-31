@@ -8,7 +8,7 @@ log = RankedLogger(__name__, rank_zero_only=False)
 
 class ARKitScenesDataset(AnnotatedDataset):
     CLASS_LABELS = []  # there is no GT semantic labels
-    LOG_PREFIX = "arkitscenes"
+    LOG_POSTFIX = "arkitscenes"
 
     def __init__(
         self,
@@ -20,7 +20,6 @@ class ARKitScenesDataset(AnnotatedDataset):
         num_masks: Optional[int] = None,
     ):
         super().__init__(
-            dataset_name="arkitscenes",
             data_dir=data_dir,
             split=split,
             repeat=repeat,

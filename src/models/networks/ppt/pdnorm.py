@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from src.models.components.structure import Point, PointModule, PointSequential
+from src.models.utils.structure import Point, PointModule, PointSequential
 
 
 class PDNorm(PointModule):

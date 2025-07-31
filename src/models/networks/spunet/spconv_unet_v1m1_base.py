@@ -6,15 +6,15 @@ Please cite our work if the code is helpful to you.
 
 from collections import OrderedDict
 from functools import partial
-from typing import Literal, List
+from typing import List, Literal
 
+import spconv.pytorch as spconv
 import torch
 import torch.nn as nn
-import spconv.pytorch as spconv
+from timm.layers import trunc_normal_
 
-from src.models.components.structure import Custom1x1Subm3d, Point
-from src.models.networks.openscene.utils import trunc_normal_
-from src.models.components.misc import offset2batch
+from src.models.utils.misc import offset2batch
+from src.models.utils.structure import Custom1x1Subm3d, Point
 
 
 class BasicBlock(spconv.SparseModule):
@@ -101,7 +101,10 @@ class Bottleneck(spconv.SparseModule):
         else:
             self.proj = spconv.SparseSequential(
                 Custom1x1Subm3d(
-                    in_channels, embed_channels * self.expansion, kernel_size=1, bias=False
+                    in_channels,
+                    embed_channels * self.expansion,
+                    kernel_size=1,
+                    bias=False,
                 ),
                 norm_fn(embed_channels * self.expansion),
             )
@@ -330,7 +333,9 @@ class SpUNetBase(nn.Module):
         else:
             point = Point(input_dict)
             point.sparsify(
-                pad=128, hash_method=self.hash_method, pooling_method=self.pooling_method
+                pad=128,
+                hash_method=self.hash_method,
+                pooling_method=self.pooling_method,
             )
             x = point.sparse_conv_feat
 
@@ -514,7 +519,16 @@ if __name__ == "__main__":
     model_kargs = {
         "in_channels": 3,
         "out_channels": 512,
-        "channels": (32, 64, 128, 256, 128, 128, 96, 96),  # MinkUNet18A (OpenScene default)
+        "channels": (
+            32,
+            64,
+            128,
+            256,
+            128,
+            128,
+            96,
+            96,
+        ),  # MinkUNet18A (OpenScene default)
         "layers": (2, 3, 4, 6, 2, 2, 2, 2),  # MinkUNet18A (OpenScene default),
     }
 

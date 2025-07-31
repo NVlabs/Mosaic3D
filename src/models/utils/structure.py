@@ -12,10 +12,10 @@ from torch_scatter import scatter
 try:
     from warpconvnet.utils.ravel import ravel_multi_index_auto_shape
 except ImportError:
-    from src.models.components.misc import ravel_multi_index_auto_shape
+    from src.models.utils.misc import ravel_multi_index_auto_shape
 
-from src.models.components.misc import batch2offset, offset2batch
-from src.models.networks.ptv3.serialization import encode
+from src.models.utils.misc import batch2offset, offset2batch
+from src.models.utils.serialization.default import encode
 
 
 def fnv_hash_vec(arr):

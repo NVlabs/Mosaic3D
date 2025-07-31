@@ -1,11 +1,13 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
-from overrides import override
 import spconv.pytorch as spconv
+from overrides import override
 
-from src.models.components.structure import Point
 from src.models.lightning_modules.language_module import DenseLanguageLitModule
-from src.models.lightning_modules.masked_language_module import MaskedDenseLanguageLitModule
+from src.models.lightning_modules.masked_language_module import (
+    MaskedDenseLanguageLitModule,
+)
+from src.models.utils.structure import Point
 
 
 class RegionPLCLitModule(DenseLanguageLitModule):
