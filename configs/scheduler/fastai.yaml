@@ -1,8 +1,0 @@
-# @package model
-scheduler:
-  _target_: src.models.optimization.build_scheduler
-  _partial_: true
-  last_epoch: -1
-  optim_cfg: ${model.optimizer.optim_cfg}
-
-scheduler_interval: step
