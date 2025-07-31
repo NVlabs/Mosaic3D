@@ -25,6 +25,7 @@ from src.models.losses.clip_alignment_loss import (
 )
 from src.models.utils.clip_models import build_clip_model, download_clip_model
 from src.models.utils.evaluator import InstanceSegmentationEvaluator
+from src.models.utils.structure import Point
 from src.utils import RankedLogger
 
 log = RankedLogger(__file__, rank_zero_only=True)
@@ -198,7 +199,14 @@ class DenseLanguageLitModule(LitModuleBase):
         return out_dict
 
     def _output_to_dict(self, output: Any, batch: Any) -> Dict[str, Any]:
-        raise NotImplementedError
+        assert isinstance(output, Point)
+        output: Point = output
+        clip_feat = output.sparse_conv_feat.features[output.v2p_map]
+        out_dict = dict(point=output, clip_feat=clip_feat)
+        # Check if binary scores are present
+        if hasattr(output, "binary_scores"):
+            out_dict["binary_scores"] = output.binary_scores
+        return out_dict
 
     def training_step(self, batch, batch_idx):
         self._train_start = time.time()
