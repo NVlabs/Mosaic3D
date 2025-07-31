@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 
-from src.data.dataset import AnnotatedDataset
+from src.data.dataset_base import AnnotatedDataset
 from src.data.metadata.scannet import (
     CLASS_LABELS_20,
     CLASS_LABELS_200,

@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 
-from src.data.dataset import AnnotatedDataset
+from src.data.dataset_base import AnnotatedDataset
 from src.data.metadata.matterport3d import (
     CLASS_LABELS_21,
     CLASS_LABELS_40,

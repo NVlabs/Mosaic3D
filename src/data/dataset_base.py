@@ -1,58 +1,59 @@
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional
 
 import numpy as np
+import torch
 from natsort import natsorted
 from omegaconf import OmegaConf
 from torch.utils.data import Dataset
 
-from src.data.transform import Compose
+from src.data.utils.transform import Compose
 from src.utils import RankedLogger
+from src.utils.io import unpack_list_of_np_arrays
 
 log = RankedLogger(__name__, rank_zero_only=False)
 
 
-class DatasetBase(Dataset, metaclass=ABCMeta):
+class BaseDataset(Dataset):
+    """Base dataset class with core functionality for 3D datasets."""
+
+    BACKGROUND_CLASSES = ("wall", "floor", "ceiling")
+    CLASS_LABELS = None
+
     def __init__(
         self,
-        dataset_name: str,
         data_dir: str,
         split: str,
-        transforms: None,
-        caption_dir: Optional[str] = None,
-        caption_subset: Optional[Union[str, List[str]]] = None,
-        segment_dir: Optional[str] = None,
-        segment_subset: Optional[Union[str, List[str]]] = None,
-        object_num_max: Optional[int] = None,
-        object_sample_ratio: Optional[float] = None,
-        base_class_idx: Optional[List[int]] = None,
-        novel_class_idx: Optional[List[int]] = None,
-        ignore_class_idx: Optional[List[int]] = None,
-        ignore_label: int = -100,
         repeat: int = 1,
-        log_postfix: Optional[str] = None,
-        mask_dir: Optional[str] = None,
-        load_embeddings: bool = False,
+        ignore_label: int = -100,
+        transforms: Optional[List[Dict]] = None,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
+        self.dataset_name = self.data_dir.stem
         assert self.data_dir.exists(), f"{self.data_dir} not exist."
-
         self.split = split
-        self.object_num_max = object_num_max
-        self.object_sample_ratio = object_sample_ratio
-        self.base_class_idx = base_class_idx
-        self.novel_class_idx = novel_class_idx
-        self.ignore_class_idx = ignore_class_idx
-        self.ignore_label = ignore_label
         self.repeat = repeat
-        self.log_postfix = log_postfix
-        self.mask_dir = mask_dir
-        self.load_embeddings = load_embeddings
+        self.ignore_label = ignore_label
 
-        # read scene names for split
-        self.dataset_name = dataset_name
+        # setup class mappers
+        self.valid_class_idx = [
+            i for i, c in enumerate(self.CLASS_LABELS) if not c.startswith("other")
+        ]
+        self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, self.ignore_label)
+        self.fg_class_idx = [
+            i
+            for i, c in enumerate(self.CLASS_LABELS)
+            if c not in self.BACKGROUND_CLASSES and "other" not in c
+        ]
+        self.bg_class_idx = list(set(range(len(self.CLASS_LABELS))) - set(self.fg_class_idx))
+        self.instance_ignore_class_idx = [
+            i for i, c in enumerate(self.CLASS_LABELS) if c in ("wall", "floor") or "other" in c
+        ]
+        self.subset_mapper = self.build_subset_mapper()
+
+        # read split file
         split_file_path = (
             Path(__file__).parent
             / "metadata"
@@ -64,66 +65,31 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
                 [line.strip() for line in f.readlines() if not line.startswith("#")]
             )
 
-        # set caption dir for train dataset
-        if self.split == "train":
-            caption_subset = (
-                [caption_subset] if isinstance(caption_subset, str) else caption_subset
-            )
-            self.caption_dir = [Path(caption_dir) / subset for subset in caption_subset]
-            for subset_dir in self.caption_dir:
-                assert subset_dir.exists(), f"{subset_dir} not exist."
-
-        # set segment dir for train dataset
-        if self.split == "train" and segment_dir and segment_subset:
-            segment_subset = (
-                [segment_subset] if isinstance(segment_subset, str) else segment_subset
-            )
-            self.segment_dir = [Path(segment_dir) / subset for subset in segment_subset]
-            assert len(self.segment_dir) == len(
-                self.caption_dir
-            ), "segment_dir and caption_dir must have the same length"
-            for subset_dir in self.segment_dir:
-                assert subset_dir.exists(), f"{subset_dir} not exist."
-
-        # class label mappers
-        self.valid_class_idx = np.arange(len(self.CLASS_LABELS)).tolist()
-        if base_class_idx is not None and len(base_class_idx):
-            self.base_class_mapper = self.build_class_mapper(base_class_idx, ignore_label)
-            self.binary_class_mapper = self.build_binary_class_mapper(
-                base_class_idx, novel_class_idx, ignore_class_idx, ignore_label
-            )
-        if ignore_class_idx is not None:
-            for c in ignore_class_idx:
-                self.valid_class_idx.remove(c)
-        self.valid_class_mapper = self.build_class_mapper(self.valid_class_idx, ignore_label)
-        self.subset_mapper = self.build_subset_mapper()
-        # foreground & background class indices
-        self.fg_class_idx = [
-            i
-            for i, c in enumerate(self.CLASS_LABELS)
-            if c not in ("wall", "floor", "ceiling") and "other" not in c
-        ]
-        self.bg_class_idx = list(set(range(len(self.CLASS_LABELS))) - set(self.fg_class_idx))
-        self.instance_ignore_class_idx = [
-            i for i, c in enumerate(self.CLASS_LABELS) if c in ("wall", "floor") or "other" in c
-        ]
-
-        # data transform
+        # setup transforms
+        self.transforms = lambda x: x
         if transforms is not None:
             transforms_cfg = OmegaConf.to_container(transforms)
-            if mask_dir is not None:
+            if hasattr(self, "mask_dir") and self.mask_dir is not None:
                 for transform_cfg in transforms_cfg:
                     if transform_cfg["type"] == "Collect":
                         transform_cfg["keys"].append("masks_binary")
             self.transforms = Compose(transforms_cfg)
-        else:
-            self.transforms = lambda x: x
 
-        log.info(f"Loaded {self.__len__()} samples in {self.split} set.")
+        log.info(
+            f"Loaded dataset: {self.dataset_name} | "
+            f"Split: {self.split} | "
+            f"Number of samples: {len(self.scene_names)}"
+        )
+
+    def __len__(self):
+        n = len(self.scene_names)
+        if self.split == "train":
+            n *= self.repeat
+        return n
 
     @property
-    def use_base_class_mapper(self):
-        return self.split == "train" and hasattr(self, "base_class_mapper")
+    def is_train(self):
+        return self.split == "train"
 
     @staticmethod
     def build_class_mapper(class_idx, ignore_label, squeeze_label=False):
@@ -136,57 +102,108 @@ class DatasetBase(Dataset, metaclass=ABCMeta):
                 remapper[x] = x
         return remapper
 
-    @staticmethod
-    def build_binary_class_mapper(base_class_idx, novel_class_idx, ignore_class_idx, ignore_label):
-        remapper = np.ones(256, dtype=np.int64) * ignore_label  # base: 1, novel: 0
-        for _, x in enumerate(base_class_idx):
-            remapper[x] = 1
-        for _, x in enumerate(novel_class_idx):
-            remapper[x] = 0
-        # ignored categories are mapped to novel
-        for _, x in enumerate(ignore_class_idx):
-            remapper[x] = 0
-        return remapper
-
     def build_subset_mapper(self):
         return None
 
-    def __len__(self):
-        length = len(self.scene_names) * (self.repeat if self.split == "train" else 1)
-        return length
+    @abstractmethod
+    def load_point_cloud(self, scene_name: str):
+        """Load point cloud data for a given scene."""
+        raise NotImplementedError
 
     @abstractmethod
     def __getitem__(self, idx):
+        """Get item by index."""
         raise NotImplementedError
 
-    @abstractmethod
+
+class AnnotatedDataset(BaseDataset):
+    """Dataset with annotation/caption capabilities."""
+
+    CLASS_LABELS = None
+    SEGMENT_FILE = None
+    INSTANCE_FILE = None
+    LOG_POSTFIX = None
+
+    def __init__(
+        self,
+        data_dir: str,
+        split: str,
+        repeat: int = 1,
+        ignore_label: int = -100,
+        transforms: Optional[List[Dict]] = None,
+        num_masks: Optional[int] = None,
+        anno_sources: Optional[List[str]] = None,
+    ):
+        super().__init__(
+            data_dir=data_dir,
+            split=split,
+            repeat=repeat,
+            ignore_label=ignore_label,
+            transforms=transforms,
+        )
+        self.num_masks = num_masks
+        self.anno_sources = anno_sources or ["gsam2", "seem"]
+        self.log_postfix = self.LOG_POSTFIX
+
     def load_point_cloud(self, scene_name: str):
-        raise NotImplementedError
+        """Load point cloud data for a given scene."""
+        geom_dir = self.data_dir / scene_name / "geometry"
+        coord = np.load(geom_dir / "coord.npy").astype(np.float32)
+        color = np.load(geom_dir / "color.npy")
+        origin_idx = np.arange(coord.shape[0]).astype(np.int64)
 
-    @abstractmethod
+        return_dict = dict(
+            coord=coord,
+            color=color,
+            origin_idx=origin_idx,
+        )
+
+        if not self.is_train and self.SEGMENT_FILE is not None:
+            segment_file = geom_dir / self.SEGMENT_FILE
+            assert segment_file.exists(), f"{segment_file} not exist."
+            segment_raw = np.load(segment_file)
+            segment = self.valid_class_mapper[segment_raw.astype(np.int64)]
+            return_dict["segment"] = segment
+
+        if not self.is_train and self.INSTANCE_FILE is not None:
+            instance_file = geom_dir / self.INSTANCE_FILE
+            assert instance_file.exists(), f"{instance_file} not exist."
+            assert "segment" in return_dict, "segment is required for instance"
+            instance = np.load(instance_file)
+            instance[return_dict["segment"] == self.ignore_label] = self.ignore_label
+            return_dict["instance"] = instance
+
+        return return_dict
+
     def load_caption(self, scene_name: str):
-        raise NotImplementedError
+        """Load caption data for a given scene."""
+        scene_dir = self.data_dir / scene_name
+        anno_source = np.random.choice(self.anno_sources)
+        captions = unpack_list_of_np_arrays(scene_dir / anno_source / "captions.npz")
+        point_indices = unpack_list_of_np_arrays(scene_dir / anno_source / "point_indices.npz")
+        captions = [item for sublist in captions for item in sublist]
+        point_indices = [
+            torch.from_numpy(item).int() for sublist in point_indices for item in sublist
+        ]
 
-    def load_caption_and_sample(self, scene_name: str):
-        try:
-            point_indices, captions = self.load_caption(scene_name)
-            if self.object_num_max is not None and self.object_num_max < len(point_indices):
-                sel = np.random.choice(len(point_indices), self.object_num_max, replace=False)
-                point_indices = [point_indices[i] for i in sel]
-                captions = [captions[i] for i in sel]
-        except Exception as e:
-            log.error(f"Error loading caption for scene {scene_name}: {e}", stacklevel=2)
-            point_indices, captions = [], []
-        return point_indices, captions
+        if self.num_masks is not None and self.num_masks < len(point_indices):
+            sel = np.random.choice(len(point_indices), self.num_masks, replace=False)
+            point_indices = [point_indices[i] for i in sel]
+            captions = [captions[i] for i in sel]
 
-    @abstractmethod
-    def load_embedding(self, scene_name: str):
-        raise NotImplementedError
+        return dict(idx=point_indices, caption=captions)
 
-    def load_embedding_and_sample(self, scene_name: str):
-        try:
-            point_indices, embeddings = self.load_embedding(scene_name)
-        except Exception as e:
-            log.error(f"Error loading embedding for scene {scene_name}: {e}", stacklevel=2)
-            point_indices, embeddings = [], []
-        return point_indices, embeddings
+    def __getitem__(self, idx_original):
+        idx = idx_original % len(self.scene_names)
+        scene_name = self.scene_names[idx]
+
+        # load point cloud data
+        data_dict = dict(scene_name=scene_name)
+        point_cloud_data = self.load_point_cloud(scene_name)
+        data_dict.update(point_cloud_data)
+
+        if self.is_train:
+            data_dict["caption_data"] = self.load_caption(scene_name)
+
+        data_dict = self.transforms(data_dict)
+        return data_dict

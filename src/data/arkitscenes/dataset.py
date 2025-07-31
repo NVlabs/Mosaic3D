@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 
-from src.data.dataset import AnnotatedDataset
+from src.data.dataset_base import AnnotatedDataset
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=False)

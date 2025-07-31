@@ -21,7 +21,10 @@ class FilterCaptionNumPoints:
         if self.max_num_points is None:
             return [self.min_num_points <= len(indices) for indices in point_indices]
         else:
-            return [self.min_num_points <= len(indices) <= self.max_num_points for indices in point_indices]
+            return [
+                self.min_num_points <= len(indices) <= self.max_num_points
+                for indices in point_indices
+            ]
 
 
 class FilterCaptionWordCount:
@@ -208,14 +211,18 @@ class CaptionFilter:
             FilterCaptionPhraseRepeats(max_consecutive),  # Slowest: phrase analysis
         ]
 
-    def __call__(self, captions: List[str], point_indices: Optional[List[List[int]]] = None) -> List[bool]:
+    def __call__(
+        self, captions: List[str], point_indices: Optional[List[List[int]]] = None
+    ) -> List[bool]:
         """Apply all filters in sequence, failing fast."""
         valid_flags = [True] * len(captions)
 
         if point_indices is not None and len(self.point_filters) > 0:
-            for filter_fn in self.point_filters:    
+            for filter_fn in self.point_filters:
                 point_flags = filter_fn(point_indices)
-                valid_flags = [flag and point_flag for flag, point_flag in zip(valid_flags, point_flags)]
+                valid_flags = [
+                    flag and point_flag for flag, point_flag in zip(valid_flags, point_flags)
+                ]
 
         # Apply each filter only to captions that passed previous filters
         for filter_fn in self.caption_filters:

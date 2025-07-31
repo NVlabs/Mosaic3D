@@ -14,7 +14,7 @@ import torch
 from jaxtyping import Int
 from torch import Tensor
 
-from src.data.caption_transform import CaptionFilter
+from src.data.utils.caption_transform import CaptionFilter
 from src.utils.registry import Registry
 
 TRANSFORMS = Registry("transforms")

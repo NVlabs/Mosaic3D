@@ -381,7 +381,7 @@ val_datasets:
         feat_keys: ["color"]
 
 collate_fn:
-  _target_: src.data.collate.point_collate_fn_with_masks
+  _target_: src.data.utils.collate.point_collate_fn_with_masks
   _partial_: true
   grid_size: 0.02
 
