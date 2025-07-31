@@ -1,172 +1,130 @@
 <div align="center">
 
-# Open-vocab 3D Understanding
+# Mosaic3D: Foundation Dataset and Model for Open-vocabulary 3D Segmentation (CVPR 2025)
 
 <a href="https://pytorch.org/get-started/locally/"><img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-ee4c2c?logo=pytorch&logoColor=white"></a>
 <a href="https://pytorchlightning.ai/"><img alt="Lightning" src="https://img.shields.io/badge/-Lightning-792ee5?logo=pytorchlightning&logoColor=white"></a>
 <a href="https://hydra.cc/"><img alt="Config: Hydra" src="https://img.shields.io/badge/Config-Hydra-89b8cd"></a>
 <a href="https://github.com/ashleve/lightning-hydra-template"><img alt="Template" src="https://img.shields.io/badge/-Lightning--Hydra--Template-017F2F?style=flat&logo=github&labelColor=gray"></a><br>
 
-<!-- [![Paper](http://img.shields.io/badge/paper-arxiv.1001.2234-B31B1B.svg)](https://www.nature.com/articles/nature14539)
-[![Conference](http://img.shields.io/badge/AnyConference-year-4b44ce.svg)](https://papers.nips.cc/paper/2020) -->
+[![Project Page](https://img.shields.io/badge/Project-Page-blue)](https://nvlabs.github.io/Mosaic3D/)
+[![Paper](https://img.shields.io/badge/CVPR-2025-green)](https://arxiv.org/abs/YOUR_ARXIV_ID)
+
+**[Junha Lee¹'²](https://junhalee.me/), [Chunghyun Park¹'²](https://chpark.me/), [Jaesung Choe¹](https://jaesungchoe.github.io/), [Frank Wang¹](https://frankwang.me/), [Jan Kautz¹](http://jankautz.net/), [Minsu Cho²](https://cvlab.postech.ac.kr/~mcho/), [Chris Choy¹](https://chrischoy.github.io/)**
+
+¹NVIDIA, ²POSTECH
 
 </div>
 
-## Description
+## Overview
 
-This is a codebase for various open-vocab 3D understanding models, including open-set indoor semantic segmentations, etc.
+We present **Mosaic3D**, a comprehensive solution for open-vocabulary 3D scene understanding that addresses three essential aspects: precise 3D region segmentation, comprehensive textual descriptions, and sufficient dataset scale. Our approach combines state-of-the-art open-vocabulary image segmentation models with region-aware vision-language models (VLMs) to create an automatic pipeline for generating high-quality 3D mask-text pairs.
+
+### Key Contributions
+
+- **Mosaic3D-5.6M Dataset**: The largest 3D mask-text paired dataset to date, encompassing over 30K indoor scenes and approximately 1M RGB-D frames, yielding 5.6M region captions with 30M total text tokens
+- **Mosaic3D Model**: A 3D visual foundation model (3D-VFM) combining a 3D encoder trained with contrastive learning and a lightweight mask decoder for open-vocabulary 3D semantic and instance segmentation
+- **State-of-the-art Performance**: Achieves leading results on open-vocabulary 3D semantic and instance segmentation benchmarks including ScanNet200, Matterport3D, and ScanNet++
+
+### Dataset Advantages
+
+Our Mosaic3D-5.6M dataset offers significant advantages over existing datasets:
+
+- **Scale**: 5.6M mask-text pairs across 30K+ scenes (significantly larger than existing datasets)
+- **Precision**: Leverages advanced open-vocabulary segmentation for precise region boundaries
+- **Rich Descriptions**: Captures object attributes, spatial relationships, and scene context
+- **Quality**: Combines robust region-aware VLMs for comprehensive textual annotations
 
 ## Dataset
 
-Currently, this codebase support training and evaluation on the official dataset provided by [RegionPLC](https://github.com/CVMI-Lab/PLA/tree/regionplc).
+### Mosaic3D-5.6M Download
 
-To download the dataset, use the following command:
+The dataset can be found in [Huggingface](https://huggingface.co/datasets/junhalee/Mosaic3D). Follow the instruction there to download and organize the data into required structure.
 
-| \*Note that you should update the `FedAuth` token in `src/data/regionplc/download.py` script to recently generated one before downloading.
 
-```bash
-python -m src.data.regionplc.download --download_dir [path/to/save/dataset]
-# e.g. python -m src.data.region.download --download_dir /home/junhal/datasets/regionplc
-```
+## Environment Setup
 
-#### How to obtain fresh `FedAuth` token?
-
-<details><summary>Click</summary>
-
-1. Open the following [link](https://connecthkuhk-my.sharepoint.com/personal/jhyang13_connect_hku_hk/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fjhyang13%5Fconnect%5Fhku%5Fhk%2FDocuments%2Fpretrained%5Fmodels%2Fregionplc%2Fcaption%5Ffiles%2Fscannet&ga=1) on Google Chrome.
-
-2. Open developer tool and head to the Network tab. Apply `Doc` filter
-
-3. Click a checkbox of some large file, such as `scannet_caption_idx_detic_and_sw_125k_iou0.3.pkl`
-
-4. Click Download button above
-
-<!-- ![alt text](assets/image.png) -->
-
-<img src="assets/image.png" height="400">
-
-5. Cancel the download process
-
-6. Search for download payload on the Network tab
-
-7. Click right mouse button and click `Copy as cURL`
-
-<!-- ![alt text](assets/image-1.png) -->
-
-<img src='assets/image-1.png' height="400">
-
-08. Paste the copied cURL command somewhere and search for `FedAuth` token.
-
-09. Update `FedAuth` variable in `src/data/regionplc/download.py` to new one.
-
-10. Execute the above download command.
-
-</details>
-
-## Installation
-
-Use of docker is highly recommended.
-
-#### On Local Machines
+### Docker (Recommended)
 
 ```bash
-# build docker image. This command will automatically push the built image to GitLab registry
+# Build docker image
 bash docker/docker_build.sh
 
-# run docker container.
-bash docker/docker_run.sh [path/to/datasets]
-# e.g. bash docker/docker_run.sh /home/junhal/datasets
+# Run docker container with dataset path
+bash docker/docker_run.sh /path/to/datasets
 ```
 
-#### ORD
-
-On ORD cluster, all the installation and docker container-related stuffs are located in sbatch script: `script/train.sbatch`
-
-Update appropriate variables in `script/train.sbatch` script.
-
-## How to run
-
-Train model with default configuration
+### Conda Environment
 
 ```bash
-# train RegionPLC model with default config (ScanNet-base15 config)
-python src/train.py experiment=regionplc logger=wandb
-```
+# Create conda environment
+conda env create -f environment.yaml
 
-If you run the experiments on ORD, use the following command for sbatch job submission
+# Install requirements
+pip install -r requirements.txt
 
-```bash
-# scannet base 15
-sbatch --gres=gpu:8 ./scripts/train.sbatch \
-     experiment=regionplc \
-     logger=auto_resume_wandb \
-     seed=${SEED} \
-     +trainer.precision="16-mixed"
-
-# scannet base 12
-sbatch --gres=gpu:8 ./scripts/train.sbatch \
-     experiment=regionplc \
-     data=regionplc_base12 \
-     logger=auto_resume_wandb \
-     +trainer.precision="16-mixed"
-
-# scannet base 10
-sbatch --gres=gpu:8 ./scripts/train.sbatch \
-     experiment=regionplc \
-     data=regionplc_base10 \
-     logger=auto_resume_wandb \
-     +trainer.precision="16-mixed"
-
-# scannet zero-shot
-sbatch --gres=gpu:8 ./scripts/train.sbatch \
-     experiment=regionplc_openvocab \
-     trainer.max_epochs=128 \
-     logger=auto_resume_wandb \
-     seed=${SEED} \
-     +trainer.precision="16-mixed"
-
-# Warp PointConv zero-shot
-sbatch --gres=gpu:8 ./scripts/train.sbatch \
-     experiment=regionplc_openvocab \
-     model=warp_pointconv_enc_dec \
-     trainer.max_epochs=128 \
-     data.batch_size=2 \
-     logger=auto_resume_wandb
-```
-
-## Development
-
-Pre-commit is configured to ensure consistent code styling and check for syntax errors.
-
-To install pre-commit hooks and ensure your merge requests pass these checks, run the following command:
-
-```bash
+# Install pre-commit hooks
 pre-commit install
 ```
 
-### Using the Latest WarpConvNet
+## Model Architecture
 
-The warpconvnet codebase is updated frequently. To use the latest version, clone the repository inside openvocab-3d repository and make sure the cluster job to use the cloned warpconvnet by installing the warpconvnet via pip directly.
+Mosaic3D employs a two-stage training approach:
 
-1. Clone the warpconvnet repository inside openvocab-3d repository
+1. **Per-point Language Alignment**: Trains a 3D encoder using contrastive learning to align 3D point features with textual descriptions
+2. **Mask Decoder Training**: Trains a lightweight mask decoder to predict instance segments from the aligned features
+
+This design enables effective open-vocabulary 3D semantic and instance segmentation across diverse indoor scenes.
+
+## Training
+
+### Basic Training
 
 ```bash
-cd openvocab-3d
-git clone --recurse-submodules https://gitlab-master.nvidia.com/3dmmllm/warp.git warpconvnet
+# Train Mosaic3D model with default configuration
+python src/train.py experiment=train_spunet_scannet logger=wandb
+
+# Evaluate trained model
+python src/eval.py ckpt_path=/path/to/checkpoint.ckpt data=scannet
 ```
 
-2. When running SLURM jobs, make sure to add `pip install --force-reinstall --no-deps ./warpconvnet` before running the training script.
+### Configuration Override
+
+You can override any configuration parameter from the command line:
 
 ```bash
-# Your train.sbatch
-CMD="
-...
-pip install --force-reinstall --no-deps ./warpconvnet
-torchrun ...
-"
+python src/train.py experiment=train_spunet_scannet data=sc model=spunet34c trainer.max_epochs=100
 ```
 
-## Debugging Tips
+## Evaluation
 
-Use the following command to enable CUDA kernel launch blocking.
-For pytorch unique CUDA illegal memory access error, use the warp docker image tag `warp` on `gitlab-master.nvidia.com/3dmmllm/openvocab-3d:warp`.
+The model achieves state-of-the-art results on multiple benchmarks:
+
+- **ScanNet200**: Open-vocabulary 3D semantic segmentation
+- **Matterport3D**: Cross-dataset generalization
+- **ScanNet++**: Instance segmentation performance
+
+*Detailed evaluation results and pretrained models will be available upon publication.*
+
+
+## Citation
+
+If you find this work useful, please consider citing:
+
+```bibtex
+@inproceedings{lee2025mosaic3d,
+  title={Mosaic3d: Foundation dataset and model for open-vocabulary 3d segmentation},
+  author={Lee, Junha and Park, Chunghyun and Choe, Jaesung and Wang, Yu-Chiang Frank and Kautz, Jan and Cho, Minsu and Choy, Chris},
+  booktitle={Proceedings of the Computer Vision and Pattern Recognition Conference},
+  pages={14089--14101},
+  year={2025}
+}
+```
+
+
+## Acknowledgments
+
+Our work builds upon several fantastic open-source projects. We'd like to express our gratitude to the authors of:
+- [Pointcept](https://github.com/Pointcept/Pointcept)
+- [PLA & RegionPLC](https://github.com/CVMI-Lab/PLA)
+- [SPConv](https://github.com/traveller59/spconv)
