@@ -1,13 +1,12 @@
 import abc
-from typing import Any, Dict, Tuple
 import time
+from typing import Any, Dict, Tuple
 
 import torch
 import torch.nn as nn
 from lightning import LightningModule
 from torchmetrics import MeanMetric
 
-from src.models.optimization.fastai_lrscheduler import OneCycle
 from src.utils import RankedLogger
 
 log = RankedLogger(__name__, rank_zero_only=True)
@@ -152,11 +151,6 @@ class LitModuleBase(LightningModule, metaclass=abc.ABCMeta):
                     optimizer=optimizer,
                     total_iters=self.trainer.estimated_stepping_batches,
                 )
-            elif self.hparams.scheduler.func.__name__.startswith("build_"):
-                scheduler = self.hparams.scheduler(
-                    optimizer=optimizer,
-                    total_steps=self.trainer.estimated_stepping_batches,
-                )
             else:
                 scheduler = self.hparams.scheduler(optimizer=optimizer)
             return {
@@ -171,9 +165,7 @@ class LitModuleBase(LightningModule, metaclass=abc.ABCMeta):
         return {"optimizer": optimizer}
 
     def lr_scheduler_step(self, scheduler, metric):
-        if isinstance(scheduler, OneCycle):
-            scheduler.step(self.trainer.global_step)
-        elif metric is None:
+        if metric is None:
             scheduler.step()
         else:
             scheduler.step(metric)

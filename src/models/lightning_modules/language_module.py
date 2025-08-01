@@ -77,6 +77,10 @@ class DenseLanguageLitModule(LitModuleBase):
         # Sync distributed metrics
         self.train_sync_dist = loss_cfg.get("sync_dist", False)
 
+        # eval configs
+        self.ignore_background = False
+        self.ignore_class_prob = False
+
     def prepare_data(self) -> None:
         # download clip model on rank 0
         ckpt_path = download_clip_model(self.hparams.clip_encoder)
