@@ -1,4 +1,4 @@
-_target_: src.models.networks.regionplc.litmodule.RegionPLCLitModule
+_target_: src.models.lightning_modules.language_module.DenseLanguageLitModule
 
 net:
   _target_: src.models.networks.ppt.model.PPT
