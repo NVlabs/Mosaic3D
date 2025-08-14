@@ -13,6 +13,7 @@ from src.data.metadata.scannet import (
     TAIL_CLASSES_200,
 )
 from src.utils import RankedLogger
+from src.utils.io import unpack_list_of_np_arrays
 
 log = RankedLogger(__name__, rank_zero_only=False)
 
@@ -86,13 +87,81 @@ class ScanNet200Dataset(ScanNetDataset):
         return mapper
 
 
+class ScanNet200DatasetMerged(ScanNet200Dataset):
+    """ScanNet200 dataset with caption merging (Alg. 1) from our paper."""
+
+    def __init__(
+        self,
+        data_dir: str,
+        split: str,
+        ignore_label: int = -100,
+        repeat: int = 1,
+        transforms: Optional[List[Dict]] = None,
+        num_masks: Optional[int] = None,
+        mask_dir: Optional[str] = None,
+        num_merged_captions: Optional[int] = None,
+    ):
+        self.num_merged_captions = num_merged_captions
+        super().__init__(
+            data_dir=data_dir,
+            split=split,
+            repeat=repeat,
+            ignore_label=ignore_label,
+            transforms=transforms,
+            num_masks=num_masks,
+            mask_dir=mask_dir,
+        )
+
+    def load_caption(self, scene_name: str):
+        """Load caption data for a given scene."""
+        scene_dir = self.data_dir / scene_name
+        point_indices_file = scene_dir / "point_indices.segment3d.npz"
+        assert point_indices_file.exists(), f"{point_indices_file} not exist."
+        point_indices = unpack_list_of_np_arrays(point_indices_file)
+
+        captions_list = [[] for _ in range(len(point_indices))]
+        for anno_source in self.anno_sources:
+            caption_file = scene_dir / f"captions.{anno_source}.npz"
+            mapping_file = scene_dir / f"segment3d-mapping.{anno_source}.npz"
+            assert caption_file.exists(), f"{caption_file} not exist."
+            assert mapping_file.exists(), f"{mapping_file} not exist."
+            captions = unpack_list_of_np_arrays(caption_file)
+            mapping = unpack_list_of_np_arrays(mapping_file)
+            mapping = [item for sublist in mapping for item in sublist]
+            captions = [item for sublist in captions for item in sublist]
+            assert len(mapping) == len(
+                captions
+            ), f"len(mapping) ({len(mapping)}) != len(captions) ({len(captions)})"
+
+            for mask_idx, caption in zip(mapping, captions):
+                if mask_idx == -1:
+                    continue
+                captions_list[mask_idx].append(caption)
+
+        # Filter out masks without captions
+        filtered_indices = []
+        filtered_captions = []
+        for idx, caps in zip(point_indices, captions_list):
+            if len(caps) == 0:
+                continue
+
+            if self.num_merged_captions is not None and len(caps) > self.num_merged_captions:
+                caps = np.random.choice(caps, self.num_merged_captions, replace=False)
+
+            filtered_indices.append(idx)
+            filtered_captions.append(", ".join(caps))
+
+        return dict(idx=filtered_indices, caption=filtered_captions)
+
+
 if __name__ == "__main__":
-    dataset = ScanNet200Dataset(
+    dataset = ScanNet200DatasetMerged(
         data_dir="/datasets/mosaic3d/data/scannet",
-        split="val",
+        split="train",
         repeat=1,
         ignore_label=-100,
         transforms=None,
+        num_merged_captions=4,
     )
 
     for i in range(5):
