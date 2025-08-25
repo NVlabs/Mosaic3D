@@ -1,0 +1,30 @@
+_target_: src.data.datamodule.DataModule
+
+train_dataset:
+  _target_: src.data.scannet.dataset.ScanNet200DatasetMerged
+  _partial_: true
+  data_dir: /datasets/mosaic3d/data/scannet
+  split: train
+  ignore_label: -100
+  repeat: 4
+  num_merged_captions: 10
+  min_score: 0.5
+  transforms: ${data.train_transforms}
+
+val_datasets:
+  - _target_: src.data.scannet.dataset.ScanNet200Dataset
+    _partial_: true
+    data_dir: /datasets/mosaic3d/data/scannet
+    split: val
+    ignore_label: ${data.train_dataset.ignore_label}
+    transforms: ${data.val_transforms}
+
+collate_fn:
+  _target_: src.data.utils.collate.point_collate_fn_with_captioned_masks
+  _partial_: true
+  grid_size: 0.02
+
+batch_size: 4
+num_workers: 2
+
+checkpoint_monitor: "val_scannet200/map"

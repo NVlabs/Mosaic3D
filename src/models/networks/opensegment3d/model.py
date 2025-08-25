@@ -10,14 +10,12 @@ from einops.layers.torch import Rearrange
 from spconv.pytorch.core import ImplicitGemmIndiceData
 from torch_scatter import scatter
 
-from src.models.networks.mask3d.mask3d import (
+from src.models.networks.opensegment3d.modules import (
     CrossAttentionLayer,
     FFNLayer,
-    SelfAttentionLayer,
-)
-from src.models.networks.segment3d.modules.helpers_3detr import GenericMLP
-from src.models.networks.segment3d.modules.position_embedding import (
+    GenericMLP,
     PositionEmbeddingCoordsSine,
+    SelfAttentionLayer,
 )
 from src.models.utils.misc import batch2offset
 from src.models.utils.structure import Point
