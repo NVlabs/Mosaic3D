@@ -100,8 +100,10 @@ class ScanNet200DatasetMerged(ScanNet200Dataset):
         num_masks: Optional[int] = None,
         mask_dir: Optional[str] = None,
         num_merged_captions: Optional[int] = None,
+        min_score: float = 0.0,  # 0.0 means no filtering
     ):
         self.num_merged_captions = num_merged_captions
+        self.min_score = min_score
         super().__init__(
             data_dir=data_dir,
             split=split,
@@ -117,7 +119,16 @@ class ScanNet200DatasetMerged(ScanNet200Dataset):
         scene_dir = self.data_dir / scene_name
         point_indices_file = scene_dir / "point_indices.segment3d.npz"
         assert point_indices_file.exists(), f"{point_indices_file} not exist."
-        point_indices = unpack_list_of_np_arrays(point_indices_file)
+
+        with np.load(point_indices_file) as data:
+            packed = data["packed"]
+            lengths = data["lengths"]
+            scores = data["scores"]
+            point_indices = [np.array(arr) for arr in np.split(packed, np.cumsum(lengths)[:-1])]
+
+            assert len(point_indices) == len(
+                scores
+            ), f"len(point_indices) ({len(point_indices)}) != len(scores) ({len(scores)})"
 
         captions_list = [[] for _ in range(len(point_indices))]
         for anno_source in self.anno_sources:
@@ -141,8 +152,11 @@ class ScanNet200DatasetMerged(ScanNet200Dataset):
         # Filter out masks without captions
         filtered_indices = []
         filtered_captions = []
-        for idx, caps in zip(point_indices, captions_list):
+        for idx, caps, score in zip(point_indices, captions_list, scores):
             if len(caps) == 0:
+                continue
+
+            if self.min_score > 0.0 and score < self.min_score:
                 continue
 
             if self.num_merged_captions is not None and len(caps) > self.num_merged_captions:
@@ -162,6 +176,7 @@ if __name__ == "__main__":
         ignore_label=-100,
         transforms=None,
         num_merged_captions=4,
+        min_score=0.5,
     )
 
     for i in range(5):
