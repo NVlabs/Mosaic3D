@@ -1,7 +1,7 @@
 # --------- pytorch --------- #
 torch==2.2.2
 torchvision>=0.15.0
-lightning==2.2
+lightning==2.5.4
 torchmetrics>=0.11.4
 torch-geometric
 --find-links https://data.pyg.org/whl/torch-2.2.2+cu121.html
