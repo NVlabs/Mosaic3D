@@ -1,8 +1,12 @@
+import os
+
+import gdown
 import torch
 
-from src.models.networks.segment3d.download_ckpt import download_ckpt
 
-
+ID_CKPTS = {
+    "segment3d.ckpt": "1Swq9d7rjV2Q1lTuXiKh1z0OZPt9V4sgO",
+}
 SKIP_PARAMETERES = (
     "criterion.empty_weight",
     "model.backbone.final.kernel",
@@ -16,6 +20,21 @@ MODULE_MAPPING = {
     "ffn_attention": "ffn",
     "lin_squeeze": "linear",
 }
+
+
+def download_ckpt():
+    if not os.path.exists("ckpts"):
+        os.makedirs("ckpts", exist_ok=True)
+
+    for name, id_ckpt in ID_CKPTS.items():
+        if os.path.exists(f"ckpts/{name}"):
+            print(f"ckpt {name} already exists")
+            continue
+        gdown.download(
+            f"https://drive.google.com/uc?id={id_ckpt}",
+            f"ckpts/{name}",
+            quiet=False,
+        )
 
 
 def patch_ckpt(ckpt_path):
