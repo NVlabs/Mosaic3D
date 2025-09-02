@@ -33,6 +33,7 @@ class ScanNetDataset(AnnotatedDataset):
         transforms: Optional[List[Dict]] = None,
         num_masks: Optional[int] = None,
         mask_dir: Optional[str] = None,
+        anno_sources: Optional[List[str]] = None,
     ):
         self.mask_dir = mask_dir
         super().__init__(
@@ -42,6 +43,7 @@ class ScanNetDataset(AnnotatedDataset):
             ignore_label=ignore_label,
             transforms=transforms,
             num_masks=num_masks,
+            anno_sources=anno_sources,
         )
 
     def __getitem__(self, idx_original):
