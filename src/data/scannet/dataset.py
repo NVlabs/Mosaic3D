@@ -170,6 +170,29 @@ class ScanNet200DatasetMerged(ScanNet200Dataset):
         return dict(idx=filtered_indices, caption=filtered_captions)
 
 
+class ScanNet200DatasetGathered(ScanNet200Dataset):
+    """ScanNet200 dataset with caption merging (Alg. 1) from our paper."""
+
+    def load_caption(self, scene_name: str):
+        """Load caption data for a given scene."""
+        scene_dir = self.data_dir / scene_name
+        anno_source = np.random.choice(self.anno_sources)
+        caption_file = scene_dir / f"captions.{anno_source}.npz"
+        point_indices_file = scene_dir / f"point_indices.{anno_source}.npz"
+        assert caption_file.exists(), f"{caption_file} not exist."
+        assert point_indices_file.exists(), f"{point_indices_file} not exist."
+        captions = unpack_list_of_np_arrays(caption_file)
+        point_indices = unpack_list_of_np_arrays(point_indices_file)
+        point_indices = [torch.from_numpy(item).int() for item in point_indices]
+
+        if self.num_masks is not None and self.num_masks < len(point_indices):
+            sel = np.random.choice(len(point_indices), self.num_masks, replace=False)
+            point_indices = [point_indices[i] for i in sel]
+            captions = [captions[i] for i in sel]
+
+        return dict(idx=point_indices, caption=captions)
+
+
 if __name__ == "__main__":
     dataset = ScanNet200DatasetMerged(
         data_dir="/datasets/mosaic3d/data/scannet",

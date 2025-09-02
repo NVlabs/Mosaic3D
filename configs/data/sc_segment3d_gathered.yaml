@@ -1,7 +1,7 @@
 _target_: src.data.datamodule.DataModule
 
 train_dataset:
-  _target_: src.data.scannet.dataset.ScanNet200Dataset
+  _target_: src.data.scannet.dataset.ScanNet200DatasetGathered
   _partial_: true
   data_dir: /datasets/mosaic3d/data/scannet
   split: train
