@@ -183,7 +183,17 @@ class ScanNet200DatasetGathered(ScanNet200Dataset):
         assert point_indices_file.exists(), f"{point_indices_file} not exist."
         captions = unpack_list_of_np_arrays(caption_file)
         point_indices = unpack_list_of_np_arrays(point_indices_file)
-        point_indices = [torch.from_numpy(item).int() for item in point_indices]
+
+        num_captions_per_object = [len(c) for c in captions]
+        # randomly select one caption per object
+        idx_select_caption = np.cumsum(
+            np.insert(num_captions_per_object, 0, 0)[0:-1]
+        ) + np.random.randint(0, num_captions_per_object, len(num_captions_per_object))
+
+        # flatten the list of list
+        point_indices = [torch.from_numpy(indices).int() for indices in point_indices]
+        captions = [item for sublist in captions for item in sublist]
+        captions = [captions[i] for i in idx_select_caption]
 
         if self.num_masks is not None and self.num_masks < len(point_indices):
             sel = np.random.choice(len(point_indices), self.num_masks, replace=False)
@@ -194,14 +204,13 @@ class ScanNet200DatasetGathered(ScanNet200Dataset):
 
 
 if __name__ == "__main__":
-    dataset = ScanNet200DatasetMerged(
+    dataset = ScanNet200DatasetGathered(
         data_dir="/datasets/mosaic3d/data/scannet",
         split="train",
         repeat=1,
         ignore_label=-100,
         transforms=None,
-        num_merged_captions=4,
-        min_score=0.5,
+        anno_sources=["segment3d-gathered"],
     )
 
     for i in range(5):
