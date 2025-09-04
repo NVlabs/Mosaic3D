@@ -29,7 +29,7 @@ model:
   best_metric: ${data.checkpoint_monitor}
 
 trainer:
-  max_epochs: 128
+  max_epochs: 256
 
 logger:
   wandb:
