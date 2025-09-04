@@ -25,6 +25,7 @@ collate_fn:
   grid_size: 0.02
 
 batch_size: 4
+test_batch_size: 1
 num_workers: 2
 
 checkpoint_monitor: "val_scannet200/map"

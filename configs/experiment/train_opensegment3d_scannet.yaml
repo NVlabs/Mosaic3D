@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: sc_segment3d
+  - override /data: sc_segment3d_gathered
   - override /data/transforms: ptv3_transforms
   - override /model: opensegment3d-pretrained_spunet34c
   - override /model/clip: recap_clip
