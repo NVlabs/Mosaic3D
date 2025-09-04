@@ -12,13 +12,14 @@
 
 **[Junha Lee¹'²*](https://junha-l.github.io/), [Chunghyun Park¹'²*](https://chrockey.github.io/), [Jaesung Choe¹](https://jaesung-choe.github.io/), [Frank Wang¹](https://vllab.ee.ntu.edu.tw/ycwang.html), [Jan Kautz¹](https://research.nvidia.com/person/jan-kautz), [Minsu Cho²](https://cvlab.postech.ac.kr/~mcho/), [Chris Choy¹](https://chrischoy.github.io/)**
 
+*equal contribution\
 ¹NVIDIA, ²POSTECH
 
 </div>
 
 ## Overview
 
-We present **Mosaic3D**, a comprehensive solution for open-vocabulary 3D scene understanding that addresses three essential aspects: precise 3D region segmentation, comprehensive textual descriptions, and sufficient dataset scale. Our approach combines state-of-the-art open-vocabulary image segmentation models with region-aware vision-language models (VLMs) to create an automatic pipeline for generating high-quality 3D mask-text pairs.
+We present **Mosaic3D**, a comprehensive solution for open-vocabulary 3D scene understanding that addresses three essential aspects: precise 3D region segmentation, comprehensive textual descriptions, and sufficient dataset scale. Our approach combines state-of-the-art open-vocabulary image segmentation models with region-aware vision-language models to create an automatic pipeline for generating high-quality 3D mask-text pairs.
 
 ### Key Contributions
 
@@ -78,7 +79,7 @@ This design enables effective open-vocabulary 3D semantic and instance segmentat
 
 ## Training
 
-### Basic Training
+### Encoder Training
 
 ```bash
 # Train Mosaic3D model with default configuration
@@ -86,6 +87,13 @@ python src/train.py experiment=train_spunet_scannet logger=wandb
 
 # Evaluate trained model
 python src/eval.py ckpt_path=/path/to/checkpoint.ckpt data=scannet
+```
+
+### Mask Decoder Training
+
+```bash
+# Train a lightweight mask decoder with default configuration
+python src/train.py experiment=train_opensegment3d_scannet model.net.backbone_ckpt=/path/to/encoder.ckpt logger=wandb
 ```
 
 ### Configuration Override
@@ -100,12 +108,8 @@ python src/train.py experiment=train_spunet_scannet data=sc model=spunet34c trai
 
 The model achieves state-of-the-art results on multiple benchmarks:
 
-- **ScanNet200**: Open-vocabulary 3D semantic segmentation
-- **Matterport3D**: Cross-dataset generalization
-- **ScanNet++**: Instance segmentation performance
-
-*Detailed evaluation results and pretrained models will be available upon publication.*
-
+- **Annotation-free 3D semantic segmentation**: ScanNet, Matterport3D, ScanNet++
+- **Annotation-free 3D instance segmentation**: ScanNet200
 
 ## Citation
 
