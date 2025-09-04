@@ -6,6 +6,6 @@ net:
     out_channels: ${model.clip_encoder.text_dim}
 
   hlevels: [4]
-  backbone_ckpt: results/mosaic3d-spunet34c/checkpoints/epoch_159-step_0048000.ckpt
+  backbone_ckpt: null
   decoder_ckpt: null
   freeze_backbone: true

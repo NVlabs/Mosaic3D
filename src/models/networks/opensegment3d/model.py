@@ -99,8 +99,8 @@ class OpenSegment3D(nn.Module):
         self.b2q = Rearrange("b q d -> q b d")
         self.q2b = Rearrange("q b d -> b q d")
 
-        if backbone_ckpt is not None:
-            self.load_pretrained_backbone(backbone_ckpt)
+        assert backbone_ckpt is not None, "Backbone checkpoint is required"
+        self.load_pretrained_backbone(backbone_ckpt)
 
         self.backbone_frozen = False
         if freeze_backbone:
