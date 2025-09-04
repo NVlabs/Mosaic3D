@@ -92,6 +92,9 @@ python src/eval.py ckpt_path=/path/to/checkpoint.ckpt data=scannet
 ### Mask Decoder Training
 
 ```bash
+# Download Segment3D checkpoint
+python src/models/networks/opensegment3d/download_ckpt.py
+
 # Train a lightweight mask decoder with default configuration
 python src/train.py experiment=train_opensegment3d_scannet model.net.backbone_ckpt=/path/to/encoder.ckpt logger=wandb
 ```
@@ -132,3 +135,4 @@ Our work builds upon several fantastic open-source projects. We'd like to expres
 - [Pointcept](https://github.com/Pointcept/Pointcept)
 - [PLA & RegionPLC](https://github.com/CVMI-Lab/PLA)
 - [SPConv](https://github.com/traveller59/spconv)
+- [Segment3D](https://github.com/LeapLabTHU/Segment3D)

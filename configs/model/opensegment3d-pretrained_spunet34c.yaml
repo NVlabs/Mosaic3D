@@ -7,5 +7,5 @@ net:
 
   hlevels: [4]
   backbone_ckpt: null
-  decoder_ckpt: null
+  decoder_ckpt: ckpts/segment3d_patched.ckpt
   freeze_backbone: true
