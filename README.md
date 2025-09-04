@@ -83,7 +83,7 @@ This design enables effective open-vocabulary 3D semantic and instance segmentat
 
 ```bash
 # Train Mosaic3D model with default configuration
-python src/train.py experiment=train_spunet_scannet logger=wandb
+python src/train.py experiment=train_spunet_scannet trainer.ddp trainer.devices=8 logger=wandb
 
 # Evaluate trained model
 python src/eval.py ckpt_path=/path/to/checkpoint.ckpt data=scannet
@@ -96,7 +96,7 @@ python src/eval.py ckpt_path=/path/to/checkpoint.ckpt data=scannet
 python src/models/networks/opensegment3d/download_ckpt.py
 
 # Train a lightweight mask decoder with default configuration
-python src/train.py experiment=train_opensegment3d_scannet model.net.backbone_ckpt=/path/to/encoder.ckpt logger=wandb
+python src/train.py experiment=train_opensegment3d_scannet model.net.backbone_ckpt=/path/to/encoder.ckpt trainer.ddp trainer.devices=8 logger=wandb
 ```
 
 ### Configuration Override
