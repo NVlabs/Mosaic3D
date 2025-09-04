@@ -6,6 +6,6 @@ net:
     out_channels: ${model.clip_encoder.text_dim}
 
   hlevels: [4]
-  backbone_ckpt: results/550723/checkpoints/epoch_684-step_0068500.ckpt
-  decoder_ckpt: null
+  backbone_ckpt: null
+  decoder_ckpt: ckpts/segment3d_patched.ckpt
   freeze_backbone: true

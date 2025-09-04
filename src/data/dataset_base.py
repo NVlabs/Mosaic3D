@@ -147,9 +147,9 @@ class AnnotatedDataset(BaseDataset):
 
     def load_point_cloud(self, scene_name: str):
         """Load point cloud data for a given scene."""
-        geom_dir = self.data_dir / scene_name / "geometry"
-        coord = np.load(geom_dir / "coord.npy").astype(np.float32)
-        color = np.load(geom_dir / "color.npy")
+        scene_dir = self.data_dir / scene_name
+        coord = np.load(scene_dir / "coord.npy").astype(np.float32)
+        color = np.load(scene_dir / "color.npy")
         origin_idx = np.arange(coord.shape[0]).astype(np.int64)
 
         return_dict = dict(
@@ -159,14 +159,14 @@ class AnnotatedDataset(BaseDataset):
         )
 
         if not self.is_train and self.SEGMENT_FILE is not None:
-            segment_file = geom_dir / self.SEGMENT_FILE
+            segment_file = scene_dir / self.SEGMENT_FILE
             assert segment_file.exists(), f"{segment_file} not exist."
             segment_raw = np.load(segment_file)
             segment = self.valid_class_mapper[segment_raw.astype(np.int64)]
             return_dict["segment"] = segment
 
         if not self.is_train and self.INSTANCE_FILE is not None:
-            instance_file = geom_dir / self.INSTANCE_FILE
+            instance_file = scene_dir / self.INSTANCE_FILE
             assert instance_file.exists(), f"{instance_file} not exist."
             assert "segment" in return_dict, "segment is required for instance"
             instance = np.load(instance_file)
@@ -179,8 +179,12 @@ class AnnotatedDataset(BaseDataset):
         """Load caption data for a given scene."""
         scene_dir = self.data_dir / scene_name
         anno_source = np.random.choice(self.anno_sources)
-        captions = unpack_list_of_np_arrays(scene_dir / anno_source / "captions.npz")
-        point_indices = unpack_list_of_np_arrays(scene_dir / anno_source / "point_indices.npz")
+        caption_file = scene_dir / f"captions.{anno_source}.npz"
+        point_indices_file = scene_dir / f"point_indices.{anno_source}.npz"
+        assert caption_file.exists(), f"{caption_file} not exist."
+        assert point_indices_file.exists(), f"{point_indices_file} not exist."
+        captions = unpack_list_of_np_arrays(caption_file)
+        point_indices = unpack_list_of_np_arrays(point_indices_file)
         captions = [item for sublist in captions for item in sublist]
         point_indices = [
             torch.from_numpy(item).int() for sublist in point_indices for item in sublist

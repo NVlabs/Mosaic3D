@@ -10,14 +10,12 @@ from einops.layers.torch import Rearrange
 from spconv.pytorch.core import ImplicitGemmIndiceData
 from torch_scatter import scatter
 
-from src.models.networks.mask3d.mask3d import (
+from src.models.networks.opensegment3d.modules import (
     CrossAttentionLayer,
     FFNLayer,
-    SelfAttentionLayer,
-)
-from src.models.networks.segment3d.modules.helpers_3detr import GenericMLP
-from src.models.networks.segment3d.modules.position_embedding import (
+    GenericMLP,
     PositionEmbeddingCoordsSine,
+    SelfAttentionLayer,
 )
 from src.models.utils.misc import batch2offset
 from src.models.utils.structure import Point
@@ -101,8 +99,8 @@ class OpenSegment3D(nn.Module):
         self.b2q = Rearrange("b q d -> q b d")
         self.q2b = Rearrange("q b d -> b q d")
 
-        if backbone_ckpt is not None:
-            self.load_pretrained_backbone(backbone_ckpt)
+        assert backbone_ckpt is not None, "Backbone checkpoint is required"
+        self.load_pretrained_backbone(backbone_ckpt)
 
         self.backbone_frozen = False
         if freeze_backbone:
