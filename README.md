@@ -136,3 +136,4 @@ Our work builds upon several fantastic open-source projects. We'd like to expres
 - [PLA & RegionPLC](https://github.com/CVMI-Lab/PLA)
 - [SPConv](https://github.com/traveller59/spconv)
 - [Segment3D](https://github.com/LeapLabTHU/Segment3D)
+- [OpenIns3D](https://github.com/Pointcept/OpenIns3D)
