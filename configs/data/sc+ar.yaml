@@ -197,7 +197,7 @@ val_datasets:
     _partial_: true
     data_dir: /datasets/mosaic3d/data/scannet
     split: val
-    mask_dir: /datasets/scannet_masks/mask3d_scannet200_openins3d
+    mask_dir: /datasets/mosaic3d/data/scannet200_masks
     ignore_label: ${data.train_dataset.ignore_label}
     transforms:
       - type: Copy
