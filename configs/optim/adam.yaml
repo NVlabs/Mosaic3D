@@ -1,0 +1,5 @@
+# @package model
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 1e-4

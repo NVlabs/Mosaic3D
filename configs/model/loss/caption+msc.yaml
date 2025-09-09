@@ -1,0 +1,21 @@
+# @package model
+defaults:
+  - caption
+
+loss_cfg:
+  msc_loss:
+    mask_strategy: random
+    mask_grid_size: 0.1
+    mask_rate: 0.4
+    view1_mix_prob: 0.8
+    view2_mix_prob: 0
+    matching_max_k: 8
+    matching_max_radius: 0.03
+    matching_max_pair: 8192
+    nce_t: 0.4
+    reconstruct_color: true
+    reconstruct_normal: false
+  weights:
+    nce_loss: 1.0
+    color_loss: 1.0
+    caption_loss: 1.0

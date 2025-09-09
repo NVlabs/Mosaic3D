@@ -1,0 +1,8 @@
+defaults:
+  - spunet18a+ppt
+
+net:
+  backbone:
+    _target_: src.models.networks.spunet.spconv_unet_v1m1_base.SpUNetBottleneck
+    channels: [32, 64, 128, 256, 256, 128, 96, 96]
+    layers: [2, 3, 4, 6, 2, 2, 2, 2]

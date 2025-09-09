@@ -1,0 +1,22 @@
+# @package model
+loss_cfg:
+  seg_loss:
+    _target_: src.models.losses.seg_loss.BinarySegmentationLoss
+    matcher:
+      _target_: src.models.networks.opensegment3d.matcher.HungarianMatcher
+      cost_class: 2.
+      cost_mask: 5.
+      cost_dice: 2.
+    losses:
+      - "labels"
+      - "masks"
+
+  caption_loss:
+    type: contrastive
+    use_logit_scale: true
+
+  weights:
+    seg_loss: 1.0
+    caption_loss: 1.0
+
+  sync_dist: false

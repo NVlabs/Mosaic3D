@@ -1,0 +1,469 @@
+_target_: src.data.datamodule.MultiDataModule
+
+train_dataset:
+  _target_: src.data.multi_dataloader.ConcatDataset
+  _partial_: true
+  ignore_label: -100
+  conditions:
+    ["ScanNet", "ARKitScenes", "Matterport3D", "Structured3D", "ScanNetPP"]
+  repeat: 4
+  datasets:
+    - _target_: src.data.scannet.dataset.ScanNetDataset
+      _partial_: true
+      data_dir: /datasets/mosaic3d/data/scannet
+      split: train
+      num_masks: 300
+      ignore_label: -100
+      repeat: 1
+      transforms:
+        - type: FilterCaption
+          min_words: 1
+          max_words: 50
+          min_letter_ratio: 0.5
+          max_repetition_ratio: 0.4
+          max_consecutive: 3
+        - type: Copy
+          keys_dict:
+            coord: origin_coord
+        - type: CenterShift
+          apply_z: true
+        - type: RandomRotate
+          p: 0.5
+          angle: [-1, 1]
+          center: [0, 0, 0]
+          axis: "z"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "x"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "y"
+        - type: RandomScale
+          scale: [0.9, 1.1]
+        - type: RandomFlip
+          p: 0.5
+        - type: RandomJitter
+          sigma: 0.005
+          clip: 0.02
+        - type: ElasticDistortion
+        - type: ChromaticAutoContrast
+          p: 0.2
+        - type: ChromaticTranslation
+          p: 0.95
+          ratio: 0.05
+        - type: ChromaticJitter
+          p: 0.95
+          std: 0.05
+        - type: SphereCrop
+          point_max: 250000
+          mode: random
+        - type: CenterShift
+          apply_z: false
+        - type: NormalizeColor
+        - type: Add
+          keys_dict:
+            condition: ScanNet
+        - type: ToTensor
+        - type: Collect
+          keys:
+            [
+              "origin_coord",
+              "coord",
+              "color",
+              "segment",
+              "instance",
+              "binary",
+              "caption_data",
+              "origin_idx",
+              "condition",
+            ]
+          offset_keys_dict:
+            offset: coord
+            pc_count: origin_coord
+          feat_keys: ["color"]
+    - _target_: src.data.arkitscenes.dataset.ARKitScenesDataset
+      _partial_: true
+      data_dir: /datasets/mosaic3d/data/arkitscenes
+      split: train
+      num_masks: 300
+      ignore_label: -100
+      repeat: 1
+      transforms:
+        - type: FilterCaption
+          min_words: 1
+          max_words: 50
+          min_letter_ratio: 0.5
+          max_repetition_ratio: 0.4
+          max_consecutive: 3
+        - type: Copy
+          keys_dict:
+            coord: origin_coord
+        - type: CenterShift
+          apply_z: true
+        - type: RandomRotate
+          p: 0.5
+          angle: [-1, 1]
+          center: [0, 0, 0]
+          axis: "z"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "x"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "y"
+        - type: RandomScale
+          scale: [0.9, 1.1]
+        - type: RandomFlip
+          p: 0.5
+        - type: RandomJitter
+          sigma: 0.005
+          clip: 0.02
+        - type: ElasticDistortion
+        - type: ChromaticAutoContrast
+          p: 0.2
+        - type: ChromaticTranslation
+          p: 0.95
+          ratio: 0.05
+        - type: ChromaticJitter
+          p: 0.95
+          std: 0.05
+        - type: SphereCrop
+          sample_rate: 0.8
+          mode: captioned
+        - type: SphereCrop
+          point_max: 120000
+          mode: captioned
+        - type: NormalizeColor
+        - type: Add
+          keys_dict:
+            condition: ARKitScenes
+        - type: ToTensor
+        - type: Collect
+          keys:
+            [
+              "origin_coord",
+              "coord",
+              "color",
+              "segment",
+              "instance",
+              "binary",
+              "caption_data",
+              "origin_idx",
+              "condition",
+            ]
+          offset_keys_dict:
+            offset: coord
+            pc_count: origin_coord
+          feat_keys: ["color"]
+    - _target_: src.data.scannetpp.dataset.ScanNetPPDataset
+      _partial_: true
+      data_dir: /datasets/mosaic3d/data/scannetpp
+      split: train
+      num_masks: 300
+      ignore_label: -100
+      repeat: 1
+      transforms:
+        - type: FilterCaption
+          min_words: 1
+          max_words: 50
+          min_letter_ratio: 0.5
+          max_repetition_ratio: 0.4
+          max_consecutive: 3
+        - type: Copy
+          keys_dict:
+            coord: origin_coord
+        - type: CenterShift
+          apply_z: true
+        - type: RandomRotate
+          p: 0.5
+          angle: [-1, 1]
+          center: [0, 0, 0]
+          axis: "z"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "x"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "y"
+        - type: RandomScale
+          scale: [0.9, 1.1]
+        - type: RandomFlip
+          p: 0.5
+        - type: RandomJitter
+          sigma: 0.005
+          clip: 0.02
+        - type: ElasticDistortion
+        - type: ChromaticAutoContrast
+          p: 0.2
+        - type: ChromaticTranslation
+          p: 0.95
+          ratio: 0.05
+        - type: ChromaticJitter
+          p: 0.95
+          std: 0.05
+        - type: SphereCrop
+          sample_rate: 0.8
+          mode: captioned
+        - type: SphereCrop
+          point_max: 120000
+          mode: captioned
+        - type: NormalizeColor
+        - type: Add
+          keys_dict:
+            condition: ScanNetPP
+        - type: ToTensor
+        - type: Collect
+          keys:
+            [
+              "origin_coord",
+              "coord",
+              "color",
+              "segment",
+              "instance",
+              "binary",
+              "caption_data",
+              "origin_idx",
+              "condition",
+            ]
+          offset_keys_dict:
+            offset: coord
+            pc_count: origin_coord
+          feat_keys: ["color"]
+    - _target_: src.data.matterport3d.dataset.Matterport3DDataset
+      _partial_: true
+      data_dir: /datasets/mosaic3d/data/matterport3d
+      split: train
+      num_masks: 300
+      ignore_label: -100
+      repeat: 1
+      transforms:
+        - type: FilterCaption
+          min_words: 1
+          max_words: 50
+          min_letter_ratio: 0.5
+          max_repetition_ratio: 0.4
+          max_consecutive: 3
+        - type: Copy
+          keys_dict:
+            coord: origin_coord
+        - type: CenterShift
+          apply_z: true
+        - type: RandomRotate
+          p: 0.5
+          angle: [-1, 1]
+          center: [0, 0, 0]
+          axis: "z"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "x"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "y"
+        - type: RandomScale
+          scale: [0.9, 1.1]
+        - type: RandomFlip
+          p: 0.5
+        - type: RandomJitter
+          sigma: 0.005
+          clip: 0.02
+        - type: ElasticDistortion
+        - type: ChromaticAutoContrast
+          p: 0.2
+        - type: ChromaticTranslation
+          p: 0.95
+          ratio: 0.05
+        - type: ChromaticJitter
+          p: 0.95
+          std: 0.05
+        - type: SphereCrop
+          point_max: 250000
+          mode: random
+        - type: CenterShift
+          apply_z: false
+        - type: NormalizeColor
+        - type: Add
+          keys_dict:
+            condition: Matterport3D
+        - type: ToTensor
+        - type: Collect
+          keys:
+            [
+              "origin_coord",
+              "coord",
+              "color",
+              "segment",
+              "instance",
+              "binary",
+              "caption_data",
+              "origin_idx",
+              "condition",
+            ]
+          offset_keys_dict:
+            offset: coord
+            pc_count: origin_coord
+          feat_keys: ["color"]
+    - _target_: src.data.structured3d.dataset.Structured3DDataset
+      _partial_: true
+      data_dir: /datasets/mosaic3d/data/structured3d
+      split: train
+      num_masks: 300
+      ignore_label: -100
+      repeat: 1
+      transforms:
+        - type: FilterCaption
+          min_words: 1
+          max_words: 50
+          min_letter_ratio: 0.5
+          max_repetition_ratio: 0.4
+          max_consecutive: 3
+        - type: Copy
+          keys_dict:
+            coord: origin_coord
+        - type: CenterShift
+          apply_z: true
+        - type: RandomRotate
+          p: 0.5
+          angle: [-1, 1]
+          center: [0, 0, 0]
+          axis: "z"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "x"
+        - type: RandomRotate
+          p: 0.5
+          angle: [-0.015625, 0.015625]
+          axis: "y"
+        - type: RandomScale
+          scale: [0.9, 1.1]
+        - type: RandomFlip
+          p: 0.5
+        - type: RandomJitter
+          sigma: 0.005
+          clip: 0.02
+        - type: ElasticDistortion
+        - type: ChromaticAutoContrast
+          p: 0.2
+        - type: ChromaticTranslation
+          p: 0.95
+          ratio: 0.05
+        - type: ChromaticJitter
+          p: 0.95
+          std: 0.05
+        - type: SphereCrop
+          sample_rate: 0.8
+          mode: captioned
+        - type: SphereCrop
+          point_max: 120000
+          mode: captioned
+        - type: NormalizeColor
+        - type: Add
+          keys_dict:
+            condition: Structured3D
+        - type: ToTensor
+        - type: Collect
+          keys:
+            [
+              "origin_coord",
+              "coord",
+              "color",
+              "segment",
+              "instance",
+              "binary",
+              "caption_data",
+              "origin_idx",
+              "condition",
+            ]
+          offset_keys_dict:
+            offset: coord
+            pc_count: origin_coord
+          feat_keys: ["color"]
+
+val_datasets:
+  - _target_: src.data.scannet.dataset.ScanNetDataset
+    _partial_: true
+    data_dir: /datasets/mosaic3d/data/scannet
+    split: val
+    ignore_label: ${data.train_dataset.ignore_label}
+    transforms:
+      - type: Copy
+        keys_dict:
+          coord: origin_coord
+      - type: CenterShift
+        apply_z: true
+      - type: NormalizeColor
+      - type: Add
+        keys_dict:
+          condition: ScanNet
+      - type: ToTensor
+      - type: Collect
+        keys:
+          [
+            "origin_coord",
+            "coord",
+            "color",
+            "segment",
+            "instance",
+            "binary",
+            "caption_data",
+            "origin_idx",
+            "condition",
+          ]
+        offset_keys_dict:
+          offset: coord
+          pc_count: origin_coord
+        feat_keys: ["color"]
+
+  - _target_: src.data.scannet.dataset.ScanNet200Dataset
+    _partial_: true
+    data_dir: /datasets/mosaic3d/data/scannet
+    split: val
+    mask_dir: /datasets/mosaic3d/data/scannet200_masks
+    ignore_label: ${data.train_dataset.ignore_label}
+    transforms:
+      - type: Copy
+        keys_dict:
+          coord: origin_coord
+      - type: CenterShift
+        apply_z: true
+      - type: NormalizeColor
+      - type: Add
+        keys_dict:
+          condition: ScanNet
+      - type: ToTensor
+      - type: Collect
+        keys:
+          [
+            "origin_coord",
+            "coord",
+            "color",
+            "segment",
+            "instance",
+            "binary",
+            "caption_data",
+            "origin_idx",
+            "condition",
+          ]
+        offset_keys_dict:
+          offset: coord
+          pc_count: origin_coord
+        feat_keys: ["color"]
+
+collate_fn:
+  _target_: src.data.utils.collate.point_collate_fn_with_masks
+  _partial_: true
+  grid_size: 0.02
+
+batch_size: 4
+num_workers: 8
+in_channel: 3
+
+checkpoint_monitor: "val_scannet200/miou"

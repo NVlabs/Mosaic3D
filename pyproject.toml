@@ -1,0 +1,98 @@
+[tool.pytest.ini_options]
+addopts = [
+  "--color=yes",
+  "--durations=0",
+  "--strict-markers",
+  "--doctest-modules",
+]
+
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::UserWarning",
+]
+
+log_cli = "True"
+markers = [
+  "slow: slow tests",
+]
+minversion = "6.0"
+testpaths = "tests/"
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: nocover",
+    "raise NotImplementedError",
+    "raise NotImplementedError()",
+    "if __name__ == .__main__.:",
+]
+
+[tool.black]
+line-length = 99
+
+[project]
+name = "mosaic3d"
+version = "0.1.0"
+description = "Mosaic3D: open-vocabulary 3D neural network foundational models and datasets"
+requires-python = ">=3.8"
+dependencies = [
+    # PyTorch ecosystem
+    "torch==2.2.2",
+    "torchvision>=0.15.0",
+    "lightning==2.2",
+    "torchmetrics>=0.11.4",
+
+    # Hydra
+    "hydra-core==1.3.2",
+    "hydra-colorlog==1.2.0",
+    "hydra-optuna-sweeper==1.2.0",
+
+    # Loggers
+    "wandb",
+
+    # Development tools
+    "rootutils",
+    "pre-commit",
+    "rich",
+    "pytest",
+    "black",
+    "fire",
+    "overrides",
+    "gdown",
+
+    # RegionPLC dependencies
+    "numpy",
+    "spconv-cu120",
+    "easydict",
+    "pyyaml",
+    "tqdm",
+    "scipy",
+    "plyfile",
+    "imageio",
+    "matplotlib",
+    "transformers",
+    "einops",
+    "open3d==0.18.0",
+    "natsort",
+    "scikit-image",
+    "open_clip_torch",
+
+    # Segment3D dependencies
+    "cuml-cu12",
+    "loguru",
+    "albumentations",
+    "pyviz3d",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "pre-commit",
+]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA/Mosaic3D"
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"

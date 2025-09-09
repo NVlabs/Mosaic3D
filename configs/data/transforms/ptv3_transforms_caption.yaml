@@ -1,0 +1,99 @@
+# @package data
+train_transforms:
+  - type: FilterCaption
+    min_words: 1
+    max_words: 50
+    min_letter_ratio: 0.5
+    max_repetition_ratio: 0.4
+    max_consecutive: 3
+  - type: Copy
+    keys_dict:
+      coord: origin_coord
+  - type: CenterShift
+    apply_z: true
+  - type: RandomRotate
+    p: 0.5
+    angle: [-1, 1]
+    center: [0, 0, 0]
+    axis: "z"
+  - type: RandomRotate
+    p: 0.5
+    angle: [-0.015625, 0.015625]
+    axis: "x"
+  - type: RandomRotate
+    p: 0.5
+    angle: [-0.015625, 0.015625]
+    axis: "y"
+  - type: RandomScale
+    scale: [0.9, 1.1]
+  - type: RandomFlip
+    p: 0.5
+  - type: RandomJitter
+    sigma: 0.005
+    clip: 0.02
+  - type: ElasticDistortion
+  - type: ChromaticAutoContrast
+    p: 0.2
+  - type: ChromaticTranslation
+    p: 0.95
+    ratio: 0.05
+  - type: ChromaticJitter
+    p: 0.95
+    std: 0.05
+  - type: SphereCrop
+    point_max: 250000
+    mode: captioned
+  - type: CenterShift
+    apply_z: false
+  - type: NormalizeColor
+  - type: ToTensor
+  - type: Collect
+    keys:
+      [
+        "origin_coord",
+        "coord",
+        "color",
+        "segment",
+        "instance",
+        "binary",
+        "caption_data",
+        "origin_idx",
+      ]
+    offset_keys_dict:
+      offset: coord
+      pc_count: origin_coord
+    feat_keys: ["color"]
+
+val_transforms:
+  - type: FilterCaption
+    min_words: 3
+    max_words: 50
+    min_letter_ratio: 0.5
+    max_repetition_ratio: 0.4
+    min_unique_ratio: 0.3
+    max_consecutive: 3
+  - type: Copy
+    keys_dict:
+      coord: origin_coord
+  - type: CenterShift
+    apply_z: true
+  - type: NormalizeColor
+  - type: ToTensor
+  - type: Collect
+    keys:
+      [
+        "origin_coord",
+        "coord",
+        "color",
+        "segment",
+        "instance",
+        "binary",
+        "caption_data",
+        "origin_idx",
+      ]
+    offset_keys_dict:
+      offset: coord
+      pc_count: origin_coord
+    feat_keys: ["color"]
+
+in_channel: 3

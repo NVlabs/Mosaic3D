@@ -1,0 +1,11 @@
+defaults:
+  - opensegment3d_spunet34c
+
+net:
+  backbone:
+    out_channels: ${model.clip_encoder.text_dim}
+
+  hlevels: [4]
+  backbone_ckpt: null
+  decoder_ckpt: ckpts/segment3d_patched.ckpt
+  freeze_backbone: true

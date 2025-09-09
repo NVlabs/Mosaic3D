@@ -1,0 +1,16 @@
+defaults:
+  - model_checkpoint
+  - model_summary
+  - lr_monitor
+  - _self_
+
+model_checkpoint:
+  dirpath: ${paths.output_dir}/checkpoints
+  filename: "epoch_{epoch:03d}"
+  monitor: "val/acc"
+  mode: "max"
+  save_last: True
+  auto_insert_metric_name: False
+
+model_summary:
+  max_depth: -1

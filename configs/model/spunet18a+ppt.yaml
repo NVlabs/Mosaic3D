@@ -1,0 +1,35 @@
+_target_: src.models.lightning_modules.language_module.DenseLanguageLitModule
+
+net:
+  _target_: src.models.networks.ppt.model.PPT
+  _partial_: true
+
+  conditions: ${data.train_dataset.conditions}
+  context_channels: 256
+  backbone:
+    _target_: src.models.networks.spunet.spconv_unet_v1m3_pdnorm.SpUNetBase
+    _partial_: true
+
+    in_channels: ${data.in_channel}
+    out_channels: ${model.clip_encoder.text_dim}
+    base_channels: 32
+    channels: [32, 64, 128, 256, 128, 128, 96, 96]
+    layers: [2, 2, 2, 2, 2, 2, 2, 2]
+    norm_decouple: true
+    norm_adaptive: true
+    norm_affine: true
+    conditions: ${data.train_dataset.conditions}
+    zero_init: true
+
+eval_cfg:
+  eval_clip_text_alignment: false
+  eval_clip_image_alignment: false
+  ignore_background: false
+  ignore_class_prob: false
+
+  seg_eval:
+    normalize_input: ${model.loss_cfg.seg_loss.normalize_input}
+    text_clip_path: ${model.loss_cfg.seg_loss.text_clip_path}
+
+use_prompt: true
+compile: false

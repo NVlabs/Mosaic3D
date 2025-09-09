@@ -1,0 +1,41 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: sc_segment3d_gathered
+  - override /data/transforms: ptv3_transforms
+  - override /model: opensegment3d-pretrained_spunet34c
+  - override /model/clip: recap_clip
+  - override /model/loss: mask_caption
+  - override /optim: adamw
+  - override /scheduler: onecyclelr
+  - override /callbacks: cluster_nolr
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+seed: 12345
+
+model:
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-2
+  scheduler:
+    pct_start: 0.3
+    div_factor: 25.0
+  best_metric: ${data.checkpoint_monitor}
+
+trainer:
+  max_epochs: 512
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "mosaic3d"
+
+callbacks:
+  model_checkpoint:
+    monitor: ${data.checkpoint_monitor}

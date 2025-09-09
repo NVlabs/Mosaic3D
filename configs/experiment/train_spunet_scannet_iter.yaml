@@ -1,0 +1,39 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: sc
+  - override /data/transforms: ptv3_transforms
+  - override /model: spunet34c
+  - override /model/clip: recap_clip
+  - override /model/loss: caption
+  - override /optim: sgd
+  - override /scheduler: onecyclelr
+  - override /callbacks: cluster_nolr
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+seed: 12345
+
+trainer:
+  max_epochs: -1
+  max_steps: 50000
+  val_check_interval: 500
+  check_val_every_n_epoch: !!null
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "mosaic3d"
+
+callbacks:
+  model_checkpoint:
+    monitor: ${data.checkpoint_monitor}
+    filename: "epoch_{epoch:03d}-step_{step:07d}"
+
+model:
+  best_metric: ${data.checkpoint_monitor}

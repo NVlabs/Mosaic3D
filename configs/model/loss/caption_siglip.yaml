@@ -1,0 +1,20 @@
+# @package model
+loss_cfg:
+  caption_loss:
+    type: siglip
+    reduction: weighted_sum
+    use_logit_scale: true
+    pooling_first: true
+  seg_loss:
+    normalize_input: false
+    text_clip_path: !!null
+    loss_type: cross_entropy
+    ignore_label: ${data.train_dataset.ignore_label}
+    learnable_logit: false
+    eval_only: true
+  binary_loss: false
+  weights:
+    binary_loss: 0.0
+    caption_loss: 1.0
+    seg_loss: 0.0
+  sync_dist: false

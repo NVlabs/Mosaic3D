@@ -1,0 +1,41 @@
+_target_: src.models.networks.opensegment3d.litmodule.OpenSegment3DLitModule
+
+net:
+  _target_: src.models.networks.opensegment3d.model.OpenSegment3D
+  _partial_: true
+
+  backbone:
+    _target_: src.models.networks.spunet.spconv_unet_v1m1_base.SpUNetBase
+    in_channels: ${data.in_channel}
+    out_channels: 96
+    base_channels: 32
+    channels: [32, 64, 128, 256, 256, 128, 96, 96]
+    layers: [2, 3, 4, 6, 2, 2, 2, 2]
+    out_fpn: true
+    hash_method: ravel
+
+  hidden_dim: 128
+  feedforward_dim: 1024
+  clip_dim: ${model.clip_encoder.text_dim}
+  num_queries: 100
+  num_heads: 8
+  decoder_iterations: 3
+  max_sample_sizes: [200, 800, 3200, 12800, 51200]
+  hlevels: [0, 1, 2, 3]
+
+eval_cfg:
+  num_queries: 150
+
+  seg_eval:
+    normalize_input: false
+    text_clip_path: null
+
+  post_processing:
+    use_dbscan: true
+    dbscan_eps: 0.95
+    dbscan_min_points: 1
+    remove_small_group: -1
+    topk_per_image: -1
+
+use_prompt: true
+compile: false
